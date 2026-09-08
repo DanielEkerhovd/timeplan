@@ -432,8 +432,9 @@ export default function AppShell({
         </nav>
       </div>
 
-      {profileOpen && (
+      {profileOpen && user && (
         <ProfileModal
+          userId={user.id}
           profile={profile ?? null}
           avatarUrl={avatar}
           onClose={() => setProfileOpen(false)}
