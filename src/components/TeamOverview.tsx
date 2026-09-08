@@ -9,9 +9,10 @@ import {
 import type { MyTeam } from "../lib/teams";
 import type { MemberWithProfile } from "../lib/types";
 import type { WeekData } from "../lib/useWeekData";
-import { dayShort, slotLabel, type WeekDay } from "../lib/week";
+import { dayShort, slotLabel, weekLock, type WeekDay } from "../lib/week";
 import EventForm, { type EventDraft } from "./EventForm";
 import SessionsList from "./SessionsList";
+import ShareWeekButton from "./ShareWeekButton";
 import { DotRow, ErrorText, Pill, Spinner, WhoHover } from "./ui";
 
 interface Props {
@@ -46,7 +47,7 @@ export default function TeamOverview({
   form,
   setForm,
 }: Props) {
-  const { days, slots, hours, events, loaded, error, reload, types } = week;
+  const { days, slots, hours, events, error, reload, types } = week;
   const total = members.length;
 
   // Rows are every distinct interval across weekday and weekend slots, sorted by start.
@@ -119,26 +120,36 @@ export default function TeamOverview({
   );
 
   function openNew(cell: Cell) {
+    if (lock) return;
     setForm({
       existing: null,
       draft: { date: cell.day.key, start_hour: cell.start, end_hour: cell.end },
     });
   }
   function openExisting(e: EventWithResponses) {
+    if (lock) return;
     setForm({
       existing: e,
       draft: { date: e.date, start_hour: e.start_hour, end_hour: e.end_hour },
     });
   }
 
-  if (!slots || !loaded) return <Spinner />;
+  const lock = weekLock(week.monday);
+
+  if (!slots) return <Spinner />;
 
   const cellStyle = (c: Cell): CSSProperties => {
     const all = total > 0 && c.count === total;
     const nearly = total > 1 && c.count === total - 1;
     return {
-      background: all ? "#DCEFE0" : nearly ? "#EAF4EC" : "#F6F5F2",
-      border: all ? "1.5px solid #3E9A63" : "1.5px solid transparent",
+      background: all
+        ? "var(--color-cell-all)"
+        : nearly
+          ? "var(--color-cell-nearly)"
+          : "var(--color-cell-few)",
+      border: all
+        ? "1.5px solid var(--color-green)"
+        : "1.5px solid transparent",
     };
   };
 
@@ -182,7 +193,9 @@ export default function TeamOverview({
         ? eventTitle(c.events[0], types)
         : `${c.events.length} activities`;
     const color =
-      c.events.length === 1 ? eventPalette(c.events[0], types).ink : "#7A7368";
+      c.events.length === 1
+        ? eventPalette(c.events[0], types).ink
+        : "var(--color-muted)";
     return (
       <div className="truncate text-[9.5px] font-extrabold" style={{ color }}>
         {text}
@@ -195,109 +208,144 @@ export default function TeamOverview({
       <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-4">
         <ErrorText>{error}</ErrorText>
 
+        {lock && (
+          <div className="flex items-center gap-2.5 rounded-2xl bg-surface px-4 py-3 text-[13px] font-semibold text-muted shadow-card">
+            <svg
+              width="15"
+              height="15"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className="shrink-0"
+            >
+              <rect x="4" y="10" width="16" height="11" rx="2.5" />
+              <path d="M8 10V7a4 4 0 0 1 8 0v3" />
+            </svg>
+            {lock === "past"
+              ? "This week is done. You can look at it, but not book or change anything."
+              : "Too far ahead to book. You can plan about three months out."}
+          </div>
+        )}
+
         <SessionsList
           events={events}
           types={types}
           members={members}
-          onEdit={openExisting}
-          hint="click a block below to add one"
+          locked={lock !== null}
+          onEdit={lock ? undefined : openExisting}
+          hint={lock ? undefined : "click a block below to add one"}
         />
 
         {/* Desktop grid */}
-        <div className="hidden min-h-0 flex-1 flex-col gap-2 overflow-auto rounded-[20px] bg-surface p-5 shadow-card lg:flex">
-          <div
-            className="grid gap-2"
-            style={{ gridTemplateColumns: "100px repeat(7, minmax(0, 1fr))" }}
-          >
-            <div />
-            {days.map((d) => (
-              <div
-                key={d.key}
-                className="flex flex-col items-center gap-0.5 pb-1.5"
-              >
-                <span
-                  className={`text-xs font-bold ${d.isToday ? "text-green-ink" : "text-muted"}`}
+        <div className="hidden min-h-0 flex-1 flex-col rounded-[20px] bg-surface p-5 shadow-card lg:flex">
+          <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-auto">
+            <div
+              className="grid gap-2"
+              style={{ gridTemplateColumns: "100px repeat(7, minmax(0, 1fr))" }}
+            >
+              <div />
+              {days.map((d) => (
+                <div
+                  key={d.key}
+                  className="flex flex-col items-center gap-0.5 pb-1.5"
                 >
-                  {dayShort[d.isoDay - 1]}
-                </span>
-                {d.isToday ? (
-                  <span className="flex h-[26px] w-[26px] items-center justify-center rounded-full bg-ink text-[13px] font-extrabold text-white">
-                    {format(d.date, "d")}
+                  <span
+                    className={`text-xs font-bold ${d.isToday ? "text-green-ink" : "text-muted"}`}
+                  >
+                    {dayShort[d.isoDay - 1]}
                   </span>
-                ) : (
-                  <span className="text-sm font-extrabold">
-                    {format(d.date, "d")}
-                  </span>
+                  {d.isToday ? (
+                    <span className="flex h-[26px] w-[26px] items-center justify-center rounded-full bg-ink text-[13px] font-extrabold text-on-ink">
+                      {format(d.date, "d")}
+                    </span>
+                  ) : (
+                    <span className="text-sm font-extrabold">
+                      {format(d.date, "d")}
+                    </span>
+                  )}
+                </div>
+              ))}
+            </div>
+            {rows.map((row, ri) => (
+              <div
+                key={`${row.start}-${row.end}`}
+                className="grid gap-2"
+                style={{
+                  gridTemplateColumns: "100px repeat(7, minmax(0, 1fr))",
+                }}
+              >
+                <div className="flex items-center text-xs font-bold text-muted">
+                  {slotLabel(row.start, row.end)}
+                </div>
+                {grid[ri].map((c, ci) =>
+                  c === null ? (
+                    <div
+                      key={ci}
+                      className="h-[78px] rounded-xl border-[1.5px] border-dashed border-line-soft"
+                    />
+                  ) : (
+                    <WhoHover
+                      key={ci}
+                      title={`${dayShort[c.day.isoDay - 1]} ${slotLabel(c.start, c.end)}`}
+                      people={members.map((m, i) => ({
+                        name: m.profile?.display_name ?? "?",
+                        url: m.profile?.avatar_url,
+                        free: c.can[i],
+                      }))}
+                    >
+                      <button
+                        onClick={() => openNew(c)}
+                        className={`relative flex h-[78px] flex-col justify-between overflow-hidden rounded-xl px-3 pb-2.5 pt-2.5 text-left transition ${lock ? "cursor-default" : "hover:brightness-[0.96] hover:ring-2 hover:ring-inset hover:ring-ink/15"}`}
+                        style={cellStyle(c)}
+                      >
+                        {marker(c, "top")}
+                        <div
+                          className="text-[15px] font-extrabold leading-none"
+                          style={{
+                            color:
+                              c.count === total && total > 0
+                                ? "var(--color-green-ink)"
+                                : "var(--color-ink)",
+                          }}
+                        >
+                          {c.count}
+                          <span
+                            className="text-xs font-semibold"
+                            style={{
+                              color:
+                                c.count === total && total > 0
+                                  ? "var(--color-green-dim)"
+                                  : "var(--color-faint)",
+                            }}
+                          >
+                            /{total}
+                          </span>
+                        </div>
+                        {markerLabel(c)}
+                        <DotRow can={c.can} size={9} />
+                      </button>
+                    </WhoHover>
+                  ),
                 )}
               </div>
             ))}
           </div>
-          {rows.map((row, ri) => (
-            <div
-              key={`${row.start}-${row.end}`}
-              className="grid gap-2"
-              style={{ gridTemplateColumns: "100px repeat(7, minmax(0, 1fr))" }}
-            >
-              <div className="flex items-center text-xs font-bold text-muted">
-                {slotLabel(row.start, row.end)}
-              </div>
-              {grid[ri].map((c, ci) =>
-                c === null ? (
-                  <div
-                    key={ci}
-                    className="h-[78px] rounded-xl border-[1.5px] border-dashed border-[#eceae5]"
-                  />
-                ) : (
-                  <WhoHover
-                    key={ci}
-                    title={`${dayShort[c.day.isoDay - 1]} ${slotLabel(c.start, c.end)}`}
-                    people={members.map((m, i) => ({
-                      name: m.profile?.display_name ?? "?",
-                      url: m.profile?.avatar_url,
-                      free: c.can[i],
-                    }))}
-                  >
-                    <button
-                      onClick={() => openNew(c)}
-                      className="relative flex h-[78px] flex-col justify-between overflow-hidden rounded-xl px-3 pb-2.5 pt-2.5 text-left transition hover:brightness-[0.96] hover:ring-2 hover:ring-inset hover:ring-ink/10"
-                      style={cellStyle(c)}
-                    >
-                      {marker(c, "top")}
-                      <div
-                        className="text-[15px] font-extrabold leading-none"
-                        style={{
-                          color:
-                            c.count === total && total > 0
-                              ? "#2F6B45"
-                              : "#1C1B19",
-                        }}
-                      >
-                        {c.count}
-                        <span
-                          className="text-xs font-semibold"
-                          style={{
-                            color:
-                              c.count === total && total > 0
-                                ? "#7FA88F"
-                                : "#9A9690",
-                          }}
-                        >
-                          /{total}
-                        </span>
-                      </div>
-                      {markerLabel(c)}
-                      <DotRow can={c.can} size={9} />
-                    </button>
-                  </WhoHover>
-                ),
-              )}
-            </div>
-          ))}
-          <div className="flex items-center gap-[18px] px-1 pt-2.5 text-xs text-muted">
-            <Legend swatch="#DCEFE0" border="#3E9A63" label="Everyone can" />
-            <Legend swatch="#EAF4EC" label="All but one" />
-            <Legend swatch="#F6F5F2" label="Fewer" />
-            <span className="ml-auto text-faint">Click a block to book it</span>
+          <div className="mt-3 flex shrink-0 items-center gap-[18px] border-t border-line px-1 pt-3 text-xs text-muted">
+            <Legend
+              swatch="var(--color-cell-all)"
+              border="var(--color-green)"
+              label="Everyone can"
+            />
+            <Legend swatch="var(--color-cell-nearly)" label="All but one" />
+            <Legend swatch="var(--color-cell-few)" label="Fewer" />
+            <span className="ml-auto text-faint">
+              {lock
+                ? "This week is closed for booking"
+                : "Click a block to book it"}
+            </span>
           </div>
         </div>
 
@@ -329,7 +377,7 @@ export default function TeamOverview({
                   <button
                     key={c.start}
                     onClick={() => openNew(c)}
-                    className="relative flex items-center gap-3 overflow-hidden rounded-xl px-3.5 py-2.5 text-left"
+                    className={`relative flex items-center gap-3 overflow-hidden rounded-xl px-3.5 py-2.5 text-left ${lock ? "cursor-default" : ""}`}
                     style={cellStyle(c)}
                   >
                     {marker(c, "left")}
@@ -345,8 +393,8 @@ export default function TeamOverview({
                       style={{
                         color:
                           c.count === total && total > 0
-                            ? "#2F6B45"
-                            : "#1C1B19",
+                            ? "var(--color-green-ink)"
+                            : "var(--color-ink)",
                       }}
                     >
                       {c.count}
@@ -387,14 +435,18 @@ export default function TeamOverview({
                       {c.count} of {total}
                     </div>
                   </div>
-                  <Pill active onClick={() => openNew(c)}>
-                    Book
-                  </Pill>
+                  {!lock && (
+                    <Pill active onClick={() => openNew(c)}>
+                      Book
+                    </Pill>
+                  )}
                 </div>
               ))}
             </div>
           )}
         </div>
+        {/* Locked to the bottom of the column, whatever the list above does. */}
+        <ShareWeekButton team={team} className="mt-auto" />
       </aside>
 
       {form && (

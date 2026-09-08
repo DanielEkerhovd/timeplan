@@ -55,7 +55,7 @@ function Popover({ anchor, onClose, width, children }: { anchor: HTMLElement | n
   return (
     <div
       ref={ref}
-      className="fixed z-[70] rounded-2xl bg-surface p-1.5 shadow-[0_12px_32px_rgba(28,27,25,0.16)] ring-1 ring-black/5"
+      className="fixed z-[70] rounded-2xl bg-surface p-1.5 shadow-pop ring-1 ring-line"
       style={{ left: pos?.left ?? -9999, top: pos?.top ?? -9999, width: width ?? (anchor ? Math.max(anchor.offsetWidth, 160) : 160), transform: pos?.up ? 'translateY(-100%)' : undefined }}
     >
       {children}
@@ -132,7 +132,7 @@ export function Dropdown<T extends string | number>({ value, options, onChange, 
                       setOpen(false)
                     }}
                     className={`flex h-9 w-full items-center gap-2 rounded-[10px] px-3 text-left text-[13px] font-semibold disabled:opacity-40 ${
-                      on ? 'bg-ink text-white' : 'text-ink hover:bg-surface-2'
+                      on ? 'bg-ink text-on-ink' : 'text-ink hover:bg-surface-2'
                     }`}
                   >
                     {o.dot && <span className="h-[9px] w-[9px] shrink-0 rounded-full" style={{ background: o.dot }} />}
@@ -232,7 +232,7 @@ export function DatePicker({ value, onChange, className = '' }: DatePickerProps)
                       setOpen(false)
                     }}
                     className={`mx-auto flex h-8 w-8 items-center justify-center rounded-full text-[13px] font-semibold transition ${
-                      picked ? 'bg-ink text-white' : inMonth ? 'text-ink hover:bg-surface-2' : 'text-faint hover:bg-surface-2'
+                      picked ? 'bg-ink text-on-ink' : inMonth ? 'text-ink hover:bg-surface-2' : 'text-faint hover:bg-surface-2'
                     } ${isToday && !picked ? 'ring-[1.5px] ring-inset ring-green' : ''}`}
                   >
                     {format(d, 'd')}

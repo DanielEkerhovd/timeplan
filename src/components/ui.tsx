@@ -43,11 +43,11 @@ export function Button({
   const dims =
     size === "sm" ? "h-9 px-3.5 text-[13px]" : "h-12 px-5 text-[15px]";
   const look = {
-    primary: "bg-ink text-white hover:bg-black",
+    primary: "bg-ink text-on-ink hover:opacity-90",
     secondary:
       "border-[1.5px] border-line bg-surface text-ink hover:bg-surface-2",
     ghost: "text-muted hover:bg-surface-2 hover:text-ink",
-    danger: "bg-red-soft text-red-ink hover:bg-[#f3d3cc]",
+    danger: "bg-red-soft text-red-ink hover:brightness-95",
   }[variant];
   return (
     <button
@@ -69,7 +69,7 @@ export function Pill({
       type="button"
       className={`inline-flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-3 text-xs font-bold transition disabled:opacity-50 ${
         active
-          ? "bg-ink text-white hover:bg-black"
+          ? "bg-ink text-on-ink hover:opacity-90"
           : "border-[1.5px] border-line bg-surface text-ink hover:bg-surface-2"
       } ${className}`}
       {...props}
@@ -146,7 +146,7 @@ export function Toggle({
       aria-checked={on}
       aria-label={label}
       onClick={() => onChange(!on)}
-      className={`relative h-5 w-[34px] shrink-0 rounded-full transition ${on ? "bg-green" : "bg-[#d6d2cb]"}`}
+      className={`relative h-5 w-[34px] shrink-0 rounded-full transition ${on ? "bg-green" : "bg-dot"}`}
     >
       <span
         className={`absolute top-0.5 h-4 w-4 rounded-full bg-white transition-all ${on ? "left-[16px]" : "left-0.5"}`}
@@ -156,14 +156,7 @@ export function Toggle({
 }
 
 // Soft avatar backgrounds for people without a Discord picture, picked by name so they stay stable.
-const avatarTints = [
-  ["#D9E7F5", "#2C4F73"],
-  ["#DCEFE0", "#2F6B45"],
-  ["#FBE3D6", "#8A3F1C"],
-  ["#E8E1F5", "#4E3A7A"],
-  ["#FFF1C7", "#6B4E00"],
-  ["#DDF1EE", "#1F5F58"],
-];
+const avatarTints = [1, 2, 3, 4, 5, 6].map((i) => [`var(--tint-${i}-bg)`, `var(--tint-${i}-fg)`]);
 
 export function initialsOf(name: string): string {
   return (
@@ -224,7 +217,7 @@ export function Avatar({
 export function AvatarStack({
   people,
   size = 18,
-  ring = "#ffffff",
+  ring = "var(--color-surface)",
   max = 6,
 }: {
   people: { user_id: string; profile: Profile | null }[];
@@ -275,7 +268,7 @@ export function AvatarStack({
 /** One dot per teammate; filled = free for the whole block. */
 export function DotRow({
   can,
-  size = 6,
+  size = 8,
   dim = false,
 }: {
   can: boolean[];
@@ -291,8 +284,8 @@ export function DotRow({
           style={{
             width: size,
             height: size,
-            background: on ? (dim ? "#9CCBAC" : "#3E9A63") : "transparent",
-            border: on ? "none" : "1.2px solid #CFCBC4",
+            background: on ? (dim ? "var(--color-green-dim)" : "var(--color-green)") : "transparent",
+            border: on ? "none" : "1.2px solid var(--color-dot)",
             boxSizing: "border-box",
           }}
         />
@@ -333,14 +326,14 @@ export function Modal({
   }, [onClose]);
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end justify-center bg-ink/40 p-0 sm:items-center sm:p-6"
+      className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-0 sm:items-center sm:p-6"
       onMouseDown={onClose}
     >
       <div
         role="dialog"
         aria-modal="true"
         onMouseDown={(e) => e.stopPropagation()}
-        className="max-h-[92vh] w-full overflow-y-auto rounded-t-[24px] bg-surface p-6 shadow-[0_24px_48px_rgba(15,12,8,0.16)] sm:rounded-[24px]"
+        className="max-h-[92vh] w-full overflow-y-auto rounded-t-[24px] bg-surface p-6 shadow-pop sm:rounded-[24px]"
         style={{ maxWidth: width }}
       >
         {children}
@@ -406,7 +399,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
       {children}
       <div
         aria-live="polite"
-        className={`pointer-events-none fixed bottom-20 left-1/2 z-[60] flex -translate-x-1/2 items-center gap-2 rounded-full bg-ink px-4 py-2.5 text-[13px] font-bold text-white shadow-card transition-all duration-200 lg:bottom-8 ${
+        className={`pointer-events-none fixed bottom-20 left-1/2 z-[60] flex -translate-x-1/2 items-center gap-2 rounded-full bg-ink px-4 py-2.5 text-[13px] font-bold text-on-ink shadow-card transition-all duration-200 lg:bottom-8 ${
           msg ? "translate-y-0 opacity-100" : "translate-y-2 opacity-0"
         }`}
       >
@@ -491,7 +484,7 @@ export function WhoHover({
       {pos && (
         <div
           role="tooltip"
-          className="pointer-events-none fixed z-50 w-[220px] rounded-2xl bg-surface p-3.5 shadow-[0_12px_32px_rgba(28,27,25,0.18)] ring-1 ring-black/5"
+          className="pointer-events-none fixed z-50 w-[220px] rounded-2xl bg-surface p-3.5 shadow-pop ring-1 ring-line"
           style={{
             left: pos.x,
             top: pos.y,
@@ -515,7 +508,7 @@ export function WhoHover({
                   {p.name}
                 </span>
                 <span
-                  className={`h-2 w-2 rounded-full ${p.free ? "bg-green" : "border border-[#CFCBC4]"}`}
+                  className={`h-2 w-2 rounded-full ${p.free ? "bg-green" : "border border-dot"}`}
                 />
               </li>
             ))}

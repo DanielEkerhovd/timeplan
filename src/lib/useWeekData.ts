@@ -1,102 +1,231 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useSearchParams } from 'react-router-dom'
-import { fetchAvailability, fetchTeamSlots, subscribeAvailability, type HoursByDayUser } from './availability'
-import { fetchActivityTypes, fetchEvents, type EventWithResponses } from './events'
-import { fetchMembers } from './settings'
-import { supabase } from './supabase'
-import { friendlyError, type ActivityType, type MemberWithProfile, type TeamSlot } from './types'
-import { daysOfWeek, shiftWeek, weekId, weekStart, weekStartFromId } from './week'
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "react-router-dom";
+import {
+  fetchAvailability,
+  fetchTeamSlots,
+  subscribeAvailability,
+  type HoursByDayUser,
+} from "./availability";
+import {
+  fetchActivityTypes,
+  fetchEvents,
+  type EventWithResponses,
+} from "./events";
+import { fetchMembers } from "./settings";
+import { supabase } from "./supabase";
+import {
+  friendlyError,
+  type ActivityType,
+  type MemberWithProfile,
+  type TeamSlot,
+} from "./types";
+import {
+  daysOfWeek,
+  shiftWeek,
+  weekId,
+  weekStart,
+  weekStartFromId,
+} from "./week";
+
+interface WeekPayload {
+  hours: HoursByDayUser;
+  events: EventWithResponses[];
+}
+
+// Stable empties, so an unloaded week does not hand out a fresh object on every render.
+const EMPTY_HOURS: HoursByDayUser = {};
+const EMPTY_EVENTS: EventWithResponses[] = [];
 
 /**
  * Everything one week of a team needs: the slots, who is free when, the events, the activity
- * types and the members. The week lives in the URL (?week=2026-W37). Live updates refetch,
- * lightly debounced.
+ * types and the members. The week lives in the URL (?week=2026-W37).
+ *
+ * Weeks are cached by their Monday, and the weeks on either side are fetched in the background,
+ * so stepping back and forth shows the new week straight away instead of blinking through a
+ * loading state. A cached week is still refetched quietly, so it never goes stale.
  */
 export function useWeekData(teamId: string) {
-  const [params, setParams] = useSearchParams()
-  const monday = useMemo(() => weekStartFromId(params.get('week')), [params])
-  const days = useMemo(() => daysOfWeek(monday), [monday])
-  const fromKey = days[0].key
-  const toKey = days[6].key
+  const [params, setParams] = useSearchParams();
+  const weekParam = params.get("week");
+  const monday = useMemo(() => weekStartFromId(weekParam), [weekParam]);
+  const days = useMemo(() => daysOfWeek(monday), [monday]);
+  const fromKey = days[0].key;
 
-  const [slots, setSlots] = useState<TeamSlot[] | null>(null)
-  const [types, setTypes] = useState<ActivityType[]>([])
-  const [members, setMembers] = useState<MemberWithProfile[] | null>(null)
-  const [hours, setHours] = useState<HoursByDayUser>({})
-  const [events, setEvents] = useState<EventWithResponses[]>([])
-  const [loaded, setLoaded] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [slots, setSlots] = useState<TeamSlot[] | null>(null);
+  const [types, setTypes] = useState<ActivityType[]>([]);
+  const [members, setMembers] = useState<MemberWithProfile[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
-  // Latest hours in a ref so optimistic updates can roll back precisely.
-  const hoursRef = useRef(hours)
+  // One entry per week, keyed by the Monday. The neighbours are prefetched into the same place.
+  const [cache, setCache] = useState<Record<string, WeekPayload>>({});
+  const week = cache[fromKey];
+  const hours = week?.hours ?? EMPTY_HOURS;
+  const events = week?.events ?? EMPTY_EVENTS;
+  // The very first load has nothing to show; every later one keeps the old week on screen.
+  const loaded = week !== undefined;
+
+  // Optimistic toggles need the newest value without waiting for a render.
+  const hoursRef = useRef(hours);
   useEffect(() => {
-    hoursRef.current = hours
-  }, [hours])
+    hoursRef.current = hours;
+  }, [hours]);
+
+  const eventsRef = useRef(events);
+  useEffect(() => {
+    eventsRef.current = events;
+  }, [events]);
+
+  const write = useCallback((key: string, next: Partial<WeekPayload>) => {
+    setCache((c) => ({
+      ...c,
+      [key]: { ...(c[key] ?? { hours: {}, events: [] }), ...next },
+    }));
+  }, []);
+
+  /** Fetch one week into the cache. `quiet` weeks are the prefetched neighbours. */
+  const fetchWeek = useCallback(
+    async (start: Date, quiet = false) => {
+      const week = daysOfWeek(start);
+      const mondayKey = week[0].key;
+      const to = week[6].key;
+      try {
+        const [h, e] = await Promise.all([
+          fetchAvailability(teamId, mondayKey, to),
+          fetchEvents(teamId, mondayKey, to),
+        ]);
+        setCache((c) => ({ ...c, [mondayKey]: { hours: h, events: e } }));
+        if (!quiet) setError(null);
+      } catch (err) {
+        if (!quiet) setError(friendlyError(err));
+      }
+    },
+    [teamId],
+  );
 
   const load = useCallback(async () => {
-    try {
-      const [h, e] = await Promise.all([fetchAvailability(teamId, fromKey, toKey), fetchEvents(teamId, fromKey, toKey)])
-      setHours(h)
-      setEvents(e)
-      setError(null)
-    } catch (err) {
-      setError(friendlyError(err))
-    } finally {
-      setLoaded(true)
-    }
-  }, [teamId, fromKey, toKey])
+    await fetchWeek(monday);
+  }, [fetchWeek, monday]);
 
   const loadTeam = useCallback(async () => {
     try {
-      const [s, t, m] = await Promise.all([fetchTeamSlots(teamId), fetchActivityTypes(teamId), fetchMembers(teamId)])
-      setSlots(s)
-      setTypes(t)
-      setMembers(m)
+      const [s, t, m] = await Promise.all([
+        fetchTeamSlots(teamId),
+        fetchActivityTypes(teamId),
+        fetchMembers(teamId),
+      ]);
+      setSlots(s);
+      setTypes(t);
+      setMembers(m);
     } catch (err) {
-      setError(friendlyError(err))
+      setError(friendlyError(err));
     }
-  }, [teamId])
+  }, [teamId]);
 
   useEffect(() => {
-    void loadTeam()
-  }, [loadTeam])
+    void loadTeam();
+  }, [loadTeam]);
 
+  // The week in the URL, then its neighbours a moment later so stepping is instant.
   useEffect(() => {
-    setLoaded(false)
-    void load()
-  }, [load])
+    let cancelled = false;
+    void fetchWeek(monday);
+    const timer = setTimeout(() => {
+      if (cancelled) return;
+      for (const step of [-1, 1]) void fetchWeek(shiftWeek(monday, step), true);
+    }, 300);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [fetchWeek, monday]);
 
-  // Availability / events / responses change often: debounce. Team-level tables change rarely.
+  // Live updates. Anything can change, so drop the cache and refetch the week on screen.
   useEffect(() => {
-    let timer: ReturnType<typeof setTimeout> | null = null
-    const unsubscribe = subscribeAvailability(teamId, () => {
-      if (timer) clearTimeout(timer)
-      timer = setTimeout(() => void load(), 250)
-    })
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const refresh = () => {
+      if (timer) clearTimeout(timer);
+      // Refresh the week on screen and the two beside it, so the cache stays warm
+      // and stepping is still instant right after someone else changes something.
+      timer = setTimeout(() => {
+        void fetchWeek(monday);
+        for (const step of [-1, 1])
+          void fetchWeek(shiftWeek(monday, step), true);
+      }, 250);
+    };
+    const unsubscribe = subscribeAvailability(teamId, refresh);
     const channel = supabase
       .channel(`team:${teamId}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'activity_types', filter: `team_id=eq.${teamId}` }, () => void loadTeam())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'team_slots', filter: `team_id=eq.${teamId}` }, () => void loadTeam())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'members', filter: `team_id=eq.${teamId}` }, () => void loadTeam())
-      .subscribe()
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "activity_types",
+          filter: `team_id=eq.${teamId}`,
+        },
+        () => void loadTeam(),
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "team_slots",
+          filter: `team_id=eq.${teamId}`,
+        },
+        () => void loadTeam(),
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "members",
+          filter: `team_id=eq.${teamId}`,
+        },
+        () => void loadTeam(),
+      )
+      .subscribe();
     return () => {
-      if (timer) clearTimeout(timer)
-      unsubscribe()
-      void supabase.removeChannel(channel)
-    }
-  }, [teamId, load, loadTeam])
+      if (timer) clearTimeout(timer);
+      unsubscribe();
+      void supabase.removeChannel(channel);
+    };
+  }, [teamId, fetchWeek, monday, loadTeam]);
+
+  // Optimistic updates from the views go into the cache for the week on screen.
+  const setHours = useCallback(
+    (next: HoursByDayUser | ((prev: HoursByDayUser) => HoursByDayUser)) => {
+      const value = typeof next === "function" ? next(hoursRef.current) : next;
+      write(fromKey, { hours: value });
+    },
+    [fromKey, write],
+  );
+
+  const setEvents = useCallback(
+    (
+      next:
+        | EventWithResponses[]
+        | ((prev: EventWithResponses[]) => EventWithResponses[]),
+    ) => {
+      const value = typeof next === "function" ? next(eventsRef.current) : next;
+      write(fromKey, { events: value });
+    },
+    [fromKey, write],
+  );
 
   const goToWeek = useCallback(
     (next: Date) => {
-      const id = weekId(next)
-      if (id === weekId(weekStart(new Date()))) params.delete('week')
-      else params.set('week', id)
-      setParams(params, { replace: true })
+      const id = weekId(next);
+      const p = new URLSearchParams(params);
+      if (id === weekId(weekStart(new Date()))) p.delete("week");
+      else p.set("week", id);
+      setParams(p, { replace: true });
     },
     [params, setParams],
-  )
+  );
 
-  const activeTypes = useMemo(() => types.filter((t) => !t.archived), [types])
+  const activeTypes = useMemo(() => types.filter((t) => !t.archived), [types]);
 
   return {
     monday,
@@ -119,7 +248,7 @@ export function useWeekData(teamId: string) {
     setError,
     reload: load,
     reloadTeam: loadTeam,
-  }
+  };
 }
 
-export type WeekData = ReturnType<typeof useWeekData>
+export type WeekData = ReturnType<typeof useWeekData>;

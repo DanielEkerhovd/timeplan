@@ -274,7 +274,7 @@ function MemberRow({
                         : onSetRole(r)
                     }
                     className={`h-7 rounded-full px-3 text-xs font-bold transition ${
-                      on ? "bg-ink text-white" : "text-muted hover:text-ink"
+                      on ? "bg-ink text-on-ink" : "text-muted hover:text-ink"
                     }`}
                   >
                     {roleLabel[r]}

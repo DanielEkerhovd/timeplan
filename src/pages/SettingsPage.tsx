@@ -34,6 +34,8 @@ import {
   useToast,
 } from "../components/ui";
 import { Dropdown, hourOptions } from "../components/pickers";
+import { rotateShareSlug, setShareEnabled, shareLink } from "../lib/share";
+import { weekId, weekStart } from "../lib/week";
 import type { MemberWithProfile } from "../lib/types";
 
 interface Props {
@@ -235,7 +237,7 @@ function SlotsCard({
                 end: dayType === "weekday" ? 21 : 16,
               })
             }
-            className="flex h-10 items-center justify-center gap-2 rounded-xl border-[1.5px] border-dashed border-[#d6d2cb] text-[13px] font-bold text-muted hover:border-faint hover:text-ink"
+            className="flex h-10 items-center justify-center gap-2 rounded-xl border-[1.5px] border-dashed border-dot text-[13px] font-bold text-muted hover:border-faint hover:text-ink"
           >
             <svg
               width="14"
@@ -324,7 +326,7 @@ function TypesCard({
           <button
             onClick={() => setAdding(true)}
             disabled={active.length >= 12}
-            className="flex h-10 items-center justify-center gap-2 rounded-xl border-[1.5px] border-dashed border-[#d6d2cb] text-[13px] font-bold text-muted hover:border-faint hover:text-ink disabled:opacity-50"
+            className="flex h-10 items-center justify-center gap-2 rounded-xl border-[1.5px] border-dashed border-dot text-[13px] font-bold text-muted hover:border-faint hover:text-ink disabled:opacity-50"
           >
             <svg
               width="14"
@@ -381,7 +383,7 @@ function ColorDot({
       <button
         onClick={() => setOpen((o) => !o)}
         aria-label={`Colour: ${palette[color].label}`}
-        className="h-[22px] w-[22px] shrink-0 rounded-full ring-2 ring-white"
+        className="h-[22px] w-[22px] shrink-0 rounded-full ring-2 ring-surface"
         style={{ background: palette[color].accent }}
       />
       {open && (
@@ -401,7 +403,7 @@ function ColorDot({
               style={{
                 background: palette[c].accent,
                 boxShadow:
-                  c === color ? "0 0 0 2px #fff, 0 0 0 3.5px #1C1B19" : "none",
+                  c === color ? "0 0 0 2px var(--color-surface), 0 0 0 3.5px var(--color-ink)" : "none",
               }}
             />
           ))}
@@ -619,6 +621,68 @@ function TeamCard({
         <p className="text-[13px] text-muted">
           Times are shown in the team's timezone ({team.timezone}).
         </p>
+      </div>
+
+      <div className="flex flex-col gap-2 border-t border-line pt-4">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex flex-col gap-0.5">
+            <h3 className="text-sm font-extrabold">Share on Discord</h3>
+            <p className="text-[13px] leading-relaxed text-muted">
+              Anyone with the link sees booked activities and the blocks where
+              everyone is free. Never who is free when.
+            </p>
+          </div>
+          <Toggle
+            on={team.share_enabled}
+            label="Sharing"
+            onChange={(v) =>
+              void run(
+                () => setShareEnabled(team.id, v),
+                v ? "Sharing is on" : "Sharing is off",
+              ).then(onTeamsChanged)
+            }
+          />
+        </div>
+        {team.share_enabled && (
+          <div className="flex flex-wrap items-center gap-2">
+            <Input
+              readOnly
+              value={shareLink(team.share_slug, weekId(weekStart(new Date())))}
+              className="h-10 w-[360px] max-w-full text-[13px]"
+              onFocus={(e) => e.currentTarget.select()}
+            />
+            <Button
+              size="sm"
+              variant="secondary"
+              className="h-10"
+              onClick={() =>
+                void navigator.clipboard
+                  .writeText(
+                    shareLink(team.share_slug, weekId(weekStart(new Date()))),
+                  )
+                  .then(() => run(async () => {}, "Link copied"))
+              }
+            >
+              Copy
+            </Button>
+            {isOwner && (
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-10"
+                title="Old links stop working"
+                onClick={() =>
+                  void run(
+                    () => rotateShareSlug(team.id).then(() => {}),
+                    "New link made · old ones stopped working",
+                  ).then(onTeamsChanged)
+                }
+              >
+                New link
+              </Button>
+            )}
+          </div>
+        )}
       </div>
 
       {isOwner && (

@@ -4,7 +4,7 @@ Ukeplan for lag. Spillerne krysser av kveldene de kan, eier og trener ser hvor a
 
 React + Vite + TypeScript + Tailwind i front. Supabase (Postgres, Auth med Discord, Realtime, Edge Functions) bak.
 
-Status: steg 1 (grunnmur og sikkerhet), steg 2 (ukevisningen), steg 3 (ledervisningen) og steg 5 (innstillinger og lagstyring) er ferdig, med det endelige designet. Neste er steg 4, delingsbildet til Discord.
+Status: steg 1 (grunnmur og sikkerhet), steg 2 (ukevisningen), steg 3 (ledervisningen), steg 4 (deling på Discord) og steg 5 (innstillinger og lagstyring) er ferdig. Igjen: tidssonehint og drift.
 
 ## Roller
 
@@ -39,7 +39,7 @@ supabase link --project-ref <prosjekt-ref>
 supabase db push
 ```
 
-Alternativt: åpne filene i `supabase/migrations/` i SQL Editor i Supabase og kjør dem i rekkefølge (`0001_init.sql`, `0002_activity_types.sql`, `0003_positions.sql`, `0004_custom_names.sql`).
+Alternativt: åpne filene i `supabase/migrations/` i SQL Editor i Supabase og kjør dem i rekkefølge (`0001_init.sql`, `0002_activity_types.sql`, `0003_positions.sql`, `0004_custom_names.sql`, `0005_share.sql`, `0006_lock_past.sql`, `0007_share_url.sql`).
 
 Har du allerede kjørt 0001? Da kjører du bare `0002_activity_types.sql` (eller `supabase db push`). Den legger til aktivitetstyper, sletter den gamle `type`-kolonnen på `events` og gir alle eksisterende lag typene Scrim, Match og VOD review.
 
@@ -73,6 +73,12 @@ Skjermene følger mockupene. På PC er appen fullskjerm med sidemeny (Week / Pla
 
 **Players**: du kan sette ditt eget visningsnavn (trykk på navnet ditt nederst i sidemenyen, eller avataren på mobil); det vinner over Discord-navnet i alle lag til du velger «Use Discord name». Medlemmer med rolle (tilgang) og lane-posisjon (Top, Jungle, Mid, Bot, Support, Sub, Coach; bare visning). Du setter din egen posisjon, eier og trener kan sette alle. Eier bytter Coach/Player, overfører eierskap og fjerner folk; trener fjerner spillere; alle andre kan forlate laget. Eier og trener lager invitasjonskoder (varighet og antall bruk).
 
+**Deling på Discord** (steg 4): eier slår på deling i Settings. «Share week on Discord» nederst i sidemenyen (eller i menyen på mobil) kopierer lenka for uka du står i. Lenka ligger på appens eget domene (`/w/<kode>`) og skrives om til en Edge Function av `vercel.json`, så Supabase-adressa aldri vises. Funksjonen gir Discord et bilde av uka; se `supabase/functions/README.md` for oppsett. Etter deploy: `curl -sI "https://<appen-din>/w/_selftest.png"` tegner et oppdiktet lag og bekrefter at fonter og wasm kom med. Alle med lenka ser bookede aktiviteter og blokker der alle er ledige, aldri hvem som er ledig når. «New link» (bare eier) gjør gamle lenker døde. Koden er 14 tegn fra et alfabet på 31 (69 bits), så den lar seg ikke gjette. Merk at Discord lagrer bildet sitt eget: en lenke som alt er postet, forsvinner ikke om du bytter kode.
+
+**Låst fortid** (0006): du kan bla bakover og se gamle uker, men ikke endre dem. Skriving er åpen fra mandag i inneværende uke (så du rekker å fikse mandagen på onsdag) og tre måneder fram. Sletting i fortida er stengt på samme måte, men cascade (forlate laget, slette laget) rydder fritt. Gammel tilgjengelighet eldre enn 90 dager slettes av `prune_old_availability()`; den registreres i pg_cron hvis utvidelsen er slått på (Database → Extensions), ellers skjer ingenting og appen virker som før. Aktivitetene blir liggende.
+
+**Mørk modus**: Light / Dark / Auto i brukermenyen nederst i sidemenyen (avataren på mobil). Lagres per nettleser. Alle farger er CSS-variabler i `src/index.css`, med et eget sett for `.dark`.
+
 **Settings** (eier og trener): intervallene for hverdag og helg, aktivitetstypene (navn, farge, spør om motstander, standard lengde; typer i bruk arkiveres i stedet for å slettes), lagnavn, og sletting av laget (bare eier, må skrive lagnavnet).
 
 Aktivitetstyper ligger i `activity_types`. En aktivitet peker enten på en type (`type_id`) eller har egen `title` + `color`; `events_type_or_title` i databasen sørger for at det alltid er akkurat én av dem. Fargen lagres som nøkkel (`yellow`, `blue` …); hex-verdiene ligger i `src/lib/colors.ts`.
@@ -81,7 +87,7 @@ Dataene for uka deles mellom sidene gjennom `src/lib/useWeekData.ts` (realtime p
 
 ## Sikkerhetstestene
 
-`supabase/tests/security.sql` er et testskript med fire brukere (eier, trener, spiller og en fremmed fra et annet lag) som prøver alt de ikke skal få lov til, mot hver tabell og hver funksjon. Over 130 sjekker. Alt kjøres i én transaksjon som rulles tilbake, så databasen er uendret etterpå.
+`supabase/tests/security.sql` er et testskript med fire brukere (eier, trener, spiller og en fremmed fra et annet lag) som prøver alt de ikke skal få lov til, mot hver tabell og hver funksjon. Nesten 150 sjekker. Alt kjøres i én transaksjon som rulles tilbake, så databasen er uendret etterpå.
 
 Mot lokal Supabase (anbefalt):
 
@@ -113,6 +119,6 @@ GitHub Actions (`.github/workflows/security.yml`) kjører testene ved hver push.
 
 ## Neste steg
 
-Se byggeplanen. Igjen: steg 4 delingsbildet (Edge Function + Satori, `share_slug` og «Share week on Discord»-knappen), tidssonehint for spillere i annen sone, og steg 6 drift.
+Igjen: tidssonehint for spillere i annen sone, navn på appen (ikke bestemt ennå; står som «Schedule»/«Team Schedule» i appen og bruker `APP_URL` i delingsbildet), og steg 6 drift (deploy, domene, redirect-URL-er, GitHub Actions).
 
 Når du legger til tabeller eller funksjoner: legg til tester i `security.sql` i samme commit.

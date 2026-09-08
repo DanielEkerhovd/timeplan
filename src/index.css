@@ -1,5 +1,8 @@
 @import "tailwindcss";
 
+/* Dark mode is a class on <html> (set by ThemeProvider), not the OS setting alone. */
+@custom-variant dark (&:where(.dark, .dark *));
+
 /* Fargene fra mockupen. Brukes som bg-surface, text-muted, bg-green-soft osv. */
 @theme {
   --font-sans: "Manrope", "Segoe UI", system-ui, sans-serif;
@@ -8,13 +11,17 @@
   --color-surface: #ffffff;
   --color-surface-2: #efede8;
   --color-line: #e6e3dd;
+  --color-line-soft: #eceae5;
   --color-ink: #1c1b19;
   --color-muted: #6f6c66;
   --color-faint: #a8a49d;
+  --color-dot: #cfcbc4;
+  --color-on-ink: #ffffff;
 
   --color-green: #3e9a63;
   --color-green-soft: #dcefe0;
   --color-green-ink: #2f6b45;
+  --color-green-dim: #9ccbac;
 
   --color-yellow: #e9a825;
   --color-yellow-soft: #fff3d1;
@@ -23,8 +30,88 @@
   --color-red-soft: #f8e1dc;
   --color-red-ink: #8a3a2c;
 
+  /* Team overview cells: everyone / all but one / fewer */
+  --color-cell-all: #dcefe0;
+  --color-cell-nearly: #eaf4ec;
+  --color-cell-few: #f6f5f2;
+
   --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.04), 0 8px 24px rgba(28, 27, 25, 0.05);
+  --shadow-pop: 0 12px 32px rgba(28, 27, 25, 0.16);
   --radius-card: 16px;
+}
+
+/* Activity colours (the 8-swatch palette) and avatar tints, as variables so they can flip in dark mode. */
+:root {
+  --act-yellow-soft: #fff6da; --act-yellow-accent: #f0cf7e; --act-yellow-ink: #6b4e00; --act-yellow-sub: #8a6a10;
+  --act-green-soft: #e1f1e5;  --act-green-accent: #8fcba6;  --act-green-ink: #2f6b45;  --act-green-sub: #4e8a63;
+  --act-coral-soft: #fbe3d6;  --act-coral-accent: #f0a58e;  --act-coral-ink: #8a3f1c;  --act-coral-sub: #a65c3a;
+  --act-purple-soft: #e8e1f5; --act-purple-accent: #c9b8ea; --act-purple-ink: #4e3a7a; --act-purple-sub: #7a66a8;
+  --act-blue-soft: #e3ecf7;   --act-blue-accent: #9fbee3;   --act-blue-ink: #2c4f73;   --act-blue-sub: #4f6e93;
+  --act-teal-soft: #ddf1ee;   --act-teal-accent: #8fd0c8;   --act-teal-ink: #1f5f58;   --act-teal-sub: #3f8078;
+  --act-pink-soft: #fbe2ec;   --act-pink-accent: #efa9c4;   --act-pink-ink: #86304f;   --act-pink-sub: #a6506f;
+  --act-grey-soft: #eceae5;   --act-grey-accent: #c9c5be;   --act-grey-ink: #4e4b46;   --act-grey-sub: #7a7368;
+
+  --tint-1-bg: #d9e7f5; --tint-1-fg: #2c4f73;
+  --tint-2-bg: #dcefe0; --tint-2-fg: #2f6b45;
+  --tint-3-bg: #fbe3d6; --tint-3-fg: #8a3f1c;
+  --tint-4-bg: #e8e1f5; --tint-4-fg: #4e3a7a;
+  --tint-5-bg: #fff1c7; --tint-5-fg: #6b4e00;
+  --tint-6-bg: #ddf1ee; --tint-6-fg: #1f5f58;
+
+  --free-border: #9ccbac; --free-bg: rgba(220, 239, 224, 0.35); --free-ink: #5e8f70; --free-sub: #7fa88f; --free-note: #9cb8a5;
+  color-scheme: light;
+}
+
+.dark {
+  color-scheme: dark;
+
+  --color-bg: #141311;
+  --color-surface: #1f1e1b;
+  --color-surface-2: #2b2926;
+  --color-line: #35332e;
+  --color-line-soft: #2c2a26;
+  --color-ink: #f2f0eb;
+  --color-muted: #a8a49d;
+  --color-faint: #6f6c66;
+  --color-dot: #4a4741;
+  --color-on-ink: #141311;
+
+  --color-green: #4fb277;
+  --color-green-soft: #1e3628;
+  --color-green-ink: #9ad8b2;
+  --color-green-dim: #3f6b50;
+
+  --color-yellow: #e9a825;
+  --color-yellow-soft: #3a3115;
+  --color-yellow-ink: #f0cf7e;
+
+  --color-red-soft: #3b1f1a;
+  --color-red-ink: #f0a58e;
+
+  --color-cell-all: #1e3628;
+  --color-cell-nearly: #1c2a22;
+  --color-cell-few: #26241f;
+
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 24px rgba(0, 0, 0, 0.25);
+  --shadow-pop: 0 12px 32px rgba(0, 0, 0, 0.5);
+
+  --act-yellow-soft: #3a3115; --act-yellow-ink: #f0cf7e; --act-yellow-sub: #c9a95c;
+  --act-green-soft: #1e3628;  --act-green-ink: #9ad8b2;  --act-green-sub: #6fb08c;
+  --act-coral-soft: #3f2419;  --act-coral-ink: #f0a58e;  --act-coral-sub: #c9846c;
+  --act-purple-soft: #2c2443; --act-purple-ink: #c9b8ea; --act-purple-sub: #a08fc7;
+  --act-blue-soft: #1d2b3c;   --act-blue-ink: #9fbee3;   --act-blue-sub: #7d9dc2;
+  --act-teal-soft: #17302d;   --act-teal-ink: #8fd0c8;   --act-teal-sub: #6aada4;
+  --act-pink-soft: #3d1f2c;   --act-pink-ink: #efa9c4;   --act-pink-sub: #c886a1;
+  --act-grey-soft: #2b2926;   --act-grey-ink: #c9c5be;   --act-grey-sub: #9a968f;
+
+  --tint-1-bg: #23364c; --tint-1-fg: #9fbee3;
+  --tint-2-bg: #1e3628; --tint-2-fg: #9ad8b2;
+  --tint-3-bg: #3f2419; --tint-3-fg: #f0a58e;
+  --tint-4-bg: #2c2443; --tint-4-fg: #c9b8ea;
+  --tint-5-bg: #3a3115; --tint-5-fg: #f0cf7e;
+  --tint-6-bg: #17302d; --tint-6-fg: #8fd0c8;
+
+  --free-border: #3f6b50; --free-bg: rgba(30, 54, 40, 0.45); --free-ink: #8fc7a4; --free-sub: #6fb08c; --free-note: #5b8f70;
 }
 
 html, body, #root { min-height: 100%; }

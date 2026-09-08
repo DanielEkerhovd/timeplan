@@ -49,10 +49,10 @@ export default function Login() {
 
 function CalendarIcon() {
   return (
-    <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#3E9A63" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="var(--color-green)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
       <rect x="3" y="5" width="18" height="16" rx="4" />
       <path d="M3 10h18M8 3v4M16 3v4" />
-      <circle cx="12" cy="15.5" r="1.6" fill="#3E9A63" stroke="none" />
+      <circle cx="12" cy="15.5" r="1.6" fill="var(--color-green)" stroke="none" />
     </svg>
   )
 }

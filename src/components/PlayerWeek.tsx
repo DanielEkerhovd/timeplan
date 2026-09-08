@@ -14,6 +14,7 @@ import {
 } from "../lib/settings";
 import type { MyTeam } from "../lib/teams";
 import {
+  canEdit,
   friendlyError,
   positionLabel,
   roleLabel,
@@ -26,9 +27,11 @@ import {
   slotLabel,
   toDateKey,
   weekId,
+  weekLock,
   type WeekDay,
 } from "../lib/week";
 import SessionsList from "./SessionsList";
+import ShareWeekButton from "./ShareWeekButton";
 import {
   Avatar,
   Button,
@@ -189,9 +192,10 @@ export default function PlayerWeek({ team, userId, members, week }: Props) {
     return users;
   }, [days, hours]);
 
-  if (!slots || !loaded) return <Spinner />;
+  if (!slots) return <Spinner />;
 
-  const showBanner = bannerFor === weekKey;
+  const lock = weekLock(week.monday);
+  const showBanner = bannerFor === weekKey && !lock;
   const weekNo = weekId(week.monday).slice(-2).replace(/^0/, "");
 
   const usualButton = (
@@ -199,7 +203,7 @@ export default function PlayerWeek({ team, userId, members, week }: Props) {
       variant="secondary"
       size="sm"
       onClick={() => void saveUsual()}
-      disabled={busy || myHourCount === 0}
+      disabled={busy || myHourCount === 0 || lock !== null}
       className="w-full lg:w-auto"
     >
       <svg
@@ -222,6 +226,28 @@ export default function PlayerWeek({ team, userId, members, week }: Props) {
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4">
       <ErrorText>{error}</ErrorText>
+
+      {lock && (
+        <div className="flex items-center gap-2.5 rounded-2xl bg-surface px-4 py-3 text-[13px] font-semibold text-muted shadow-card">
+          <svg
+            width="15"
+            height="15"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className="shrink-0"
+          >
+            <rect x="4" y="10" width="16" height="11" rx="2.5" />
+            <path d="M8 10V7a4 4 0 0 1 8 0v3" />
+          </svg>
+          {lock === "past"
+            ? "This week is done. You can look at it, but not change it."
+            : "Too far ahead to plan. You can mark your time about three months out."}
+        </div>
+      )}
 
       {showBanner && (
         <div className="flex flex-col gap-3 rounded-2xl border-[1.5px] border-green bg-green-soft px-4 py-3.5 sm:flex-row sm:items-center sm:justify-between">
@@ -256,7 +282,8 @@ export default function PlayerWeek({ team, userId, members, week }: Props) {
           members={members}
           userId={userId}
           onToggleJoin={(e) => void toggleJoin(e)}
-          hint="tap to join or leave"
+          locked={lock !== null}
+          hint={lock ? undefined : "tap to join or leave"}
         />
 
         <div className="hidden flex-col gap-2.5 rounded-[20px] bg-surface p-5 shadow-card lg:flex">
@@ -264,11 +291,14 @@ export default function PlayerWeek({ team, userId, members, week }: Props) {
           <p className="text-[13px] leading-relaxed text-muted">
             Every tap is saved right away. Nothing to submit.
           </p>
-          {usualButton}
+          <div className="mt-auto">{usualButton}</div>
         </div>
 
         {/* Desktop: 7 columns, with the hint pinned to the bottom of the card */}
         <div className="hidden min-h-0 flex-1 flex-col rounded-[20px] bg-surface p-5 shadow-card lg:flex">
+          <h2 className="whitespace-nowrap text-[15px] font-extrabold mb-5">
+            Select your availability
+          </h2>
           <div className="grid min-h-0 flex-1 grid-cols-7 content-start gap-2.5 overflow-auto">
             {days.map((day) => {
               const daySlots = slots.filter(
@@ -278,7 +308,7 @@ export default function PlayerWeek({ team, userId, members, week }: Props) {
                 <div key={day.key} className="flex min-w-0 flex-col gap-2">
                   <DayHeader day={day} />
                   {daySlots.length === 0 && (
-                    <div className="rounded-xl border-[1.5px] border-dashed border-[#eceae5] py-3 text-center text-[11px] text-faint">
+                    <div className="rounded-xl border-[1.5px] border-dashed border-line-soft py-3 text-center text-[11px] text-faint">
                       no slots
                     </div>
                   )}
@@ -288,37 +318,47 @@ export default function PlayerWeek({ team, userId, members, week }: Props) {
             })}
           </div>
           <p className="pt-4 text-[13px] text-muted">
-            Tap the times you can play. You can pick more than one per day.
+            {lock
+              ? "Looking back at what the week looked like."
+              : "Tap the times you can play. You can pick more than one per day."}
           </p>
         </div>
 
-        <div className="hidden min-h-0 flex-col gap-3.5 rounded-[20px] bg-surface p-5 shadow-card lg:flex">
-          <h2 className="text-[15px] font-extrabold">Players</h2>
-          <ul className="flex min-h-0 flex-col gap-2.5 overflow-y-auto">
-            {members.map((m) => (
-              <li key={m.user_id} className="flex items-center gap-2.5">
-                <Avatar
-                  name={m.profile?.display_name ?? "?"}
-                  url={m.profile?.avatar_url}
-                  size={30}
-                />
-                <div className="flex min-w-0 flex-col">
-                  <span className="truncate text-[13px] font-bold">
-                    {m.profile?.display_name ?? "Unknown"}
-                  </span>
-                  <span className="text-[11px] text-muted">
-                    {m.position ? positionLabel[m.position] : roleLabel[m.role]}{" "}
-                    ·{" "}
-                    {m.user_id === userId
-                      ? "you"
-                      : answered.has(m.user_id)
-                        ? "answered"
-                        : "not answered"}
-                  </span>
-                </div>
-              </li>
-            ))}
-          </ul>
+        {/* Right column: Players, with the share bar locked to the bottom. */}
+        <div className="hidden min-h-0 flex-col gap-4 lg:flex">
+          <div className="flex min-h-0 flex-col gap-3.5 rounded-[20px] bg-surface p-5 shadow-card">
+            <h2 className="text-[15px] font-extrabold">Players</h2>
+            <ul className="flex min-h-0 flex-col gap-2.5 overflow-y-auto">
+              {members.map((m) => (
+                <li key={m.user_id} className="flex items-center gap-2.5">
+                  <Avatar
+                    name={m.profile?.display_name ?? "?"}
+                    url={m.profile?.avatar_url}
+                    size={30}
+                  />
+                  <div className="flex min-w-0 flex-col">
+                    <span className="truncate text-[13px] font-bold">
+                      {m.profile?.display_name ?? "Unknown"}
+                    </span>
+                    <span className="text-[11px] text-muted">
+                      {m.position
+                        ? positionLabel[m.position]
+                        : roleLabel[m.role]}{" "}
+                      ·{" "}
+                      {m.user_id === userId
+                        ? "you"
+                        : answered.has(m.user_id)
+                          ? "answered"
+                          : "not answered"}
+                    </span>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </div>
+          {canEdit(team.role) && (
+            <ShareWeekButton team={team} className="mt-auto" />
+          )}
         </div>
         {/* Mobile: one card per day */}
         <div className="flex flex-col gap-2.5 lg:hidden">
@@ -361,7 +401,9 @@ export default function PlayerWeek({ team, userId, members, week }: Props) {
             );
           })}
           <p className="px-1 pt-1 text-[13px] text-muted">
-            Tap the times you can play. You can pick more than one per day.
+            {lock
+              ? "Looking back at what the week looked like."
+              : "Tap the times you can play. You can pick more than one per day."}
           </p>
           <div className="pt-1">{usualButton}</div>
         </div>
@@ -393,12 +435,12 @@ export default function PlayerWeek({ team, userId, members, week }: Props) {
           key={slot.id}
           onClick={() => void toggle(day, slot, daySlots)}
           aria-pressed={on}
-          disabled={isPending}
-          className={`flex h-12 flex-col items-center justify-center gap-1 rounded-xl border-[1.5px] text-[12px] font-bold leading-none tracking-tight transition disabled:opacity-60 ${
+          disabled={isPending || lock !== null}
+          className={`flex h-18 flex-col items-center justify-center gap-1 rounded-xl border-[1.5px] text-[13px] font-bold leading-none tracking-tight transition disabled:opacity-60 ${
             on
               ? "border-green bg-green-soft text-green-ink"
               : "border-line bg-surface text-ink hover:border-faint"
-          } ${compact ? "whitespace-nowrap text-[11px]" : ""}`}
+          } ${compact ? "whitespace-nowrap text-[11px]" : ""} ${lock ? "cursor-default opacity-60" : ""}`}
         >
           <span>{slotLabel(slot.start_hour, slot.end_hour)}</span>
           <DotRow can={can} dim={!on} />
@@ -417,7 +459,7 @@ function DayHeader({ day }: { day: WeekDay }) {
         {dayShort[day.isoDay - 1]}
       </span>
       {day.isToday ? (
-        <span className="flex h-[26px] w-[26px] items-center justify-center rounded-full bg-ink text-[13px] font-extrabold text-white">
+        <span className="flex h-[26px] w-[26px] items-center justify-center rounded-full bg-ink text-[13px] font-extrabold text-on-ink">
           {format(day.date, "d")}
         </span>
       ) : (

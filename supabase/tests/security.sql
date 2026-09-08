@@ -407,6 +407,24 @@ select pg_temp.expect_count('spiller fyller neste uke fra vanlig uke (3 timer)',
   format('select 1 where public.apply_default_week(%L, date %L + 7) = 3', :'team_a', :'mandag'), 1);
 select pg_temp.expect_count('fylling er idempotent (0 nye)',
   format('select 1 where public.apply_default_week(%L, date %L + 7) = 0', :'team_a', :'mandag'), 1);
+-- ------------------------------------------------------------
+-- Fortida er låst, framtida er begrenset (0006)
+-- ------------------------------------------------------------
+select pg_temp.expect_denied('kan ikke skrive tilgjengelighet i forrige uke',
+  format('insert into public.availability (team_id, date, hour) values (%L, date %L - 7, 19)', :'team_a', :'mandag'));
+select pg_temp.expect_denied('kan ikke skrive tilgjengelighet mer enn tre måneder fram',
+  format('insert into public.availability (team_id, date, hour) values (%L, current_date + 100, 19)', :'team_a'));
+select pg_temp.expect_ok('kan skrive på mandag denne uka selv om den er passert',
+  format('insert into public.availability (team_id, date, hour) values (%L, %L, 13) on conflict do nothing', :'team_a', :'mandag'));
+select pg_temp.expect_ok('kan skrive to måneder fram',
+  format('insert into public.availability (team_id, date, hour) values (%L, current_date + 60, 19) on conflict do nothing', :'team_a'));
+select pg_temp.expect_denied('kan ikke fylle vanlig uke inn i fortida',
+  format('select public.apply_default_week(%L, date %L - 7)', :'team_a', :'mandag'));
+select pg_temp.expect_denied('kan ikke fylle vanlig uke for langt fram',
+  format('select public.apply_default_week(%L, date %L + 140)', :'team_a', :'mandag'));
+select pg_temp.expect_denied('ingen kan kalle oppryddingen',
+  'select public.prune_old_availability()');
+
 reset role;
 
 select pg_temp.become(:'fremmed_b');
@@ -423,6 +441,47 @@ select pg_temp.expect_count('oppbrukt kode gir null', format('select * from (sel
 reset role;
 
 -- ------------------------------------------------------------
+-- Deling av uka (share_week): uten innlogging, bare når deling er på
+-- ------------------------------------------------------------
+select share_slug as slug_a from public.teams where id = :'team_a' \gset
+select (date :'dato' - (extract(isodow from date :'dato')::int - 1))::text as mandag \gset
+-- Alle tre er ledige lørdag 13–16, så det skal bli en «alle ledige»-blokk
+insert into public.availability (team_id, user_id, date, hour)
+  select :'team_a', u, date :'dato' + 2, h
+  from unnest(array[:'eier_a', :'spiller_a', :'trener_a']::uuid[]) u, generate_series(13, 15) h
+  on conflict do nothing;
+
+select set_config('request.jwt.claims', '', true);
+set local role anon;
+select pg_temp.expect_count('deling av gir null (anon)',
+  format('select 1 where public.share_week(%L, %L) is not null', :'slug_a', :'mandag'), 0);
+reset role;
+
+select pg_temp.become(:'eier_a');
+set local role authenticated;
+select pg_temp.expect_ok('eier slår på deling', format('update public.teams set share_enabled = true where id = %L', :'team_a'));
+reset role;
+
+select set_config('request.jwt.claims', '', true);
+set local role anon;
+select pg_temp.expect_count('anon får uka via delingslenka',
+  format('select 1 where public.share_week(%L, %L) -> ''team'' ->> ''name'' = ''Quackers''', :'slug_a', :'mandag'), 1);
+select pg_temp.expect_count('delingsdata har aktiviteten',
+  format('select 1 where jsonb_path_exists(public.share_week(%L, %L), ''$.days[*].events[*] ? (@.title == "Scrim")'')', :'slug_a', :'mandag'), 1);
+select pg_temp.expect_count('delingsdata har «alle ledige»-blokka lørdag 13–16',
+  format('select 1 where jsonb_path_exists(public.share_week(%L, %L), ''$.days[*].free[*] ? (@.start_hour == 13 && @.end_hour == 16)'')', :'slug_a', :'mandag'), 1);
+select pg_temp.expect_count('delingsdata har ingen blokk der bare noen er ledige',
+  format('select 1 where jsonb_path_exists(public.share_week(%L, %L), ''$.days[*].free[*] ? (@.start_hour == 19)'')', :'slug_a', :'mandag'), 0);
+select pg_temp.expect_count('delingsdata lekker ikke bruker-ider',
+  format('select 1 where position(%L in public.share_week(%L, %L)::text) > 0', :'spiller_a', :'slug_a', :'mandag'), 0);
+select pg_temp.expect_count('delingskoden er 14 tegn',
+  format('select 1 where char_length(%L) = 14', :'slug_a'), 1);
+select pg_temp.expect_count('feil slug gir null', format('select 1 where public.share_week(''FEILSLUG99'', %L) is not null', :'mandag'), 0);
+select pg_temp.expect_count('en dag som ikke er mandag gir null', format('select 1 where public.share_week(%L, date %L + 1) is not null', :'slug_a', :'mandag'), 0);
+select pg_temp.expect_denied('anon kan fortsatt ikke lese teams direkte', 'select * from public.teams');
+reset role;
+
+-- ------------------------------------------------------------
 -- Eier A: fjerne trener, overføre eierskap, slette
 -- ------------------------------------------------------------
 select pg_temp.become(:'eier_a');
@@ -431,7 +490,7 @@ set local role authenticated;
 select pg_temp.expect_count('eieren ser at navnet ikke ble endret',
   format('select * from public.teams where id = %L and name = ''Quackers''', :'team_a'), 1);
 select pg_temp.expect_count('eieren ser at tilgjengeligheten fortsatt er der',
-  format('select * from public.availability where team_id = %L', :'team_a'), 9);
+  format('select * from public.availability where team_id = %L', :'team_a'), 20);
 select pg_temp.expect_count('laget har 3 medlemmer', format('select * from public.members where team_id = %L', :'team_a'), 3);
 
 select pg_temp.expect_ok('eier kan fjerne treneren', format('select public.remove_member(%L, %L)', :'team_a', :'trener_a'));
@@ -453,7 +512,7 @@ select pg_temp.become(:'spiller_a');
 set local role authenticated;
 select pg_temp.expect_count('ny eier ser bare seg selv som medlem', format('select * from public.members where team_id = %L', :'team_a'), 1);
 select pg_temp.expect_count('tilgjengeligheten til den som forlot laget er borte',
-  format('select * from public.availability where team_id = %L', :'team_a'), 6);
+  format('select * from public.availability where team_id = %L', :'team_a'), 11);
 select pg_temp.expect_denied('ny eier kan ikke forlate laget', format('select public.leave_team(%L)', :'team_a'));
 select pg_temp.expect_denied('ny eier kan ikke slette laget med feil navn',
   format('select public.delete_team(%L, ''Feil navn'')', :'team_a'));

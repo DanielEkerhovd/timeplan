@@ -16,9 +16,11 @@ import { ToastProvider } from '../src/components/ui'
 import PlayersPage from '../src/pages/PlayersPage'
 import SettingsPage from '../src/pages/SettingsPage'
 import WeekPage from '../src/pages/WeekPage'
+import SharePage from '../src/pages/SharePage'
 
 const q = new URLSearchParams(location.search)
 const screen = q.get('s') ?? 'me'
+if (q.get('dark')) document.documentElement.classList.add('dark')
 const role = (q.get('role') ?? 'owner') as MyTeam['role']
 
 const team: MyTeam = { id: 't1', name: 'Playwell Quackers', timezone: 'Europe/Oslo', share_slug: 'abc', share_enabled: true, created_at: '', role }
@@ -42,7 +44,7 @@ const types: ActivityType[] = [
   { id: 'ty2', team_id: 't1', name: 'Match', color: 'coral', ask_opponent: true, default_hours: 3, sort: 2, archived: false },
   { id: 'ty3', team_id: 't1', name: 'VOD review', color: 'purple', ask_opponent: false, default_hours: 2, sort: 3, archived: false },
 ]
-const monday = weekStart(new Date())
+const monday = q.get('past') ? new Date(weekStart(new Date()).getTime() - 21 * 86400000) : weekStart(new Date())
 const days = daysOfWeek(monday)
 const hours: HoursByDayUser = {}
 const set = (d: number, u: number, from: number, to: number) => {
@@ -77,6 +79,15 @@ function useFakeWeek(): WeekData {
 function Screen() {
   const week = useFakeWeek()
   const [open, setOpen] = useState(screen === 'form' || screen === 'form-custom')
+  if (screen === 'share') {
+    return (
+      <MemoryRouter initialEntries={['/share/ABC123XYZ9?week=2026-W37']}>
+        <Routes>
+          <Route path="/share/:slug" element={<SharePage />} />
+        </Routes>
+      </MemoryRouter>
+    )
+  }
   const path = screen === 'players' ? '/players' : screen === 'settings' ? '/settings' : '/'
   return (
     <MemoryRouter initialEntries={[`/team/t1${path}${screen === 'team' ? '?view=team' : ''}`]}>

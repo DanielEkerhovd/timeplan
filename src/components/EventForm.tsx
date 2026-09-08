@@ -224,7 +224,7 @@ export default function EventForm({
                           borderColor: p.accent,
                           color: p.ink,
                         }
-                      : { borderColor: "#E6E3DD", color: "#6F6C66" }
+                      : { borderColor: "var(--color-line)", color: "var(--color-muted)" }
                   }
                 >
                   <span
@@ -303,7 +303,7 @@ export default function EventForm({
                       background: palette[c].accent,
                       boxShadow:
                         color === c
-                          ? "0 0 0 2px #fff, 0 0 0 4px #1C1B19"
+                          ? "0 0 0 2px var(--color-surface), 0 0 0 4px var(--color-ink)"
                           : "none",
                     }}
                   />
