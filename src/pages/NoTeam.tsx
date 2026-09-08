@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../lib/auth'
-import { createTeam, joinTeam, setActiveTeamId } from '../lib/teams'
+import { createTeam, joinTeam, setActiveTeamId, takePendingInvite } from '../lib/teams'
 import { friendlyError } from '../lib/types'
 import { Button, Card, ErrorText, Eyebrow, Input } from '../components/ui'
 
@@ -17,7 +17,9 @@ export default function NoTeam({ hasTeams = false, onTeamsChanged }: Props) {
   const { signOut } = useAuth()
 
   const [teamName, setTeamName] = useState('')
-  const [code, setCode] = useState('')
+  // Kom du hit via en invitasjonslenke, men OAuth sendte deg til forsiden i stedet for
+  // /join/<kode>, ligger koden igjen her. Da er den ferdig utfylt og du trykker bare Join.
+  const [code, setCode] = useState(() => takePendingInvite() ?? '')
   const [busy, setBusy] = useState<'create' | 'join' | null>(null)
   const [createError, setCreateError] = useState<string | null>(null)
   const [joinError, setJoinError] = useState<string | null>(null)

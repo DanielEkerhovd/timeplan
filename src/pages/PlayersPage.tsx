@@ -11,7 +11,7 @@ import {
   setPosition,
   setRole,
 } from "../lib/settings";
-import type { MyTeam } from "../lib/teams";
+import { inviteLink, type MyTeam } from "../lib/teams";
 import {
   canEdit,
   friendlyError,
@@ -372,121 +372,169 @@ function InviteCard({
     }
   }
 
-  async function copy(code: string) {
+  async function copy(text: string, done: string) {
     try {
-      await navigator.clipboard.writeText(code);
-      toast("Code copied");
+      await navigator.clipboard.writeText(text);
+      toast(done);
     } catch {
-      toast(code);
+      window.prompt("Copy this", text);
     }
   }
 
+  return (
+    <InviteCardView
+      invites={invites}
+      days={days}
+      uses={uses}
+      busy={busy}
+      onDays={setDays}
+      onUses={setUses}
+      onCreate={() => void make()}
+      onDelete={(id) => void remove(id)}
+      onCopyLink={(code) =>
+        void copy(inviteLink(code), "Link copied · paste it on Discord")
+      }
+      onCopyCode={(code) => void copy(code, "Code copied")}
+      onClearSpent={(ids) =>
+        void Promise.all(ids.map((id) => deleteInvite(id))).then(load)
+      }
+    />
+  );
+}
+
+const expiryLabel = (iso: string) =>
+  new Date(iso).toLocaleDateString(undefined, { day: "numeric", month: "short" });
+
+function trash(size = 14) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M4 7h16M9 7V5h6v2M7 7l1 13h8l1-13" />
+    </svg>
+  );
+}
+
+interface ViewProps {
+  invites: Invite[] | null;
+  days: number;
+  uses: number;
+  busy: boolean;
+  onDays: (n: number) => void;
+  onUses: (n: number) => void;
+  onCreate: () => void;
+  onDelete: (id: string) => void;
+  onCopyLink: (code: string) => void;
+  onCopyCode: (code: string) => void;
+  onClearSpent: (ids: string[]) => void;
+}
+
+/**
+ * The invite card, without the data loading — so it can be rendered in the preview harness.
+ * The newest code gets the whole width: the link is what people paste, so it is the thing
+ * you can see and copy. Older codes sit below as thin rows.
+ */
+export function InviteCardView({ invites, days, uses, busy, onDays, onUses, onCreate, onDelete, onCopyLink, onCopyCode, onClearSpent }: ViewProps) {
   const active = (invites ?? []).filter(inviteIsActive);
   const spent = (invites ?? []).filter((i) => !inviteIsActive(i));
+  const [first, ...rest] = active;
 
   return (
-    <Card className="flex flex-col gap-3">
+    <Card className="flex flex-col gap-3.5">
       <div className="flex flex-col gap-0.5">
-        <h2 className="text-[15px] font-extrabold">Invite codes</h2>
+        <h2 className="text-[15px] font-extrabold">Invite players</h2>
         <p className="text-[13px] leading-relaxed text-muted">
-          Make a code and paste it in Discord. It stops working when it expires
-          or the uses are spent.
+          Paste the link in Discord. One click, sign in, and they are on the team.
         </p>
       </div>
 
-      <div className="flex flex-wrap items-end gap-2">
-        <label className="flex flex-col gap-1 text-[11px] font-bold uppercase tracking-[0.08em] text-muted">
-          Lasts
-          <Dropdown
-            value={days}
-            options={[
-              { value: 1, label: "1 day" },
-              { value: 7, label: "7 days" },
-              { value: 30, label: "30 days" },
-            ]}
-            onChange={setDays}
-            className="h-10 w-[120px] text-sm"
-          />
-        </label>
-        <label className="flex flex-col gap-1 text-[11px] font-bold uppercase tracking-[0.08em] text-muted">
-          Uses
-          <Dropdown
-            value={uses}
-            options={[
-              { value: 1, label: "1" },
-              { value: 5, label: "5" },
-              { value: 15, label: "15" },
-            ]}
-            onChange={setUses}
-            className="h-10 w-[110px] text-sm"
-          />
-        </label>
-        <Button
-          size="sm"
-          className="h-10"
-          onClick={() => void make()}
-          disabled={busy || active.length >= 5}
-        >
-          New code
-        </Button>
-      </div>
-
       {invites === null ? (
-        <Spinner className="min-h-[60px]" />
-      ) : active.length === 0 ? (
-        <p className="text-[13px] text-faint">No active codes.</p>
+        <Spinner className="min-h-[92px]" />
+      ) : !first ? (
+        <div className="flex flex-col items-start gap-1 rounded-2xl border-[1.5px] border-dashed border-line px-4 py-5">
+          <span className="text-sm font-bold">No invite link yet</span>
+          <span className="text-[13px] text-muted">Make one below and paste it where your players are.</span>
+        </div>
       ) : (
-        <ul className="flex flex-col gap-2">
-          {active.map((inv) => (
-            <li
-              key={inv.id}
-              className="flex items-center gap-3 rounded-xl bg-bg px-3 py-2.5"
-            >
-              <button
-                onClick={() => void copy(inv.code)}
-                className="font-mono text-[15px] font-bold tracking-[0.12em] hover:text-green-ink"
-                title="Copy"
-              >
+        <div className="flex flex-col gap-2.5 rounded-2xl bg-bg p-3.5">
+          <div className="flex items-center gap-2">
+            <div className="flex h-11 min-w-0 flex-1 items-center rounded-xl bg-surface px-3.5 shadow-[inset_0_0_0_1.5px_var(--color-line)]">
+              <span className="truncate text-[13px] font-semibold text-muted">
+                {inviteLink(first.code)}
+              </span>
+            </div>
+            <Button className="h-11 shrink-0 px-4 sm:px-5" onClick={() => onCopyLink(first.code)}>
+              Copy link
+            </Button>
+          </div>
+          <div className="flex items-center gap-2 pl-1 text-xs text-muted">
+            <button onClick={() => onCopyCode(first.code)} className="shrink-0 rounded-md bg-surface px-1.5 py-0.5 font-mono text-[11px] font-bold tracking-[0.1em] text-ink hover:text-green-ink" title="Copy the code on its own">
+              {first.code}
+            </button>
+            <span className="min-w-0 truncate">
+              <span className="font-bold text-ink">{first.max_uses - first.used_count} of {first.max_uses} left</span> · expires {expiryLabel(first.expires_at)}
+            </span>
+            <div className="flex-1" />
+            <button onClick={() => onDelete(first.id)} aria-label="Delete this link" className="flex h-7 w-7 items-center justify-center rounded-full text-faint hover:bg-red-soft hover:text-red-ink">
+              {trash()}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {rest.length > 0 && (
+        <ul className="flex flex-col gap-1.5">
+          {rest.map((inv) => (
+            <li key={inv.id} className="flex items-center gap-3 rounded-xl px-3 py-2 hover:bg-bg">
+              <button onClick={() => onCopyCode(inv.code)} className="font-mono text-[13px] font-bold tracking-[0.1em] hover:text-green-ink" title="Copy the code on its own">
                 {inv.code}
               </button>
-              <span className="flex-1 text-xs text-muted">
-                {inv.used_count}/{inv.max_uses} used · expires{" "}
-                {new Date(inv.expires_at).toLocaleDateString(undefined, {
-                  day: "numeric",
-                  month: "short",
-                })}
+              <span className="hidden min-w-0 flex-1 truncate text-xs text-muted sm:block">
+                {inv.max_uses - inv.used_count} of {inv.max_uses} left · expires {expiryLabel(inv.expires_at)}
               </span>
-              <Pill onClick={() => void copy(inv.code)}>Copy</Pill>
-              <button
-                onClick={() => void remove(inv.id)}
-                aria-label="Delete code"
-                className="flex h-8 w-8 items-center justify-center rounded-full text-faint hover:bg-red-soft hover:text-red-ink"
-              >
-                <svg
-                  width="14"
-                  height="14"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2.2"
-                  strokeLinecap="round"
-                >
-                  <path d="M6 6l12 12M18 6L6 18" />
-                </svg>
+              <div className="flex-1 sm:hidden" />
+              <Pill active onClick={() => onCopyLink(inv.code)}>
+                Copy link
+              </Pill>
+              <button onClick={() => onDelete(inv.id)} aria-label="Delete code" className="flex h-7 w-7 items-center justify-center rounded-full text-faint hover:bg-red-soft hover:text-red-ink">
+                {trash(13)}
               </button>
             </li>
           ))}
         </ul>
       )}
+
+      <div className="flex flex-wrap items-center gap-2 border-t border-line pt-3.5">
+        <span className="hidden text-[11px] font-bold uppercase tracking-[0.08em] text-muted sm:inline">New link</span>
+        <Dropdown
+          value={days}
+          options={[
+            { value: 1, label: "1 day" },
+            { value: 7, label: "7 days" },
+            { value: 30, label: "30 days" },
+          ]}
+          onChange={onDays}
+          aria-label="Lasts"
+          className="h-9 w-[122px] text-[13px]"
+        />
+        <Dropdown
+          value={uses}
+          options={[
+            { value: 1, label: "1 use" },
+            { value: 5, label: "5 uses" },
+            { value: 15, label: "15 uses" },
+          ]}
+          onChange={onUses}
+          aria-label="Uses"
+          className="h-9 w-[122px] text-[13px]"
+        />
+        <div className="flex-1" />
+        <Button size="sm" variant="secondary" className="h-9" onClick={onCreate} disabled={busy || active.length >= 5}>
+          Make link
+        </Button>
+      </div>
+
       {spent.length > 0 && (
-        <button
-          onClick={() =>
-            void Promise.all(spent.map((i) => deleteInvite(i.id))).then(load)
-          }
-          className="self-start text-xs font-semibold text-muted hover:text-ink"
-        >
-          Clear {spent.length} expired or used-up code
-          {spent.length === 1 ? "" : "s"}
+        <button onClick={() => onClearSpent(spent.map((i) => i.id))} className="self-start text-xs font-semibold text-muted hover:text-ink">
+          Clear {spent.length} expired or used-up code{spent.length === 1 ? "" : "s"}
         </button>
       )}
     </Card>

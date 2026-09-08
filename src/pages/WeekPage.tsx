@@ -3,7 +3,8 @@ import { useSearchParams } from "react-router-dom";
 import { useAuth } from "../lib/auth";
 import { lineupOrder } from "../lib/settings";
 import type { MyTeam } from "../lib/teams";
-import { canEdit } from "../lib/types";
+import { canEdit, type Profile } from "../lib/types";
+import { viewerZone, zoneNote } from "../lib/timezone";
 import { weekLock } from "../lib/week";
 import type { WeekData } from "../lib/useWeekData";
 import PlayerWeek from "../components/PlayerWeek";
@@ -15,9 +16,11 @@ import { Button, Spinner } from "../components/ui";
 export default function WeekPage({
   team,
   week,
+  profile,
 }: {
   team: MyTeam;
   week: WeekData;
+  profile: Profile | null;
 }) {
   const { user } = useAuth();
   const [params, setParams] = useSearchParams();
@@ -35,6 +38,13 @@ export default function WeekPage({
   const members = useMemo(
     () => lineupOrder(week.members ?? []),
     [week.members],
+  );
+
+  // Bare synlig for den som sitter i en annen tidssone enn laget.
+  // Regnet ut for uka som vises, siden sommertid kan skifte mellom uker.
+  const zone = useMemo(
+    () => zoneNote(team.timezone, week.monday, viewerZone(profile?.timezone)),
+    [team.timezone, week.monday, profile?.timezone],
   );
 
   const toggle = editor && (
@@ -106,6 +116,11 @@ export default function WeekPage({
         leftActions={newActivity || undefined}
         rightActions={toggle || undefined}
       />
+      {zone && (
+        <p className="rounded-[12px] bg-surface px-3.5 py-2.5 text-[13px] font-semibold text-muted shadow-card">
+          {zone}
+        </p>
+      )}
       {!user || week.members === null ? (
         <Spinner />
       ) : tab === "team" ? (

@@ -13,7 +13,7 @@ import { daysOfWeek, weekStart } from '../src/lib/week'
 import AppShell from '../src/components/AppShell'
 import EventForm from '../src/components/EventForm'
 import { ToastProvider } from '../src/components/ui'
-import PlayersPage from '../src/pages/PlayersPage'
+import PlayersPage, { InviteCardView } from '../src/pages/PlayersPage'
 import SettingsPage from '../src/pages/SettingsPage'
 import WeekPage from '../src/pages/WeekPage'
 import SharePage from '../src/pages/SharePage'
@@ -76,9 +76,45 @@ function useFakeWeek(): WeekData {
   } as unknown as WeekData
 }
 
+const day = (n: number) => new Date(Date.now() + n * 86_400_000).toISOString()
+const fakeInvites = [
+  { id: 'i1', team_id: 't1', code: 'K7XM2Q9TB4WZ', max_uses: 5, used_count: 1, expires_at: day(7), created_by: 'u0', created_at: '' },
+  { id: 'i2', team_id: 't1', code: 'P3RTY8HD2KQM', max_uses: 1, used_count: 0, expires_at: day(2), created_by: 'u0', created_at: '' },
+  { id: 'i3', team_id: 't1', code: 'ZZ11AA22BB33', max_uses: 5, used_count: 5, expires_at: day(-1), created_by: 'u0', created_at: '' },
+] as unknown as import('../src/lib/types').Invite[]
+
+/** The invite card on its own, with fake codes: it loads from Supabase in the real app. */
+function InvitePreview() {
+  const [days, setDays] = useState(7)
+  const [uses, setUses] = useState(5)
+  const list = q.get('empty') ? [] : q.get('one') ? fakeInvites.slice(0, 1) : fakeInvites
+  return (
+    <ToastProvider>
+      <div className="min-h-dvh bg-bg p-6">
+        <div className="max-w-[560px]">
+          <InviteCardView
+            invites={list}
+            days={days}
+            uses={uses}
+            busy={false}
+            onDays={setDays}
+            onUses={setUses}
+            onCreate={() => {}}
+            onDelete={() => {}}
+            onCopyLink={() => {}}
+            onCopyCode={() => {}}
+            onClearSpent={() => {}}
+          />
+        </div>
+      </div>
+    </ToastProvider>
+  )
+}
+
 function Screen() {
   const week = useFakeWeek()
   const [open, setOpen] = useState(screen === 'form' || screen === 'form-custom')
+  if (screen === 'invite') return <InvitePreview />
   if (screen === 'share') {
     return (
       <MemoryRouter initialEntries={['/share/ABC123XYZ9?week=2026-W37']}>
@@ -97,7 +133,7 @@ function Screen() {
           element={
             <ToastProvider>
               <Routes>
-                <Route path="/" element={<AppShell team={team} teams={teamsList} mobileTitle="Week 37"><WeekPage team={team} week={week} /></AppShell>} />
+                <Route path="/" element={<AppShell team={team} teams={teamsList} mobileTitle="Week 37"><WeekPage team={team} week={week} profile={null} /></AppShell>} />
                 <Route path="/players" element={<AppShell team={team} teams={teamsList} mobileTitle="Players"><PlayersPage team={team} week={week} onTeamsChanged={async () => {}} /></AppShell>} />
                 <Route path="/settings" element={<AppShell team={team} teams={teamsList} mobileTitle="Settings"><SettingsPage team={team} week={week} onTeamsChanged={async () => {}} /></AppShell>} />
               </Routes>

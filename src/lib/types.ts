@@ -74,6 +74,8 @@ export interface Profile {
   /** What Discord calls you; display_name follows it until you set your own. */
   discord_name: string | null;
   custom_name: boolean;
+  /** Your own zone, used only to explain the team's times. Null until we know it. */
+  timezone: string | null;
 }
 
 export interface MemberWithProfile extends Member {

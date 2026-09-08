@@ -39,14 +39,18 @@ export async function fetchSharedWeek(
   return (data as ShareWeek | null) ?? null;
 }
 
+/** Where the app lives, for links we hand to other people. No trailing slash. */
+export function appBase(): string {
+  return ((import.meta.env.VITE_SHARE_BASE as string | undefined) ?? window.location.origin).replace(/\/$/, "");
+}
+
 /**
  * The link to paste on Discord. It goes to the app's own domain (/w/<code>), which Vercel
  * rewrites to the Supabase function behind the scenes, so the project URL is never shown
  * and the links survive a change of backend.
  */
 export function shareLink(slug: string, weekId: string): string {
-  const base = ((import.meta.env.VITE_SHARE_BASE as string | undefined) ?? window.location.origin).replace(/\/$/, "");
-  return `${base}/w/${slug}?week=${weekId}`;
+  return `${appBase()}/w/${slug}?week=${weekId}`;
 }
 
 export async function setShareEnabled(teamId: string, enabled: boolean) {

@@ -6,7 +6,8 @@ interface AuthState {
   session: Session | null
   user: User | null
   loading: boolean
-  signInWithDiscord: () => Promise<void>
+  /** `next` er en sti i appen å komme tilbake til, f.eks. '/join/K7XM2Q9TB4WZ'. */
+  signInWithDiscord: (next?: string) => Promise<void>
   signOut: () => Promise<void>
 }
 
@@ -29,11 +30,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => sub.subscription.unsubscribe()
   }, [])
 
-  async function signInWithDiscord() {
+  async function signInWithDiscord(next?: string) {
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'discord',
       options: {
-        redirectTo: `${window.location.origin}/`,
+        // Stien må stå i Supabase sin Redirect URL-liste, ellers havner du på Site URL.
+        redirectTo: `${window.location.origin}${next ?? '/'}`,
         scopes: 'identify',
       },
     })

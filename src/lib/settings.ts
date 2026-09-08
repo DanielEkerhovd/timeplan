@@ -18,6 +18,12 @@ export async function setDisplayName(name: string | null) {
   if (error) throw error
 }
 
+/** Your own timezone, in every team. Empty = we stop guessing and show nothing. */
+export async function setTimezone(userId: string, timezone: string | null) {
+  const { error } = await supabase.from('profiles').update({ timezone }).eq('user_id', userId)
+  if (error) throw error
+}
+
 /** Your own position, or anyone's when you are owner/coach. RLS turns other cases into 0 rows. */
 /** Team order for the week views: coaches first, then Top, Jungle, Mid, ADC, Support, Sub, then no position. */
 export function lineupOrder<T extends Pick<MemberWithProfile, 'role' | 'position' | 'profile'>>(members: T[]): T[] {

@@ -1,9 +1,5 @@
 # Supabase-oppsett som hører til repoet. Prosjekt-id settes av `supabase link`.
 
-[functions.share]
-# Discord henter lenka uten token.
-verify_jwt = false
-
 [functions.share-image]
 verify_jwt = false
 # Uten disse to linjene finner ikke funksjonen fontene og wasm-en, og bildet feiler med 500.

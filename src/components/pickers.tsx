@@ -82,13 +82,20 @@ interface DropdownProps<T extends string | number> {
   /** 'pill' = small round trigger (rows); 'field' = form field. */
   look?: 'field' | 'pill'
   menuWidth?: number
+  /** Search box on top of the list. On by itself only for very long lists (timezones). */
+  search?: boolean
 }
 
 /** App-styled select. Trigger + floating list, same look as the user menu. */
-export function Dropdown<T extends string | number>({ value, options, onChange, placeholder = 'Pick …', disabled, className = '', look = 'field', menuWidth, ...rest }: DropdownProps<T>) {
+export function Dropdown<T extends string | number>({ value, options, onChange, placeholder = 'Pick …', disabled, className = '', look = 'field', menuWidth, search, ...rest }: DropdownProps<T>) {
   const [open, setOpen] = useState(false)
+  const [query, setQuery] = useState('')
   const btn = useRef<HTMLButtonElement>(null)
   const current = options.find((o) => o.value === value)
+  // Long lists (every timezone in the world) need a way in that is not scrolling.
+  const searchable = search ?? options.length > 30
+  const q = query.trim().toLowerCase()
+  const shown = q ? options.filter((o) => o.label.toLowerCase().includes(q)) : options
   const base =
     look === 'pill'
       ? 'h-8 rounded-full border-[1.5px] border-line bg-surface pl-3 pr-2.5 text-xs font-bold'
@@ -102,7 +109,10 @@ export function Dropdown<T extends string | number>({ value, options, onChange, 
         aria-haspopup="listbox"
         aria-expanded={open}
         aria-label={rest['aria-label']}
-        onClick={() => setOpen((o) => !o)}
+        onClick={() => {
+          setQuery('')
+          setOpen((o) => !o)
+        }}
         className={`flex items-center justify-between gap-2 text-left outline-none transition hover:border-faint focus-visible:border-green disabled:opacity-50 ${base} ${className}`}
       >
         <span className={`flex min-w-0 items-center gap-2 truncate ${current ? '' : 'text-faint'}`}>
@@ -113,12 +123,22 @@ export function Dropdown<T extends string | number>({ value, options, onChange, 
       </button>
       {open && (
         <Popover anchor={btn.current} onClose={() => setOpen(false)} width={menuWidth}>
+          {searchable && (
+            <input
+              autoFocus
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search"
+              className="mb-1 h-9 w-full rounded-[10px] bg-surface-2 px-3 text-[13px] font-semibold outline-none placeholder:text-faint"
+            />
+          )}
           <ul
             role="listbox"
             className="flex max-h-[260px] flex-col overflow-y-auto"
             ref={(el) => el?.querySelector('[aria-selected="true"]')?.scrollIntoView({ block: 'nearest' })}
           >
-            {options.map((o) => {
+            {shown.length === 0 && <li className="px-3 py-2 text-[13px] font-semibold text-faint">Nothing matches</li>}
+            {shown.map((o) => {
               const on = o.value === value
               return (
                 <li key={String(o.value)}>

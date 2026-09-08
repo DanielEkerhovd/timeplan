@@ -295,6 +295,20 @@ select pg_temp.expect_ok('spiller går tilbake til discord-navnet', 'select publ
 select pg_temp.expect_count('discord-navnet er tilbake',
   format('select * from public.profiles where user_id = %L and display_name = ''Spiller Nytt'' and not custom_name', :'spiller_a'), 1);
 
+-- Egen tidssone: din egen rad, ekte sonenavn, og ingen andres
+select pg_temp.expect_ok('spiller setter egen tidssone', 'update public.profiles set timezone = ''Europe/London'' where user_id = auth.uid()');
+select pg_temp.expect_count('tidssonen er lagret',
+  format('select * from public.profiles where user_id = %L and timezone = ''Europe/London''', :'spiller_a'), 1);
+select pg_temp.expect_denied('oppdiktet sone blir avvist',
+  'update public.profiles set timezone = ''Mars/Olympus'' where user_id = auth.uid()');
+select pg_temp.expect_ok('spiller prøver å sette tidssonen til eieren',
+  format('update public.profiles set timezone = ''Asia/Tokyo'' where user_id = %L', :'eier_a'));
+select pg_temp.expect_count('eierens tidssone er urørt (RLS traff ingen rader)',
+  format('select * from public.profiles where user_id = %L and timezone is null', :'eier_a'), 1);
+select pg_temp.expect_ok('tom sone nullstiller', 'update public.profiles set timezone = '''' where user_id = auth.uid()');
+select pg_temp.expect_count('sonen er nullstilt',
+  format('select * from public.profiles where user_id = %L and timezone is null', :'spiller_a'), 1);
+
 select pg_temp.expect_ok('spiller svarer på aktivitet',
   format('insert into public.event_responses (event_id, status) values (%L, ''coming'')', :'event_a'));
 select pg_temp.expect_denied('spiller kan ikke svare på vegne av andre',

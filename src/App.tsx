@@ -4,6 +4,7 @@ import { AuthProvider, useAuth } from "./lib/auth";
 import { ThemeProvider } from "./lib/theme";
 import { fetchMyTeams, getActiveTeamId, type MyTeam } from "./lib/teams";
 import { Spinner } from "./components/ui";
+import JoinPage from "./pages/JoinPage";
 import Login from "./pages/Login";
 import NoTeam from "./pages/NoTeam";
 import SharePage from "./pages/SharePage";
@@ -18,6 +19,9 @@ export default function App() {
             <Route path="/login" element={<Login />} />
             {/* Public: anyone with the link, no sign-in. */}
             <Route path="/share/:slug" element={<SharePage />} />
+            {/* Outside <Protected> on purpose: it has to render for signed-out
+                visitors, or the invite code is lost on the way to /login. */}
+            <Route path="/join/:code" element={<JoinPage />} />
             <Route path="/*" element={<Protected />} />
           </Routes>
         </BrowserRouter>

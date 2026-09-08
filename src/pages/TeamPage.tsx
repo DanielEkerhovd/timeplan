@@ -1,7 +1,9 @@
 import { useEffect } from 'react'
 import { Navigate, Route, Routes, useParams } from 'react-router-dom'
 import { useAuth } from '../lib/auth'
+import { setTimezone } from '../lib/settings'
 import { setActiveTeamId, type MyTeam } from '../lib/teams'
+import { localZone } from '../lib/timezone'
 import { canEdit } from '../lib/types'
 import { useWeekData } from '../lib/useWeekData'
 import { weekId } from '../lib/week'
@@ -34,6 +36,15 @@ function TeamContent({ team, teams, onTeamsChanged }: { team: MyTeam } & Props) 
     setActiveTeamId(team.id)
   }, [team.id])
 
+  // Første gang: vi vet ikke sonen din, så vi tar den maskinen står i. Du kan endre den i profilen,
+  // og da rører vi den aldri igjen. Feiler den, går appen videre som før.
+  useEffect(() => {
+    if (!user || !profile || profile.timezone) return
+    const zone = localZone()
+    if (!zone) return
+    void setTimezone(user.id, zone).then(week.reloadTeam).catch(() => {})
+  }, [user, profile, week.reloadTeam])
+
   return (
     <ToastProvider>
       <Routes>
@@ -41,7 +52,7 @@ function TeamContent({ team, teams, onTeamsChanged }: { team: MyTeam } & Props) 
           path="/"
           element={
             <AppShell team={team} teams={teams} profile={profile} onProfileChanged={week.reloadTeam} mobileTitle={`Week ${weekId(week.monday).slice(-2).replace(/^0/, '')}`}>
-              <WeekPage team={team} week={week} />
+              <WeekPage team={team} week={week} profile={profile} />
             </AppShell>
           }
         />

@@ -95,7 +95,3 @@ export const palette: Record<string, { soft: string; ink: string; sub: string }>
   pink: { soft: '#FBE2EC', ink: '#86304F', sub: '#A6506F' },
   grey: { soft: '#ECEAE5', ink: '#4E4B46', sub: '#7A7368' },
 }
-
-export function escapeHtml(s: string): string {
-  return s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!)
-}
