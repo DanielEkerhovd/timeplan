@@ -12,7 +12,8 @@
     "test:security:pg": "bash supabase/tests/run_local.sh",
     "db:reset": "supabase db reset",
     "db:types": "supabase gen types typescript --local > src/lib/database.types.ts",
-    "test": "vitest run"
+    "test": "vitest run",
+    "preview:ui": "vite --open /preview/preview.html"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.116.0",

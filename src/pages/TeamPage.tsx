@@ -1,118 +1,70 @@
-import { useEffect, useState } from 'react'
-import { Navigate, useNavigate, useParams } from 'react-router-dom'
-import { useAuth } from '../lib/auth'
-import { supabase } from '../lib/supabase'
+import { useEffect } from 'react'
+import { Navigate, Route, Routes, useParams } from 'react-router-dom'
 import { setActiveTeamId, type MyTeam } from '../lib/teams'
-import { canEdit, roleLabel, type Member, type Profile } from '../lib/types'
-import { Avatar, Card, Eyebrow, Spinner } from '../components/ui'
-import WeekView from '../components/WeekView'
+import { canEdit } from '../lib/types'
+import { useWeekData } from '../lib/useWeekData'
+import { weekId } from '../lib/week'
+import AppShell from '../components/AppShell'
+import { ToastProvider } from '../components/ui'
+import PlayersPage from './PlayersPage'
+import SettingsPage from './SettingsPage'
+import WeekPage from './WeekPage'
 
-interface MemberWithProfile extends Member {
-  profile: Profile | null
+interface Props {
+  teams: MyTeam[]
+  onTeamsChanged: () => Promise<void>
 }
 
-/**
- * Lagsiden: ukevisningen (steg 2) og medlemslista. Ledervisningen (steg 3) kommer her også.
- */
-export default function TeamPage({ teams }: { teams: MyTeam[] }) {
+/** One team: the app frame plus the Week / Players / Settings pages. */
+export default function TeamPage({ teams, onTeamsChanged }: Props) {
   const { teamId } = useParams()
-  const navigate = useNavigate()
-  const { user, signOut } = useAuth()
-
   const team = teams.find((t) => t.id === teamId)
+  // The team is not yours (removed, deleted, or a wrong id): back to the team picker.
+  if (!team) return <Navigate to="/" replace />
+  return <TeamContent key={team.id} team={team} teams={teams} onTeamsChanged={onTeamsChanged} />
+}
 
-  const [members, setMembers] = useState<MemberWithProfile[] | null>(null)
+function TeamContent({ team, teams, onTeamsChanged }: { team: MyTeam } & Props) {
+  const week = useWeekData(team.id)
 
   useEffect(() => {
-    if (!team) return
     setActiveTeamId(team.id)
-    setMembers(null)
-    let cancelled = false
-    supabase
-      .from('members')
-      .select('*, profile:profiles(*)')
-      .eq('team_id', team.id)
-      .then(({ data }) => {
-        if (cancelled) return
-        const rows = (data ?? []) as unknown as MemberWithProfile[]
-        rows.sort((a, b) => (a.profile?.display_name ?? '').localeCompare(b.profile?.display_name ?? ''))
-        setMembers(rows)
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [team])
-
-  // Laget finnes ikke for deg (fjernet, slettet, eller feil id): tilbake til lagvelgeren.
-  if (!team) return <Navigate to="/" replace />
+  }, [team.id])
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-md flex-col gap-5 px-5 pb-10 pt-12">
-      <header className="flex items-center justify-between">
-        <div className="flex flex-col gap-0.5">
-          <Eyebrow>{roleLabel[team.role]}</Eyebrow>
-          <h1 className="text-[26px] font-extrabold tracking-tight">{team.name}</h1>
-        </div>
-        <Avatar
-          name={(user?.user_metadata?.full_name as string | undefined) ?? 'You'}
-          url={user?.user_metadata?.avatar_url as string | undefined}
+    <ToastProvider>
+      <Routes>
+        <Route
+          path="/"
+          element={
+            <AppShell team={team} teams={teams} mobileTitle={`Week ${weekId(week.monday).slice(-2).replace(/^0/, '')}`}>
+              <WeekPage team={team} week={week} />
+            </AppShell>
+          }
         />
-      </header>
-
-      {teams.length > 1 && (
-        <div className="flex flex-wrap gap-2">
-          {teams.map((t) => (
-            <button
-              key={t.id}
-              onClick={() => navigate(`/team/${t.id}`)}
-              className={`h-9 rounded-full px-4 text-[13px] font-bold ${
-                t.id === team.id ? 'bg-ink text-white' : 'bg-surface text-muted shadow-card hover:text-ink'
-              }`}
-            >
-              {t.name}
-            </button>
-          ))}
-        </div>
-      )}
-
-      {user && members !== null && <WeekView team={team} userId={user.id} members={members} />}
-
-      <Card className="flex flex-col gap-3">
-        <h2 className="text-[15px] font-extrabold">Members</h2>
-        {members === null ? (
-          <Spinner />
-        ) : (
-          <ul className="flex flex-col gap-2.5">
-            {members.map((m) => (
-              <li key={m.user_id} className="flex items-center gap-3">
-                <Avatar name={m.profile?.display_name ?? '?'} url={m.profile?.avatar_url} size={32} />
-                <div className="flex flex-col">
-                  <span className="text-sm font-bold">{m.profile?.display_name ?? 'Unknown'}</span>
-                  <span className="text-xs text-muted">
-                    {roleLabel[m.role]}
-                    {m.user_id === user?.id ? ' · you' : ''}
-                  </span>
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
-        {canEdit(team.role) && (
-          <p className="text-[13px] leading-relaxed text-faint">
-            As {roleLabel[team.role].toLowerCase()} you can invite with a code and edit the schedule. The settings page
-            arrives in step 5.
-          </p>
-        )}
-      </Card>
-
-      <div className="flex justify-center gap-4 pt-2 text-sm font-semibold text-muted">
-        <button onClick={() => navigate('/new-team')} className="hover:text-ink">
-          New team / use a code
-        </button>
-        <button onClick={() => signOut()} className="hover:text-ink">
-          Sign out
-        </button>
-      </div>
-    </main>
+        <Route
+          path="/players"
+          element={
+            <AppShell team={team} teams={teams} mobileTitle="Players">
+              <PlayersPage team={team} week={week} onTeamsChanged={onTeamsChanged} />
+            </AppShell>
+          }
+        />
+        <Route
+          path="/settings"
+          element={
+            canEdit(team.role) ? (
+              <AppShell team={team} teams={teams} mobileTitle="Settings">
+                <SettingsPage team={team} week={week} onTeamsChanged={onTeamsChanged} />
+              </AppShell>
+            ) : (
+              <Navigate to={`/team/${team.id}`} replace />
+            )
+          }
+        />
+        <Route path="*" element={<Navigate to={`/team/${team.id}`} replace />} />
+      </Routes>
+    </ToastProvider>
   )
 }
+

@@ -82,6 +82,9 @@ select pg_temp.become(:'eier_a');
 set local role authenticated;
 
 select public.create_team('Quackers') as team_a \gset
+select id as type_scrim from public.activity_types where team_id = :'team_a' and name = 'Scrim' \gset
+select pg_temp.expect_count('nytt lag får 3 standardtyper',
+  format('select * from public.activity_types where team_id = %L', :'team_a'), 3);
 insert into public.invites (team_id, max_uses) values (:'team_a', 2);
 select code as code_a from public.invites where team_id = :'team_a' \gset
 
@@ -127,14 +130,22 @@ select pg_temp.expect_denied('time utenfor 0–23',
 select pg_temp.expect_denied('dato mer enn ett år fram',
   format('insert into public.availability (team_id, date, hour) values (%L, current_date + 400, 19)', :'team_a'));
 select pg_temp.expect_denied('aktivitet med slutt før start',
-  format('insert into public.events (team_id, date, start_hour, end_hour, title) values (%L, %L, 21, 19, ''Feil'')', :'team_a', :'dato'));
-select pg_temp.expect_denied('aktivitet med for lang tittel',
-  format('insert into public.events (team_id, date, start_hour, end_hour, title) values (%L, %L, 19, 22, %L)', :'team_a', :'dato', repeat('x', 81)));
+  format('insert into public.events (team_id, date, start_hour, end_hour, type_id) values (%L, %L, 21, 19, %L)', :'team_a', :'dato', :'type_scrim'));
+select pg_temp.expect_denied('custom-aktivitet med for lang tittel',
+  format('insert into public.events (team_id, date, start_hour, end_hour, title, color) values (%L, %L, 19, 22, %L, ''blue'')', :'team_a', :'dato', repeat('x', 81)));
+select pg_temp.expect_denied('custom-aktivitet uten farge avvises',
+  format('insert into public.events (team_id, date, start_hour, end_hour, title) values (%L, %L, 19, 22, ''Flex'')', :'team_a', :'dato'));
+select pg_temp.expect_denied('aktivitet med både type og tittel avvises',
+  format('insert into public.events (team_id, date, start_hour, end_hour, type_id, title, color) values (%L, %L, 19, 22, %L, ''Begge'', ''blue'')', :'team_a', :'dato', :'type_scrim'));
+select pg_temp.expect_denied('eier kan ikke lage mer enn 12 typer',
+  format('insert into public.activity_types (team_id, name) select %L, ''Type '' || g from generate_series(1, 10) g', :'team_a'));
 
 -- En ekte aktivitet til senere tester
-insert into public.events (team_id, date, start_hour, end_hour, type, title)
-  values (:'team_a', :'dato', 19, 22, 'scrim', 'Scrim');
-select id as event_a from public.events where team_id = :'team_a' \gset
+insert into public.events (team_id, date, start_hour, end_hour, type_id, opponent)
+  values (:'team_a', :'dato', 19, 22, :'type_scrim', 'Nordic Wolves');
+select id as event_a from public.events where team_id = :'team_a' and type_id = :'type_scrim' \gset
+select pg_temp.expect_ok('custom-aktivitet med tittel og farge',
+  format('insert into public.events (team_id, date, start_hour, end_hour, title, color) values (%L, %L, 13, 16, ''Flex 5v5 night'', ''blue'')', :'team_a', :'dato'));
 
 reset role;
 
@@ -157,6 +168,10 @@ select pg_temp.expect_count('fremmed ser ikke aktiviteter i lag A',
   format('select * from public.events where team_id = %L', :'team_a'), 0);
 select pg_temp.expect_count('fremmed ser ikke intervaller i lag A',
   format('select * from public.team_slots where team_id = %L', :'team_a'), 0);
+select pg_temp.expect_count('fremmed ser ikke typene i lag A',
+  format('select * from public.activity_types where team_id = %L', :'team_a'), 0);
+select pg_temp.expect_denied('fremmed kan ikke bruke lag A sin type på egen aktivitet',
+  format('insert into public.events (team_id, date, start_hour, end_hour, type_id) values (%L, %L, 19, 22, %L)', :'team_b', :'dato', :'type_scrim'));
 select pg_temp.expect_count('fremmed ser ikke koder i lag A',
   format('select * from public.invites where team_id = %L', :'team_a'), 0);
 select pg_temp.expect_count('fremmed ser ikke profilene i lag A',
@@ -173,7 +188,9 @@ select pg_temp.expect_denied('fremmed kan ikke legge seg selv til i lag A',
 select pg_temp.expect_denied('fremmed kan ikke skrive tilgjengelighet i lag A',
   format('insert into public.availability (team_id, date, hour) values (%L, %L, 19)', :'team_a', :'dato'));
 select pg_temp.expect_denied('fremmed kan ikke lage aktivitet i lag A',
-  format('insert into public.events (team_id, date, start_hour, end_hour, title) values (%L, %L, 19, 22, ''Hack'')', :'team_a', :'dato'));
+  format('insert into public.events (team_id, date, start_hour, end_hour, title, color) values (%L, %L, 19, 22, ''Hack'', ''grey'')', :'team_a', :'dato'));
+select pg_temp.expect_denied('fremmed kan ikke lage type i lag A',
+  format('insert into public.activity_types (team_id, name) values (%L, ''Hack'')', :'team_a'));
 select pg_temp.expect_denied('fremmed kan ikke lage intervall i lag A',
   format('insert into public.team_slots (team_id, day_type, start_hour, end_hour) values (%L, ''weekday'', 10, 13)', :'team_a'));
 select pg_temp.expect_denied('fremmed kan ikke lage kode for lag A',
@@ -256,7 +273,13 @@ select pg_temp.expect_denied('spiller kan ikke svare på vegne av andre',
   format('insert into public.event_responses (event_id, user_id, status) values (%L, %L, ''coming'')', :'event_a', :'eier_a'));
 
 select pg_temp.expect_denied('spiller kan ikke lage aktivitet',
-  format('insert into public.events (team_id, date, start_hour, end_hour, title) values (%L, %L, 19, 22, ''Min'')', :'team_a', :'dato'));
+  format('insert into public.events (team_id, date, start_hour, end_hour, type_id) values (%L, %L, 19, 22, %L)', :'team_a', :'dato', :'type_scrim'));
+select pg_temp.expect_count('spiller ser lagets typer',
+  format('select * from public.activity_types where team_id = %L', :'team_a'), 3);
+select pg_temp.expect_denied('spiller kan ikke endre typer',
+  format('insert into public.activity_types (team_id, name) values (%L, ''Min type'')', :'team_a'));
+select pg_temp.expect_ok('spiller sitt forsøk på å endre en type treffer ingen rader',
+  format('update public.activity_types set name = ''Hacket'' where team_id = %L', :'team_a'));
 select pg_temp.expect_denied('spiller kan ikke lage kode',
   format('insert into public.invites (team_id) values (%L)', :'team_a'));
 select pg_temp.expect_denied('spiller kan ikke endre intervaller',
@@ -284,7 +307,7 @@ set local role authenticated;
 select pg_temp.expect_count('trener blir med via kode',
   format('select * from (select public.join_team(%L) as t) j where t is not null', :'code_a'), 1);
 select pg_temp.expect_denied('som spiller kan han ennå ikke lage aktivitet',
-  format('insert into public.events (team_id, date, start_hour, end_hour, title) values (%L, %L, 20, 23, ''Nei'')', :'team_a', :'dato'));
+  format('insert into public.events (team_id, date, start_hour, end_hour, type_id) values (%L, %L, 20, 23, %L)', :'team_a', :'dato', :'type_scrim'));
 reset role;
 
 select pg_temp.become(:'eier_a');
@@ -300,7 +323,20 @@ reset role;
 select pg_temp.become(:'trener_a');
 set local role authenticated;
 select pg_temp.expect_ok('trener kan lage aktivitet',
-  format('insert into public.events (team_id, date, start_hour, end_hour, title) values (%L, %L, 20, 23, ''Trenerens øving'')', :'team_a', :'dato'));
+  format('insert into public.events (team_id, date, start_hour, end_hour, type_id) values (%L, %L, 20, 23, %L)', :'team_a', :'dato', :'type_scrim'));
+select pg_temp.expect_ok('trener kan lage en ny type',
+  format('insert into public.activity_types (team_id, name, color, default_hours) values (%L, ''Clash'', ''teal'', 4)', :'team_a'));
+select id as type_clash from public.activity_types where team_id = :'team_a' and name = 'Clash' \gset
+select pg_temp.expect_ok('trener booker en Clash-kveld',
+  format('insert into public.events (team_id, date, start_hour, end_hour, type_id) values (%L, date %L + 1, 19, 23, %L)', :'team_a', :'dato', :'type_clash'));
+select pg_temp.expect_denied('type fra laget kan ikke slettes mens den er i bruk',
+  format('delete from public.activity_types where id = %L', :'type_clash'));
+select pg_temp.expect_ok('trener kan arkivere en type',
+  format('update public.activity_types set archived = true where team_id = %L and name = ''Clash''', :'team_a'));
+select pg_temp.expect_ok('aktivitet med arkivert type kan fortsatt flyttes',
+  format('update public.events set start_hour = 20 where team_id = %L and type_id = %L', :'team_a', :'type_clash'));
+select pg_temp.expect_denied('arkivert type kan ikke brukes på nye aktiviteter',
+  format('insert into public.events (team_id, date, start_hour, end_hour, type_id) values (%L, %L, 20, 23, %L)', :'team_a', :'dato', :'type_clash'));
 select pg_temp.expect_ok('trener kan lage kode',
   format('insert into public.invites (team_id) values (%L)', :'team_a'));
 select pg_temp.expect_ok('trener kan endre intervaller',
@@ -332,6 +368,19 @@ select pg_temp.expect_count('spiller blir med igjen via trenerens kode',
   format('select * from (select public.join_team(%L) as t) j where t is not null', :'code_t'), 1);
 select pg_temp.expect_ok('spiller skriver tilgjengelighet på nytt',
   format('insert into public.availability (team_id, date, hour) values (%L, %L, 19), (%L, %L, 20), (%L, %L, 21)', :'team_a', :'dato', :'team_a', :'dato', :'team_a', :'dato'));
+select (date :'dato' - (extract(isodow from date :'dato')::int - 1))::text as mandag \gset
+select pg_temp.expect_count('spiller lagrer vanlig uke (3 timer)',
+  format('select 1 where public.save_default_week(%L, %L) = 3', :'team_a', :'mandag'), 1);
+select pg_temp.expect_count('spiller fyller neste uke fra vanlig uke (3 timer)',
+  format('select 1 where public.apply_default_week(%L, date %L + 7) = 3', :'team_a', :'mandag'), 1);
+select pg_temp.expect_count('fylling er idempotent (0 nye)',
+  format('select 1 where public.apply_default_week(%L, date %L + 7) = 0', :'team_a', :'mandag'), 1);
+reset role;
+
+select pg_temp.become(:'fremmed_b');
+set local role authenticated;
+select pg_temp.expect_denied('fremmed kan ikke lagre vanlig uke i lag A',
+  format('select public.save_default_week(%L, %L)', :'team_a', :'mandag'));
 reset role;
 
 -- Koden var maks 2 bruk og er nå oppbrukt: fremmed kan ikke bruke den (og er sperret uansett, så vi nullstiller loggen først)
@@ -350,7 +399,7 @@ set local role authenticated;
 select pg_temp.expect_count('eieren ser at navnet ikke ble endret',
   format('select * from public.teams where id = %L and name = ''Quackers''', :'team_a'), 1);
 select pg_temp.expect_count('eieren ser at tilgjengeligheten fortsatt er der',
-  format('select * from public.availability where team_id = %L', :'team_a'), 6);
+  format('select * from public.availability where team_id = %L', :'team_a'), 9);
 select pg_temp.expect_count('laget har 3 medlemmer', format('select * from public.members where team_id = %L', :'team_a'), 3);
 
 select pg_temp.expect_ok('eier kan fjerne treneren', format('select public.remove_member(%L, %L)', :'team_a', :'trener_a'));
@@ -359,7 +408,7 @@ select pg_temp.expect_denied('kan ikke overføre til en som ikke er medlem',
 select pg_temp.expect_ok('overfører eierskapet til spiller A',
   format('select public.transfer_ownership(%L, %L)', :'team_a', :'spiller_a'));
 select pg_temp.expect_ok('gammel eier er nå trener og kan fortsatt lage aktivitet',
-  format('insert into public.events (team_id, date, start_hour, end_hour, title) values (%L, %L, 20, 23, ''Ja'')', :'team_a', :'dato'));
+  format('insert into public.events (team_id, date, start_hour, end_hour, title, color) values (%L, %L, 20, 23, ''Ja'', ''pink'')', :'team_a', :'dato'));
 select pg_temp.expect_denied('gammel eier kan ikke lenger slette laget',
   format('select public.delete_team(%L, ''Quackers'')', :'team_a'));
 select pg_temp.expect_ok('gammel eier kan forlate laget', format('select public.leave_team(%L)', :'team_a'));
@@ -372,7 +421,7 @@ select pg_temp.become(:'spiller_a');
 set local role authenticated;
 select pg_temp.expect_count('ny eier ser bare seg selv som medlem', format('select * from public.members where team_id = %L', :'team_a'), 1);
 select pg_temp.expect_count('tilgjengeligheten til den som forlot laget er borte',
-  format('select * from public.availability where team_id = %L', :'team_a'), 3);
+  format('select * from public.availability where team_id = %L', :'team_a'), 6);
 select pg_temp.expect_denied('ny eier kan ikke forlate laget', format('select public.leave_team(%L)', :'team_a'));
 select pg_temp.expect_denied('ny eier kan ikke slette laget med feil navn',
   format('select public.delete_team(%L, ''Feil navn'')', :'team_a'));

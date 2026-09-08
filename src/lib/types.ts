@@ -1,6 +1,5 @@
-// Speiler tabellene i supabase/migrations/0001_init.sql.
-// Når skjemaet vokser: `supabase gen types typescript --local > src/lib/database.types.ts`
-// og bytt til de genererte typene.
+// Speiler tabellene i supabase/migrations/. Når skjemaet vokser:
+// `supabase gen types typescript --local > src/lib/database.types.ts` og bytt til de genererte typene.
 
 export type MemberRole = 'owner' | 'coach' | 'player'
 
@@ -13,8 +12,10 @@ export const roleLabel: Record<MemberRole, string> = {
 /** Eier og trener kan redigere planen. */
 export const canEdit = (role: MemberRole) => role === 'owner' || role === 'coach'
 export type DayType = 'weekday' | 'weekend'
-export type EventType = 'scrim' | 'practice' | 'match' | 'other'
 export type ResponseStatus = 'coming' | 'not_coming'
+
+export type ActivityColor = 'yellow' | 'green' | 'coral' | 'purple' | 'blue' | 'teal' | 'pink' | 'grey'
+export const activityColors: ActivityColor[] = ['yellow', 'green', 'coral', 'purple', 'blue', 'teal', 'pink', 'grey']
 
 export interface Team {
   id: string
@@ -39,6 +40,10 @@ export interface Profile {
   avatar_url: string | null
 }
 
+export interface MemberWithProfile extends Member {
+  profile: Profile | null
+}
+
 export interface TeamSlot {
   id: string
   team_id: string
@@ -55,28 +60,46 @@ export interface Availability {
   hour: number
 }
 
+/** A team-editable activity type (Scrim, Match, VOD review …). The type is the title of the booking. */
+export interface ActivityType {
+  id: string
+  team_id: string
+  name: string
+  color: ActivityColor
+  ask_opponent: boolean
+  default_hours: number
+  sort: number
+  archived: boolean
+}
+
+/**
+ * A booked activity. Either it points at a type (type_id set, title/color null),
+ * or it is a custom one with its own title and colour.
+ */
 export interface TeamEvent {
   id: string
   team_id: string
   date: string
   start_hour: number
   end_hour: number
-  type: EventType
-  title: string
+  type_id: string | null
+  title: string | null
+  color: ActivityColor | null
   opponent: string | null
   note: string | null
   created_by: string | null
   updated_at: string
 }
 
-export interface SlotCount {
+export interface Invite {
+  id: string
   team_id: string
-  date: string
-  start_hour: number
-  end_hour: number
-  sort: number
-  available_count: number
-  user_ids: string[]
+  code: string
+  created_by: string | null
+  expires_at: string
+  max_uses: number
+  used_count: number
+  created_at: string
 }
 
 /** Feilkoder databasen kaster (raise exception '<kode>'). */
@@ -94,6 +117,8 @@ export const dbErrors = {
   invite_too_long: 'An invite code can last at most 30 days.',
   too_many_attempts: 'Too many failed attempts. Try again in an hour.',
   too_many_events: 'Max 4 activities per day.',
+  too_many_types: 'Max 12 activity types. Archive one first.',
+  type_not_in_team: 'That activity type is not available any more.',
   date_out_of_range: 'The date must be within one year.',
   name_mismatch: 'The name does not match.',
   use_leave_team: 'Use "Leave team" to remove yourself.',
@@ -105,7 +130,9 @@ export function friendlyError(err: unknown): string {
   for (const [code, text] of Object.entries(dbErrors)) {
     if (msg.includes(code)) return text
   }
+  if (msg.includes('events_type_or_title')) return 'Give the activity a title and a colour, or pick a type.'
   if (msg.includes('row-level security')) return 'You do not have access to this.'
   if (msg.includes('permission denied')) return 'You do not have access to this.'
+  if (msg.includes('violates foreign key') && msg.includes('events')) return 'That type is used by a booking. Archive it instead.'
   return 'Something went wrong. Please try again.'
 }

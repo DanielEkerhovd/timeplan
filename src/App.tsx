@@ -20,7 +20,7 @@ export default function App() {
   )
 }
 
-/** Alt bak innlogging. Henter lagene dine én gang, og på nytt når du lager/blir med i et lag. */
+/** Everything behind sign-in. Loads your teams once, and again when you create/join/leave one. */
 function Protected() {
   const { user, loading } = useAuth()
   const [teams, setTeams] = useState<MyTeam[] | null>(null)
@@ -38,9 +38,9 @@ function Protected() {
     if (user) void reload()
   }, [user, reload])
 
-  if (loading) return <Spinner />
+  if (loading) return <Spinner className="min-h-dvh" />
   if (!user) return <Navigate to="/login" replace />
-  if (teams === null) return <Spinner />
+  if (teams === null) return <Spinner className="min-h-dvh" />
 
   const active = getActiveTeamId()
   const home = teams.length === 0 ? '/new-team' : `/team/${teams.some((t) => t.id === active) ? active : teams[0].id}`
@@ -49,7 +49,7 @@ function Protected() {
     <Routes>
       <Route path="/" element={<Navigate to={home} replace />} />
       <Route path="/new-team" element={<NoTeam hasTeams={teams.length > 0} onTeamsChanged={reload} />} />
-      <Route path="/team/:teamId" element={<TeamPage teams={teams} />} />
+      <Route path="/team/:teamId/*" element={<TeamPage teams={teams} onTeamsChanged={reload} />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   )
