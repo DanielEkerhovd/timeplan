@@ -1,5 +1,6 @@
 import { useEffect } from 'react'
 import { Navigate, Route, Routes, useParams } from 'react-router-dom'
+import { useAuth } from '../lib/auth'
 import { setActiveTeamId, type MyTeam } from '../lib/teams'
 import { canEdit } from '../lib/types'
 import { useWeekData } from '../lib/useWeekData'
@@ -26,6 +27,8 @@ export default function TeamPage({ teams, onTeamsChanged }: Props) {
 
 function TeamContent({ team, teams, onTeamsChanged }: { team: MyTeam } & Props) {
   const week = useWeekData(team.id)
+  const { user } = useAuth()
+  const profile = week.members?.find((m) => m.user_id === user?.id)?.profile ?? null
 
   useEffect(() => {
     setActiveTeamId(team.id)
@@ -37,7 +40,7 @@ function TeamContent({ team, teams, onTeamsChanged }: { team: MyTeam } & Props) 
         <Route
           path="/"
           element={
-            <AppShell team={team} teams={teams} mobileTitle={`Week ${weekId(week.monday).slice(-2).replace(/^0/, '')}`}>
+            <AppShell team={team} teams={teams} profile={profile} onProfileChanged={week.reloadTeam} mobileTitle={`Week ${weekId(week.monday).slice(-2).replace(/^0/, '')}`}>
               <WeekPage team={team} week={week} />
             </AppShell>
           }
@@ -45,7 +48,7 @@ function TeamContent({ team, teams, onTeamsChanged }: { team: MyTeam } & Props) 
         <Route
           path="/players"
           element={
-            <AppShell team={team} teams={teams} mobileTitle="Players">
+            <AppShell team={team} teams={teams} profile={profile} onProfileChanged={week.reloadTeam} mobileTitle="Players">
               <PlayersPage team={team} week={week} onTeamsChanged={onTeamsChanged} />
             </AppShell>
           }
@@ -54,7 +57,7 @@ function TeamContent({ team, teams, onTeamsChanged }: { team: MyTeam } & Props) 
           path="/settings"
           element={
             canEdit(team.role) ? (
-              <AppShell team={team} teams={teams} mobileTitle="Settings">
+              <AppShell team={team} teams={teams} profile={profile} onProfileChanged={week.reloadTeam} mobileTitle="Settings">
                 <SettingsPage team={team} week={week} onTeamsChanged={onTeamsChanged} />
               </AppShell>
             ) : (

@@ -39,7 +39,7 @@ supabase link --project-ref <prosjekt-ref>
 supabase db push
 ```
 
-Alternativt: åpne filene i `supabase/migrations/` i SQL Editor i Supabase og kjør dem i rekkefølge (`0001_init.sql`, så `0002_activity_types.sql`).
+Alternativt: åpne filene i `supabase/migrations/` i SQL Editor i Supabase og kjør dem i rekkefølge (`0001_init.sql`, `0002_activity_types.sql`, `0003_positions.sql`, `0004_custom_names.sql`).
 
 Har du allerede kjørt 0001? Da kjører du bare `0002_activity_types.sql` (eller `supabase db push`). Den legger til aktivitetstyper, sletter den gamle `type`-kolonnen på `events` og gir alle eksisterende lag typene Scrim, Match og VOD review.
 
@@ -71,7 +71,7 @@ Skjermene følger mockupene. På PC er appen fullskjerm med sidemeny (Week / Pla
 - «Everyone can» til høyre: blokkene der alle er ledige og ingenting er booket. Lista ruller.
 - Skjemaet: dato, fra/til, «What» = lagets typer eller Custom. Typer med «Ask for opponent» får et motstanderfelt; Custom får tittel og en av 8 farger. «Shows as» viser resultatet. Overlapper det en annen aktivitet, advarer skjemaet men lar deg booke likevel (maks 4 per dag).
 
-**Players**: medlemmer med roller. Eier gir/tar trenerrolle, overfører eierskap og fjerner folk; trener fjerner spillere; alle andre kan forlate laget. Eier og trener lager invitasjonskoder (varighet og antall bruk).
+**Players**: du kan sette ditt eget visningsnavn (trykk på navnet ditt nederst i sidemenyen, eller avataren på mobil); det vinner over Discord-navnet i alle lag til du velger «Use Discord name». Medlemmer med rolle (tilgang) og lane-posisjon (Top, Jungle, Mid, Bot, Support, Sub, Coach; bare visning). Du setter din egen posisjon, eier og trener kan sette alle. Eier bytter Coach/Player, overfører eierskap og fjerner folk; trener fjerner spillere; alle andre kan forlate laget. Eier og trener lager invitasjonskoder (varighet og antall bruk).
 
 **Settings** (eier og trener): intervallene for hverdag og helg, aktivitetstypene (navn, farge, spør om motstander, standard lengde; typer i bruk arkiveres i stedet for å slettes), lagnavn, og sletting av laget (bare eier, må skrive lagnavnet).
 
@@ -81,7 +81,7 @@ Dataene for uka deles mellom sidene gjennom `src/lib/useWeekData.ts` (realtime p
 
 ## Sikkerhetstestene
 
-`supabase/tests/security.sql` er et testskript med fire brukere (eier, trener, spiller og en fremmed fra et annet lag) som prøver alt de ikke skal få lov til, mot hver tabell og hver funksjon. Over 120 sjekker. Alt kjøres i én transaksjon som rulles tilbake, så databasen er uendret etterpå.
+`supabase/tests/security.sql` er et testskript med fire brukere (eier, trener, spiller og en fremmed fra et annet lag) som prøver alt de ikke skal få lov til, mot hver tabell og hver funksjon. Over 130 sjekker. Alt kjøres i én transaksjon som rulles tilbake, så databasen er uendret etterpå.
 
 Mot lokal Supabase (anbefalt):
 

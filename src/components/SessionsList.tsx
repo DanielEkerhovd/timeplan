@@ -40,7 +40,7 @@ export default function SessionsList({ events, types, members, userId, onToggleJ
             const people = members.filter((m) => ids.includes(m.user_id))
             const d = fromDateKey(e.date)
             return (
-              <div key={e.id} className="flex min-w-0 items-center gap-3 rounded-xl px-3.5 py-2.5" style={{ background: p.soft }}>
+              <div key={e.id} className="flex min-w-0 items-center gap-3 rounded-xl px-3.5 py-3" style={{ background: p.soft }}>
                 <div className="flex w-10 shrink-0 flex-col items-center leading-[1.1]">
                   <span className="text-[10px] font-bold uppercase tracking-[0.06em]" style={{ color: p.sub }}>
                     {dayShort[d.getDay() === 0 ? 6 : d.getDay() - 1]}

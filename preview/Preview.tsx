@@ -22,11 +22,13 @@ const screen = q.get('s') ?? 'me'
 const role = (q.get('role') ?? 'owner') as MyTeam['role']
 
 const team: MyTeam = { id: 't1', name: 'Playwell Quackers', timezone: 'Europe/Oslo', share_slug: 'abc', share_enabled: true, created_at: '', role }
+const teamsList: MyTeam[] = q.get('teams') ? [team, { ...team, id: 't2', name: 'Quackers Academy' }] : [team]
 const names = ['Daniel', 'Sander', 'Mathias', 'Jonas', 'Emil']
-const members: MemberWithProfile[] = names.map((n, i) => ({
-  team_id: 't1', user_id: `u${i}`, role: i === 0 ? 'owner' : i === 1 ? 'coach' : 'player', position: null, joined_at: '',
-  profile: { user_id: `u${i}`, display_name: n, avatar_url: null },
+const membersAll: MemberWithProfile[] = names.map((n, i) => ({
+  team_id: 't1', user_id: `u${i}`, role: i === 0 ? 'owner' : i === 1 ? 'coach' : 'player', position: (['mid', 'coach', 'top', 'jungle', null] as const)[i], joined_at: '',
+  profile: { user_id: `u${i}`, display_name: n, avatar_url: null, discord_name: n, custom_name: i === 0 },
 }))
+const members = q.get('one') ? membersAll.slice(0, 1) : membersAll
 const slots: TeamSlot[] = [
   { id: 's1', team_id: 't1', day_type: 'weekday', start_hour: 18, end_hour: 21, sort: 1 },
   { id: 's2', team_id: 't1', day_type: 'weekday', start_hour: 19, end_hour: 22, sort: 2 },
@@ -84,9 +86,9 @@ function Screen() {
           element={
             <ToastProvider>
               <Routes>
-                <Route path="/" element={<AppShell team={team} teams={[team]} mobileTitle="Week 37"><WeekPage team={team} week={week} /></AppShell>} />
-                <Route path="/players" element={<AppShell team={team} teams={[team]} mobileTitle="Players"><PlayersPage team={team} week={week} onTeamsChanged={async () => {}} /></AppShell>} />
-                <Route path="/settings" element={<AppShell team={team} teams={[team]} mobileTitle="Settings"><SettingsPage team={team} week={week} onTeamsChanged={async () => {}} /></AppShell>} />
+                <Route path="/" element={<AppShell team={team} teams={teamsList} mobileTitle="Week 37"><WeekPage team={team} week={week} /></AppShell>} />
+                <Route path="/players" element={<AppShell team={team} teams={teamsList} mobileTitle="Players"><PlayersPage team={team} week={week} onTeamsChanged={async () => {}} /></AppShell>} />
+                <Route path="/settings" element={<AppShell team={team} teams={teamsList} mobileTitle="Settings"><SettingsPage team={team} week={week} onTeamsChanged={async () => {}} /></AppShell>} />
               </Routes>
               {open && (
                 <EventForm teamId="t1" types={types} events={events} existing={null} draft={{ date: days[3].key, start_hour: 19, end_hour: 22 }} onClose={() => setOpen(false)} onSaved={() => setOpen(false)} />

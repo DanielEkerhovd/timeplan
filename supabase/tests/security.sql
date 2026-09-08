@@ -267,6 +267,34 @@ select pg_temp.expect_count('slot_counts viser 2 ledige på 19–22',
 select pg_temp.expect_count('slot_counts viser 0 ledige på 18–21',
   format('select * from public.slot_counts where team_id = %L and date = %L and start_hour = 18 and available_count = 0', :'team_a', :'dato'), 1);
 
+select pg_temp.expect_ok('spiller setter egen posisjon',
+  format('update public.members set position = ''mid'' where team_id = %L and user_id = %L', :'team_a', :'spiller_a'));
+select pg_temp.expect_count('posisjonen er lagret',
+  format('select * from public.members where team_id = %L and user_id = %L and position = ''mid''', :'team_a', :'spiller_a'), 1);
+select pg_temp.expect_denied('ugyldig posisjon avvises',
+  format('update public.members set position = ''ceo'' where team_id = %L and user_id = %L', :'team_a', :'spiller_a'));
+select pg_temp.expect_ok('spiller sitt forsøk på å sette eierens posisjon treffer ingen rader',
+  format('update public.members set position = ''sub'' where team_id = %L and user_id = %L', :'team_a', :'eier_a'));
+select pg_temp.expect_count('eierens posisjon er uendret',
+  format('select * from public.members where team_id = %L and user_id = %L and position is null', :'team_a', :'eier_a'), 1);
+
+-- Eget navn: vinner over Discord til du nullstiller
+select pg_temp.expect_ok('spiller setter eget navn', 'select public.set_display_name(''  Fabe  '')');
+select pg_temp.expect_count('eget navn er lagret (trimmet)',
+  format('select * from public.profiles where user_id = %L and display_name = ''Fabe'' and custom_name', :'spiller_a'), 1);
+select pg_temp.expect_denied('spiller kan ikke endre navn direkte i tabellen',
+  format('update public.profiles set display_name = ''Hack'' where user_id = %L', :'spiller_a'));
+reset role;
+-- Discord oppdaterer navnet: eget navn skal bli stående
+update auth.users set raw_user_meta_data = '{"full_name":"Spiller Nytt"}'::jsonb where id = :'spiller_a';
+select pg_temp.expect_count('discord-oppdatering overskriver ikke eget navn (superbruker sjekker)',
+  format('select * from public.profiles where user_id = %L and display_name = ''Fabe'' and discord_name = ''Spiller Nytt''', :'spiller_a'), 1);
+select pg_temp.become(:'spiller_a');
+set local role authenticated;
+select pg_temp.expect_ok('spiller går tilbake til discord-navnet', 'select public.set_display_name(null)');
+select pg_temp.expect_count('discord-navnet er tilbake',
+  format('select * from public.profiles where user_id = %L and display_name = ''Spiller Nytt'' and not custom_name', :'spiller_a'), 1);
+
 select pg_temp.expect_ok('spiller svarer på aktivitet',
   format('insert into public.event_responses (event_id, status) values (%L, ''coming'')', :'event_a'));
 select pg_temp.expect_denied('spiller kan ikke svare på vegne av andre',
@@ -337,6 +365,10 @@ select pg_temp.expect_ok('aktivitet med arkivert type kan fortsatt flyttes',
   format('update public.events set start_hour = 20 where team_id = %L and type_id = %L', :'team_a', :'type_clash'));
 select pg_temp.expect_denied('arkivert type kan ikke brukes på nye aktiviteter',
   format('insert into public.events (team_id, date, start_hour, end_hour, type_id) values (%L, %L, 20, 23, %L)', :'team_a', :'dato', :'type_clash'));
+select pg_temp.expect_ok('trener setter posisjon på en spiller',
+  format('update public.members set position = ''top'' where team_id = %L and user_id = %L', :'team_a', :'spiller_a'));
+select pg_temp.expect_count('spillerens posisjon ble endret av treneren',
+  format('select * from public.members where team_id = %L and user_id = %L and position = ''top''', :'team_a', :'spiller_a'), 1);
 select pg_temp.expect_ok('trener kan lage kode',
   format('insert into public.invites (team_id) values (%L)', :'team_a'));
 select pg_temp.expect_ok('trener kan endre intervaller',

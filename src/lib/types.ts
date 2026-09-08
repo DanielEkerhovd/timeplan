@@ -26,11 +26,24 @@ export interface Team {
   created_at: string
 }
 
+export type Position = 'top' | 'jungle' | 'mid' | 'bot' | 'support' | 'sub' | 'coach'
+export const positions: Position[] = ['top', 'jungle', 'mid', 'bot', 'support', 'sub', 'coach']
+export const positionLabel: Record<Position, string> = {
+  top: 'Top',
+  jungle: 'Jungle',
+  mid: 'Mid',
+  bot: 'ADC',
+  support: 'Support',
+  sub: 'Sub',
+  coach: 'Coach',
+}
+
 export interface Member {
   team_id: string
   user_id: string
   role: MemberRole
-  position: string | null
+  /** Lane / seat shown in lists. Cosmetic; access comes from role. */
+  position: Position | null
   joined_at: string
 }
 
@@ -38,6 +51,9 @@ export interface Profile {
   user_id: string
   display_name: string
   avatar_url: string | null
+  /** What Discord calls you; display_name follows it until you set your own. */
+  discord_name: string | null
+  custom_name: boolean
 }
 
 export interface MemberWithProfile extends Member {

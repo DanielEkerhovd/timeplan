@@ -1,5 +1,5 @@
 import { supabase } from './supabase'
-import type { ActivityColor, ActivityType, DayType, Invite, MemberRole, MemberWithProfile, TeamSlot } from './types'
+import type { ActivityColor, ActivityType, DayType, Invite, MemberWithProfile, Position, TeamSlot } from './types'
 
 // ---------- members ----------
 
@@ -7,11 +7,31 @@ export async function fetchMembers(teamId: string): Promise<MemberWithProfile[]>
   const { data, error } = await supabase.from('members').select('*, profile:profiles(*)').eq('team_id', teamId)
   if (error) throw error
   const rows = (data ?? []) as unknown as MemberWithProfile[]
-  const rank: Record<MemberRole, number> = { owner: 0, coach: 1, player: 2 }
-  rows.sort(
-    (a, b) => rank[a.role] - rank[b.role] || (a.profile?.display_name ?? '').localeCompare(b.profile?.display_name ?? ''),
-  )
+  // Stable order (who joined first) so rows do not jump around while you edit positions.
+  rows.sort((a, b) => a.joined_at.localeCompare(b.joined_at))
   return rows
+}
+
+/** Your own display name in every team. Empty = back to the Discord name. */
+export async function setDisplayName(name: string | null) {
+  const { error } = await supabase.rpc('set_display_name', { new_name: name })
+  if (error) throw error
+}
+
+/** Your own position, or anyone's when you are owner/coach. RLS turns other cases into 0 rows. */
+/** Team order for the week views: coaches first, then Top, Jungle, Mid, ADC, Support, Sub, then no position. */
+export function lineupOrder<T extends Pick<MemberWithProfile, 'role' | 'position' | 'profile'>>(members: T[]): T[] {
+  const order = ['coach', 'top', 'jungle', 'mid', 'bot', 'support', 'sub']
+  const rank = (m: T) => {
+    if (m.role === 'coach' || m.position === 'coach') return 0
+    return m.position ? order.indexOf(m.position) : order.length
+  }
+  return [...members].sort((a, b) => rank(a) - rank(b) || (a.profile?.display_name ?? '').localeCompare(b.profile?.display_name ?? ''))
+}
+
+export async function setPosition(teamId: string, userId: string, position: Position | null) {
+  const { error } = await supabase.from('members').update({ position }).eq('team_id', teamId).eq('user_id', userId)
+  if (error) throw error
 }
 
 export async function setRole(teamId: string, userId: string, role: 'coach' | 'player') {

@@ -9,8 +9,9 @@ export async function fetchTeamSlots(teamId: string): Promise<TeamSlot[]> {
     .from('team_slots')
     .select('*')
     .eq('team_id', teamId)
-    .order('sort')
+    // Earliest start first, everywhere the slots are listed.
     .order('start_hour')
+    .order('end_hour')
   if (error) throw error
   return (data ?? []) as TeamSlot[]
 }

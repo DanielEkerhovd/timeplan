@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useAuth } from '../lib/auth'
+import { lineupOrder } from '../lib/settings'
 import type { MyTeam } from '../lib/teams'
 import { canEdit } from '../lib/types'
 import type { WeekData } from '../lib/useWeekData'
@@ -23,16 +24,10 @@ export default function WeekPage({ team, week }: { team: MyTeam; week: WeekData 
     setParams(params, { replace: true })
   }
 
-  const members = week.members ?? []
-  const answered = useMemo(() => {
-    const users = new Set<string>()
-    for (const d of week.days) for (const uid of Object.keys(week.hours[d.key] ?? {})) users.add(uid)
-    return users.size
-  }, [week.days, week.hours])
-  const subtitle = members.length > 0 && answered === members.length ? 'everyone answered' : `${answered} of ${members.length} answered`
+  const members = useMemo(() => lineupOrder(week.members ?? []), [week.members])
 
   const toggle = editor && (
-    <div className="flex w-full gap-1 rounded-[10px] bg-surface p-[3px] shadow-card">
+    <div className="flex w-fit gap-1 rounded-[10px] bg-surface p-[3px] shadow-card">
       <TabButton active={tab === 'me'} onClick={() => setTab('me')}>
         My week
       </TabButton>
@@ -70,7 +65,6 @@ export default function WeekPage({ team, week }: { team: MyTeam; week: WeekData 
       <WeekNav
         monday={week.monday}
         isCurrentWeek={week.isCurrentWeek}
-        subtitle={subtitle}
         onPrev={week.prevWeek}
         onNext={week.nextWeek}
         onToday={week.thisWeek}
@@ -98,7 +92,7 @@ export default function WeekPage({ team, week }: { team: MyTeam; week: WeekData 
 
 function TabButton({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
   return (
-    <button onClick={onClick} className={`h-8 flex-1 whitespace-nowrap rounded-lg px-3.5 text-[13px] font-bold sm:px-4 ${active ? 'bg-ink text-white' : 'text-muted hover:text-ink'}`}>
+    <button onClick={onClick} className={`h-8 whitespace-nowrap rounded-lg px-3.5 text-[13px] font-bold sm:px-4 ${active ? 'bg-ink text-white' : 'text-muted hover:text-ink'}`}>
       {children}
     </button>
   )
