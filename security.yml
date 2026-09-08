@@ -1,0 +1,46 @@
+name: Sikkerhetstester
+
+# Kjører migrasjonen og alle sikkerhetstestene mot en fersk Postgres.
+# Feiler én test, feiler bygget. Ingenting skal deployes før dette er grønt.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  security:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      PGHOST: 127.0.0.1
+      PGPORT: '5432'
+      PGUSER: postgres
+      PGPASSWORD: postgres
+    steps:
+      - uses: actions/checkout@v4
+      - name: Installer psql
+        run: sudo apt-get update -q && sudo apt-get install -y -q postgresql-client
+      - name: Migrasjon + sikkerhetstester
+        run: bash supabase/tests/run_local.sh
+
+  typecheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx tsc -b
+      - run: npm run lint

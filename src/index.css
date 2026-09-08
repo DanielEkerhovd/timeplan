@@ -1,0 +1,31 @@
+@import "tailwindcss";
+
+/* Fargene fra mockupen. Brukes som bg-surface, text-muted, bg-green-soft osv. */
+@theme {
+  --font-sans: "Manrope", "Segoe UI", system-ui, sans-serif;
+
+  --color-bg: #f6f5f2;
+  --color-surface: #ffffff;
+  --color-surface-2: #efede8;
+  --color-line: #e6e3dd;
+  --color-ink: #1c1b19;
+  --color-muted: #6f6c66;
+  --color-faint: #a8a49d;
+
+  --color-green: #3e9a63;
+  --color-green-soft: #dcefe0;
+  --color-green-ink: #2f6b45;
+
+  --color-yellow: #e9a825;
+  --color-yellow-soft: #fff3d1;
+  --color-yellow-ink: #6b4e00;
+
+  --color-red-soft: #f8e1dc;
+  --color-red-ink: #8a3a2c;
+
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.04), 0 8px 24px rgba(28, 27, 25, 0.05);
+  --radius-card: 16px;
+}
+
+html, body, #root { min-height: 100%; }
+body { @apply bg-bg text-ink font-sans antialiased; }
