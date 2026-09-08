@@ -7,7 +7,8 @@ import {
   type EventWithResponses,
 } from "../lib/events";
 import type { ActivityType, MemberWithProfile } from "../lib/types";
-import { dayShort, fromDateKey, slotLabel } from "../lib/week";
+import { dayShort, fromDateKey } from "../lib/week";
+import { useZone } from "../lib/zone";
 import { AvatarStack, Check, Pill } from "./ui";
 
 interface Props {
@@ -38,6 +39,7 @@ export default function SessionsList({
   className = "",
 }: Props) {
   const n = events.length;
+  const zone = useZone();
   return (
     <section
       className={`flex flex-col gap-2.5 rounded-[20px] bg-surface p-4 shadow-card lg:px-5 ${className}`}
@@ -96,7 +98,7 @@ export default function SessionsList({
                       className="whitespace-nowrap text-xs font-semibold"
                       style={{ color: p.sub }}
                     >
-                      {slotLabel(e.start_hour, e.end_hour)}
+                      {zone.label(e.start_hour, e.end_hour, d.getDay() === 0 ? 7 : d.getDay())}
                     </span>
                     <AvatarStack people={people} ring={p.soft} />
                   </div>

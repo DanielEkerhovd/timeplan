@@ -103,3 +103,55 @@ export function zoneNote(
   const which = diff > 0 ? "ahead of" : "behind";
   return `Times are in ${teamZone}, ${size} ${unit} ${which} you — 20:00 here is ${yourTime(20, diff)} for you.`;
 }
+
+// ---------- visning av klokkeslett ----------
+//
+// Alt blir fortsatt lagret som timetall i lagets tid. Det er bare etikettene som
+// regnes om, så en rad betyr det samme for alle — den vises bare med dine tall.
+
+const DAY_SHORT = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+
+const pad = (n: number) => String(n).padStart(2, "0");
+
+/** Timen slik den ser ut hos deg, som tall i døgnet. */
+export function zoneHour(hour: number, diff: number): number {
+  const m = (((hour - diff) * 60) % 1440 + 1440) % 1440;
+  return Math.floor(m / 60);
+}
+
+/** Hvor mange døgn timen flytter seg hos deg: -1, 0 eller 1. */
+export function zoneDayShift(hour: number, diff: number): number {
+  return Math.floor((hour - diff) / 24);
+}
+
+/** '13:00' i din tid. */
+export function zoneHourLabel(hour: number, diff: number): string {
+  const m = (((hour - diff) * 60) % 1440 + 1440) % 1440;
+  return `${pad(Math.floor(m / 60))}:${pad(Math.round(m % 60))}`;
+}
+
+/**
+ * '13:00 - 17:00' i din tid. Havner blokka på et annet døgn enn lagets, står dagen foran
+ * ('Tue 03:00 - 07:00'), og krysser den midnatt hos deg, får slutten et '+1'.
+ * isoDay er lagets dag, 1 = mandag.
+ */
+export function zoneSlotLabel(start: number, end: number, diff: number, isoDay?: number): string {
+  const text = `${zoneHourLabel(start, diff)} - ${zoneHourLabel(end, diff)}`;
+  if (diff === 0) return text;
+
+  const shiftStart = zoneDayShift(start, diff);
+  // Slutten er eksklusiv: 24 hører til samme døgn som 23.
+  const shiftEnd = zoneDayShift(end - 1, diff);
+
+  let out = text;
+  if (shiftEnd !== shiftStart) out += " +1";
+  if (shiftStart !== 0) {
+    const tag = isoDay
+      ? DAY_SHORT[(((isoDay - 1 + shiftStart) % 7) + 7) % 7]
+      : shiftStart > 0
+        ? "next day"
+        : "day before";
+    out = `${tag} ${out}`;
+  }
+  return out;
+}

@@ -3,8 +3,8 @@ import { useSearchParams } from "react-router-dom";
 import { useAuth } from "../lib/auth";
 import { lineupOrder } from "../lib/settings";
 import type { MyTeam } from "../lib/teams";
-import { canEdit, type Profile } from "../lib/types";
-import { viewerZone, zoneNote } from "../lib/timezone";
+import { canEdit } from "../lib/types";
+import { useZone } from "../lib/zone";
 import { weekLock } from "../lib/week";
 import type { WeekData } from "../lib/useWeekData";
 import PlayerWeek from "../components/PlayerWeek";
@@ -16,11 +16,9 @@ import { Button, Spinner } from "../components/ui";
 export default function WeekPage({
   team,
   week,
-  profile,
 }: {
   team: MyTeam;
   week: WeekData;
-  profile: Profile | null;
 }) {
   const { user } = useAuth();
   const [params, setParams] = useSearchParams();
@@ -40,12 +38,9 @@ export default function WeekPage({
     [week.members],
   );
 
-  // Bare synlig for den som sitter i en annen tidssone enn laget.
-  // Regnet ut for uka som vises, siden sommertid kan skifte mellom uker.
-  const zone = useMemo(
-    () => zoneNote(team.timezone, week.monday, viewerZone(profile?.timezone)),
-    [team.timezone, week.monday, profile?.timezone],
-  );
+  // Klokkeslettene vises i din sone. Står du et annet sted enn laget, må det stå hvor
+  // tallene kommer fra — ellers avtaler to personer «19:00» og møter til hver sin tid.
+  const zone = useZone();
 
   const toggle = editor && (
     <div className="flex w-fit gap-1 rounded-[10px] bg-surface p-[3px] shadow-card lg:w-full">
@@ -116,9 +111,10 @@ export default function WeekPage({
         leftActions={newActivity || undefined}
         rightActions={toggle || undefined}
       />
-      {zone && (
+      {zone.diff !== 0 && (
         <p className="rounded-[12px] bg-surface px-3.5 py-2.5 text-[13px] font-semibold text-muted shadow-card">
-          {zone}
+          Times are shown in your timezone ({zone.yourZone.replace(/_/g, " ")}).
+          The team plans in {zone.teamZone.replace(/_/g, " ")}.
         </p>
       )}
       {!user || week.members === null ? (

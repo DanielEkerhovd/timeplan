@@ -1,4 +1,5 @@
 import { supabase } from './supabase'
+import { tracked } from './writes'
 import { palette, type Palette } from './colors'
 import type { ActivityColor, ActivityType, ResponseStatus, TeamEvent } from './types'
 
@@ -32,21 +33,25 @@ export async function fetchActivityTypes(teamId: string): Promise<ActivityType[]
 
 /** Join = a "coming" response. Update first, insert if there was nothing to update (users cannot SET event_id). */
 export async function joinEvent(eventId: string) {
-  const { data, error } = await supabase
-    .from('event_responses')
-    .update({ status: 'coming' })
-    .eq('event_id', eventId)
-    .select('event_id')
-  if (error) throw error
-  if (data && data.length > 0) return
-  const { error: insertError } = await supabase.from('event_responses').insert({ event_id: eventId, status: 'coming' })
-  if (insertError) throw insertError
+  return tracked(async () => {
+    const { data, error } = await supabase
+      .from('event_responses')
+      .update({ status: 'coming' })
+      .eq('event_id', eventId)
+      .select('event_id')
+    if (error) throw error
+    if (data && data.length > 0) return
+    const { error: insertError } = await supabase.from('event_responses').insert({ event_id: eventId, status: 'coming' })
+    if (insertError) throw insertError
+  })
 }
 
 /** Leave = remove your own response. RLS makes sure only your row can go. */
 export async function leaveEvent(eventId: string) {
-  const { error } = await supabase.from('event_responses').delete().eq('event_id', eventId)
-  if (error) throw error
+  return tracked(async () => {
+    const { error } = await supabase.from('event_responses').delete().eq('event_id', eventId)
+    if (error) throw error
+  })
 }
 
 export function hasJoined(event: EventWithResponses, userId: string): boolean {

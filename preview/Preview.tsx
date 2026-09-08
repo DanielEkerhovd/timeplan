@@ -10,6 +10,7 @@ import type { MyTeam } from '../src/lib/teams'
 import type { ActivityType, MemberWithProfile, TeamSlot } from '../src/lib/types'
 import type { WeekData } from '../src/lib/useWeekData'
 import { daysOfWeek, weekStart } from '../src/lib/week'
+import { ZoneProvider } from '../src/lib/zone'
 import AppShell from '../src/components/AppShell'
 import EventForm from '../src/components/EventForm'
 import { ToastProvider } from '../src/components/ui'
@@ -126,6 +127,7 @@ function Screen() {
   }
   const path = screen === 'players' ? '/players' : screen === 'settings' ? '/settings' : '/'
   return (
+    <ZoneProvider teamZone={team.timezone} yourZone={q.get('tz')} at={monday}>
     <MemoryRouter initialEntries={[`/team/t1${path}${screen === 'team' ? '?view=team' : ''}`]}>
       <Routes>
         <Route
@@ -133,7 +135,7 @@ function Screen() {
           element={
             <ToastProvider>
               <Routes>
-                <Route path="/" element={<AppShell team={team} teams={teamsList} mobileTitle="Week 37"><WeekPage team={team} week={week} profile={null} /></AppShell>} />
+                <Route path="/" element={<AppShell team={team} teams={teamsList} mobileTitle="Week 37"><WeekPage team={team} week={week} /></AppShell>} />
                 <Route path="/players" element={<AppShell team={team} teams={teamsList} mobileTitle="Players"><PlayersPage team={team} week={week} onTeamsChanged={async () => {}} /></AppShell>} />
                 <Route path="/settings" element={<AppShell team={team} teams={teamsList} mobileTitle="Settings"><SettingsPage team={team} week={week} onTeamsChanged={async () => {}} /></AppShell>} />
               </Routes>
@@ -145,6 +147,7 @@ function Screen() {
         />
       </Routes>
     </MemoryRouter>
+    </ZoneProvider>
   )
 }
 

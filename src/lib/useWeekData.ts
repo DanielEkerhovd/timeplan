@@ -12,6 +12,7 @@ import {
   type EventWithResponses,
 } from "./events";
 import { fetchMembers } from "./settings";
+import { writingNow } from "./writes";
 import { supabase } from "./supabase";
 import {
   friendlyError,
@@ -139,17 +140,28 @@ export function useWeekData(teamId: string) {
     };
   }, [fetchWeek, monday]);
 
-  // Live updates. Anything can change, so drop the cache and refetch the week on screen.
+  // Live updates. Anything can change, so refetch the week on screen.
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout> | null = null;
+    let neighbours: ReturnType<typeof setTimeout> | null = null;
     const refresh = () => {
       if (timer) clearTimeout(timer);
-      // Refresh the week on screen and the two beside it, so the cache stays warm
-      // and stepping is still instant right after someone else changes something.
       timer = setTimeout(() => {
+        // Realtime sender våre egne skrivinger tilbake til oss. Henter vi uka på nytt
+        // for hvert trykk, kan et svar som var underveis overskrive trykket du nettopp
+        // gjorde. Så mens vi skriver selv, venter vi — andre sine endringer kommer inn
+        // med det samme det er ro.
+        if (writingNow()) {
+          refresh();
+          return;
+        }
         void fetchWeek(monday);
-        for (const step of [-1, 1])
-          void fetchWeek(shiftWeek(monday, step), true);
+        // Nabo-ukene holdes varme, men de haster ikke og skal ikke stå i veien.
+        if (neighbours) clearTimeout(neighbours);
+        neighbours = setTimeout(() => {
+          for (const step of [-1, 1])
+            void fetchWeek(shiftWeek(monday, step), true);
+        }, 1200);
       }, 250);
     };
     const unsubscribe = subscribeAvailability(teamId, refresh);
@@ -188,6 +200,7 @@ export function useWeekData(teamId: string) {
       .subscribe();
     return () => {
       if (timer) clearTimeout(timer);
+      if (neighbours) clearTimeout(neighbours);
       unsubscribe();
       void supabase.removeChannel(channel);
     };

@@ -4,6 +4,7 @@ import { useAuth } from '../lib/auth'
 import { setTimezone } from '../lib/settings'
 import { setActiveTeamId, type MyTeam } from '../lib/teams'
 import { localZone } from '../lib/timezone'
+import { ZoneProvider } from '../lib/zone'
 import { canEdit } from '../lib/types'
 import { useWeekData } from '../lib/useWeekData'
 import { weekId } from '../lib/week'
@@ -42,43 +43,52 @@ function TeamContent({ team, teams, onTeamsChanged }: { team: MyTeam } & Props) 
     if (!user || !profile || profile.timezone) return
     const zone = localZone()
     if (!zone) return
-    void setTimezone(user.id, zone).then(week.reloadTeam).catch(() => {})
+    void setTimezone(user.id, zone)
+      .then(week.reloadTeam)
+      .catch(() => {})
   }, [user, profile, week.reloadTeam])
 
   return (
-    <ToastProvider>
-      <Routes>
-        <Route
-          path="/"
-          element={
-            <AppShell team={team} teams={teams} profile={profile} onProfileChanged={week.reloadTeam} mobileTitle={`Week ${weekId(week.monday).slice(-2).replace(/^0/, '')}`}>
-              <WeekPage team={team} week={week} profile={profile} />
-            </AppShell>
-          }
-        />
-        <Route
-          path="/players"
-          element={
-            <AppShell team={team} teams={teams} profile={profile} onProfileChanged={week.reloadTeam} mobileTitle="Players">
-              <PlayersPage team={team} week={week} onTeamsChanged={onTeamsChanged} />
-            </AppShell>
-          }
-        />
-        <Route
-          path="/settings"
-          element={
-            canEdit(team.role) ? (
-              <AppShell team={team} teams={teams} profile={profile} onProfileChanged={week.reloadTeam} mobileTitle="Settings">
-                <SettingsPage team={team} week={week} onTeamsChanged={onTeamsChanged} />
+    <ZoneProvider teamZone={team.timezone} yourZone={profile?.timezone} at={week.monday}>
+      <ToastProvider>
+        <Routes>
+          <Route
+            path="/"
+            element={
+              <AppShell
+                team={team}
+                teams={teams}
+                profile={profile}
+                onProfileChanged={week.reloadTeam}
+                mobileTitle={`Week ${weekId(week.monday).slice(-2).replace(/^0/, '')}`}
+              >
+                <WeekPage team={team} week={week} />
               </AppShell>
-            ) : (
-              <Navigate to={`/team/${team.id}`} replace />
-            )
-          }
-        />
-        <Route path="*" element={<Navigate to={`/team/${team.id}`} replace />} />
-      </Routes>
-    </ToastProvider>
+            }
+          />
+          <Route
+            path="/players"
+            element={
+              <AppShell team={team} teams={teams} profile={profile} onProfileChanged={week.reloadTeam} mobileTitle="Players">
+                <PlayersPage team={team} week={week} onTeamsChanged={onTeamsChanged} />
+              </AppShell>
+            }
+          />
+          <Route
+            path="/settings"
+            element={
+              canEdit(team.role) ? (
+                <AppShell team={team} teams={teams} profile={profile} onProfileChanged={week.reloadTeam} mobileTitle="Settings">
+                  <SettingsPage team={team} week={week} onTeamsChanged={onTeamsChanged} />
+                </AppShell>
+              ) : (
+                <Navigate to={`/team/${team.id}`} replace />
+              )
+            }
+          />
+          <Route path="*" element={<Navigate to={`/team/${team.id}`} replace />} />
+        </Routes>
+      </ToastProvider>
+    </ZoneProvider>
   )
 }
-

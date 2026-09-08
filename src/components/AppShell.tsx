@@ -138,8 +138,10 @@ export default function AppShell({
       : []),
   ];
 
+  // Ultrawide: the frame stops growing past 3000px and sits in the middle, so the week
+  // grid keeps sane column widths instead of stretching across the screen.
   return (
-    <div className="flex min-h-dvh lg:h-dvh lg:overflow-hidden">
+    <div className="mx-auto flex min-h-dvh w-full max-w-[2440px] lg:h-dvh lg:overflow-hidden">
       {/* Desktop sidebar */}
       <aside className="hidden w-[232px] shrink-0 flex-col justify-between border-r border-line-soft px-5 py-7 lg:flex">
         <div className="flex flex-col gap-7">

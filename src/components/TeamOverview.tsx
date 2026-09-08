@@ -9,7 +9,8 @@ import {
 import type { MyTeam } from "../lib/teams";
 import type { MemberWithProfile } from "../lib/types";
 import type { WeekData } from "../lib/useWeekData";
-import { dayShort, slotLabel, weekLock, type WeekDay } from "../lib/week";
+import { dayShort, weekLock, type WeekDay } from "../lib/week";
+import { useZone } from "../lib/zone";
 import EventForm, { type EventDraft } from "./EventForm";
 import SessionsList from "./SessionsList";
 import ShareWeekButton from "./ShareWeekButton";
@@ -48,6 +49,7 @@ export default function TeamOverview({
   setForm,
 }: Props) {
   const { days, slots, hours, events, error, reload, types } = week;
+  const zone = useZone();
   const total = members.length;
 
   // Rows are every distinct interval across weekday and weekend slots, sorted by start.
@@ -278,7 +280,7 @@ export default function TeamOverview({
                 }}
               >
                 <div className="flex items-center text-xs font-bold text-muted">
-                  {slotLabel(row.start, row.end)}
+                  {zone.label(row.start, row.end)}
                 </div>
                 {grid[ri].map((c, ci) =>
                   c === null ? (
@@ -289,7 +291,7 @@ export default function TeamOverview({
                   ) : (
                     <WhoHover
                       key={ci}
-                      title={`${dayShort[c.day.isoDay - 1]} ${slotLabel(c.start, c.end)}`}
+                      title={`${dayShort[c.day.isoDay - 1]} ${zone.label(c.start, c.end, c.day.isoDay)}`}
                       people={members.map((m, i) => ({
                         name: m.profile?.display_name ?? "?",
                         url: m.profile?.avatar_url,
@@ -383,7 +385,7 @@ export default function TeamOverview({
                     {marker(c, "left")}
                     <div className="flex min-w-0 flex-1 flex-col gap-0.5">
                       <div className="text-[13px] font-bold">
-                        {slotLabel(c.start, c.end)}
+                        {zone.label(c.start, c.end, c.day.isoDay)}
                       </div>
                       {markerLabel(c)}
                     </div>
@@ -429,7 +431,7 @@ export default function TeamOverview({
                 >
                   <div className="flex flex-col gap-px">
                     <div className="text-sm font-bold">
-                      {dayShort[c.day.isoDay - 1]} {slotLabel(c.start, c.end)}
+                      {dayShort[c.day.isoDay - 1]} {zone.label(c.start, c.end, c.day.isoDay)}
                     </div>
                     <div className="text-xs text-muted">
                       {c.count} of {total}

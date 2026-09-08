@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { addDays, addMonths, format, isSameDay, isSameMonth, startOfMonth, subMonths } from 'date-fns'
+import { zoneDayShift, zoneHourLabel } from '../lib/timezone'
 import { fromDateKey, toDateKey, weekStart } from '../lib/week'
 
 // Custom dropdown and date picker so nothing native (browser select / calendar) shows up.
@@ -173,9 +174,15 @@ export function Dropdown<T extends string | number>({ value, options, onChange, 
   )
 }
 
-/** Hours as dropdown options, e.g. 18 → "18:00". */
-export function hourOptions(from: number, to: number): DropdownOption<number>[] {
-  return Array.from({ length: to - from + 1 }, (_, i) => from + i).map((h) => ({ value: h, label: `${String(h).padStart(2, '0')}:00` }))
+/**
+ * Hours as dropdown options, e.g. 18 → "18:00". The value stays the team's hour;
+ * only the label follows the reader's timezone, so nothing about storage changes.
+ */
+export function hourOptions(from: number, to: number, diff = 0): DropdownOption<number>[] {
+  return Array.from({ length: to - from + 1 }, (_, i) => from + i).map((h) => {
+    const shift = zoneDayShift(h, diff)
+    return { value: h, label: `${zoneHourLabel(h, diff)}${shift === 0 ? '' : shift > 0 ? ' +1' : ' −1'}` }
+  })
 }
 
 interface DatePickerProps {

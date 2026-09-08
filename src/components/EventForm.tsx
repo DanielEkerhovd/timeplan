@@ -15,7 +15,7 @@ import {
   type ActivityColor,
   type ActivityType,
 } from "../lib/types";
-import { slotLabel } from "../lib/week";
+import { useZone } from "../lib/zone";
 import { Button, CloseButton, ErrorText, Input, Label, Modal } from "./ui";
 import { DatePicker, Dropdown, hourOptions } from "./pickers";
 
@@ -48,6 +48,7 @@ export default function EventForm({
   onClose,
   onSaved,
 }: Props) {
+  const zone = useZone();
   const [date, setDate] = useState(draft.date);
   const [start, setStart] = useState(draft.start_hour);
   const [end, setEnd] = useState(draft.end_hour);
@@ -183,7 +184,7 @@ export default function EventForm({
             <Label>From</Label>
             <Dropdown
               value={start}
-              options={hourOptions(0, 23)}
+              options={hourOptions(0, 23, zone.diff)}
               onChange={setStartHour}
               className="pl-3 text-sm"
               aria-label="From"
@@ -193,7 +194,7 @@ export default function EventForm({
             <Label>To</Label>
             <Dropdown
               value={end}
-              options={hourOptions(start + 1, 24)}
+              options={hourOptions(start + 1, 24, zone.diff)}
               onChange={(h) => {
                 setEnd(h);
                 setConfirmOverlap(false);
@@ -320,7 +321,7 @@ export default function EventForm({
               {clashes
                 .map(
                   (c) =>
-                    `${eventLabel(c, types)} (${slotLabel(c.start_hour, c.end_hour)})`,
+                    `${eventLabel(c, types)} (${zone.label(c.start_hour, c.end_hour)})`,
                 )
                 .join(", ")}
             </div>

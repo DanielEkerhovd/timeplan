@@ -1,4 +1,5 @@
 import { supabase } from './supabase'
+import { tracked } from './writes'
 import { indexHours, type HoursByDayUser } from './slots'
 import type { Availability, TeamSlot } from './types'
 
@@ -28,26 +29,30 @@ export async function fetchAvailability(teamId: string, fromKey: string, toKey: 
 }
 
 export async function applyToggle(teamId: string, userId: string, dateKey: string, plan: { add: number[]; remove: number[] }) {
-  if (plan.add.length > 0) {
-    // user_id is set by the database (default auth.uid()); sending it would be refused.
-    const { error } = await supabase
-      .from('availability')
-      .upsert(
-        plan.add.map((hour) => ({ team_id: teamId, date: dateKey, hour })),
-        { onConflict: 'team_id,user_id,date,hour', ignoreDuplicates: true },
-      )
-    if (error) throw error
-  }
-  if (plan.remove.length > 0) {
-    const { error } = await supabase
-      .from('availability')
-      .delete()
-      .eq('team_id', teamId)
-      .eq('user_id', userId)
-      .eq('date', dateKey)
-      .in('hour', plan.remove)
-    if (error) throw error
-  }
+  // tracked(): mens dette pågår lar vi vår egen optimistiske tilstand stå, i stedet for å
+  // hente uka på nytt for hvert trykk. Se writes.ts.
+  await tracked(async () => {
+    if (plan.add.length > 0) {
+      // user_id is set by the database (default auth.uid()); sending it would be refused.
+      const { error } = await supabase
+        .from('availability')
+        .upsert(
+          plan.add.map((hour) => ({ team_id: teamId, date: dateKey, hour })),
+          { onConflict: 'team_id,user_id,date,hour', ignoreDuplicates: true },
+        )
+      if (error) throw error
+    }
+    if (plan.remove.length > 0) {
+      const { error } = await supabase
+        .from('availability')
+        .delete()
+        .eq('team_id', teamId)
+        .eq('user_id', userId)
+        .eq('date', dateKey)
+        .in('hour', plan.remove)
+      if (error) throw error
+    }
+  })
 }
 
 /** Live updates for one team's availability. Calls onChange on every insert/delete; the caller refetches. */

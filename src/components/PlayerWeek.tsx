@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { format } from "date-fns";
 import { applyToggle, coversSlot, planToggle } from "../lib/availability";
 import {
@@ -22,9 +22,9 @@ import {
   type TeamSlot,
 } from "../lib/types";
 import type { WeekData } from "../lib/useWeekData";
+import { useZone } from "../lib/zone";
 import {
   dayShort,
-  slotLabel,
   toDateKey,
   weekId,
   weekLock,
@@ -63,7 +63,13 @@ export default function PlayerWeek({ team, userId, members, week }: Props) {
     error,
     setError,
   } = week;
+  const zone = useZone();
+  // Lagringer som er underveis. Ref-en er fasit i klikkhåndteringen, så et raskt
+  // andretrykk ikke leser en gammel render.
+  const pendingRef = useRef<Set<string>>(new Set());
   const [pending, setPending] = useState<Set<string>>(new Set());
+  // Trykk som kom mens forrige lagring var underveis, og som skal kjøres etterpå.
+  const queued = useRef(new Map<string, () => void>());
   const [hasUsual, setHasUsual] = useState<boolean | null>(null);
   const [busy, setBusy] = useState(false);
   const toast = useToast();
@@ -96,7 +102,12 @@ export default function PlayerWeek({ team, userId, members, week }: Props) {
 
   async function toggle(day: WeekDay, slot: TeamSlot, daySlots: TeamSlot[]) {
     const key = `${day.key}:${slot.id}`;
-    if (pending.has(key)) return;
+    // Trykker du igjen mens forrige lagring pågår, husker vi trykket i stedet for å
+    // spise det, og kjører det så snart svaret er tilbake.
+    if (pendingRef.current.has(key)) {
+      queued.current.set(key, () => void toggle(day, slot, daySlots));
+      return;
+    }
     const before = hoursRef.current;
     const mine = before[day.key]?.[userId];
     const plan = planToggle(mine, slot, daySlots);
@@ -109,22 +120,29 @@ export default function PlayerWeek({ team, userId, members, week }: Props) {
       ...before,
       [day.key]: { ...(before[day.key] ?? {}), [userId]: next },
     });
+    pendingRef.current.add(key);
     setPending((p) => new Set(p).add(key));
     try {
       await applyToggle(team.id, userId, day.key, plan);
       setError(null);
       toast(
-        `Saved · ${dayShort[day.isoDay - 1]} ${slotLabel(slot.start_hour, slot.end_hour)}`,
+        `Saved · ${dayShort[day.isoDay - 1]} ${zone.label(slot.start_hour, slot.end_hour, day.isoDay)}`,
       );
     } catch (err) {
       setHours(before);
       setError(friendlyError(err));
     } finally {
+      pendingRef.current.delete(key);
       setPending((p) => {
         const n = new Set(p);
         n.delete(key);
         return n;
       });
+      const next = queued.current.get(key);
+      if (next) {
+        queued.current.delete(key);
+        next();
+      }
     }
   }
 
@@ -420,11 +438,12 @@ export default function PlayerWeek({ team, userId, members, week }: Props) {
     const byUser = hours[day.key] ?? {};
     const on = coversSlot(byUser[userId], slot);
     const can = members.map((m) => coversSlot(byUser[m.user_id], slot));
+    // Ikke i bruk til å låse knappen lenger; se toggle().
     const isPending = pending.has(`${day.key}:${slot.id}`);
     return (
       <WhoHover
         key={slot.id}
-        title={`${dayShort[day.isoDay - 1]} ${slotLabel(slot.start_hour, slot.end_hour)}`}
+        title={`${dayShort[day.isoDay - 1]} ${zone.label(slot.start_hour, slot.end_hour, day.isoDay)}`}
         people={members.map((m, i) => ({
           name: m.profile?.display_name ?? "?",
           url: m.profile?.avatar_url,
@@ -435,14 +454,15 @@ export default function PlayerWeek({ team, userId, members, week }: Props) {
           key={slot.id}
           onClick={() => void toggle(day, slot, daySlots)}
           aria-pressed={on}
-          disabled={isPending || lock !== null}
+          disabled={lock !== null}
+          data-saving={isPending || undefined}
           className={`flex h-18 flex-col items-center justify-center gap-1 rounded-xl border-[1.5px] text-[13px] font-bold leading-none tracking-tight transition disabled:opacity-60 ${
             on
               ? "border-green bg-green-soft text-green-ink"
               : "border-line bg-surface text-ink hover:border-faint"
           } ${compact ? "whitespace-nowrap text-[11px]" : ""} ${lock ? "cursor-default opacity-60" : ""}`}
         >
-          <span>{slotLabel(slot.start_hour, slot.end_hour)}</span>
+          <span>{zone.label(slot.start_hour, slot.end_hour, day.isoDay)}</span>
           <DotRow can={can} dim={!on} />
         </button>
       </WhoHover>
