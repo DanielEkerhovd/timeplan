@@ -74,7 +74,7 @@ const escapeHtml = (s: string) =>
 
 export default async function handler(req: Request): Promise<Response> {
   const url = new URL(req.url)
-  const slug = (url.pathname.split('/').filter(Boolean).pop() ?? '').replace(/\.png$/i, '')
+  const slug = url.searchParams.get('s') ?? ''
   if (!/^[A-Z0-9]{6,20}$/i.test(slug)) return new Response('Not found', { status: 404 })
 
   const monday = mondayFromWeekId(url.searchParams.get('week'))
