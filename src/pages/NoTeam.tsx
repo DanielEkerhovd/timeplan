@@ -72,7 +72,7 @@ export default function NoTeam({ hasTeams = false, onTeamsChanged }: Props) {
   return (
     <main className="mx-auto flex min-h-screen max-w-md flex-col gap-5 px-5 pb-10 pt-16">
       <div className="flex flex-col gap-1">
-        <Eyebrow>Team Schedule</Eyebrow>
+        <Eyebrow>Gather</Eyebrow>
         <h1 className="text-[26px] font-extrabold tracking-tight">
           {hasTeams ? 'New team' : 'You are not on a team yet'}
         </h1>

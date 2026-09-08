@@ -91,7 +91,7 @@ export default function JoinPage() {
   return (
     <main className="mx-auto flex min-h-screen max-w-md flex-col gap-5 px-5 pb-10 pt-16">
       <div className="flex flex-col gap-1">
-        <Eyebrow>Team Schedule</Eyebrow>
+        <Eyebrow>Gather</Eyebrow>
         <h1 className="text-[26px] font-extrabold tracking-tight">You have been invited to a team</h1>
         <p className="text-[15px] leading-relaxed text-muted">
           {user ? 'One tap and you are on the team.' : 'Sign in with Discord and you are on the team – no code to type in.'}

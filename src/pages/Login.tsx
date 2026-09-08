@@ -25,7 +25,7 @@ export default function Login() {
           <CalendarIcon />
         </div>
         <div className="flex flex-col gap-2.5">
-          <Eyebrow>Team Schedule</Eyebrow>
+          <Eyebrow>Gather</Eyebrow>
           <h1 className="text-[30px] font-extrabold leading-tight tracking-tight">When can you play this week?</h1>
           <p className="max-w-[300px] text-[15px] leading-relaxed text-muted">
             Mark the evenings you are free, and the team finds times that work for everyone.

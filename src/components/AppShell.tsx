@@ -145,6 +145,32 @@ export default function AppShell({
       {/* Desktop sidebar */}
       <aside className="hidden w-[232px] shrink-0 flex-col justify-between border-r border-line-soft px-5 py-7 lg:flex">
         <div className="flex flex-col gap-7">
+          {/* Merket: appen sitt namn, over laget du står i. */}
+          <div className="flex items-center gap-2.5 px-1.5">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[12px] bg-ink text-bg">
+              <svg
+                width="20"
+                height="20"
+                viewBox="0 0 64 64"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="6.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="M44 22a15 15 0 1 0 3 10h-11" />
+              </svg>
+            </div>
+            <div className="flex min-w-0 flex-col leading-tight">
+              <span className="text-[15px] font-extrabold tracking-tight">
+                Gather
+              </span>
+              <span className="truncate text-[11px] text-muted">
+                Planning tool for teams
+              </span>
+            </div>
+          </div>
+
           {/* Team switcher: the block is a button when you are on more than one team. */}
           <div ref={teamsRef} className="relative">
             <button
@@ -175,7 +201,7 @@ export default function AppShell({
                   {team.name}
                 </div>
                 <div className="text-[11px] text-muted">
-                  {teams.length > 1 ? `${teams.length} teams` : "Schedule"}
+                  {teams.length > 1 ? `${teams.length} teams` : "Your team"}
                 </div>
               </div>
               {teams.length > 1 && (

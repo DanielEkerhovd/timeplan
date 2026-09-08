@@ -153,7 +153,7 @@ function page(title: string, description: string, image: string | null, target: 
 <title>${t}</title>
 <meta name="description" content="${dAttr}">
 <meta property="og:type" content="website">
-<meta property="og:site_name" content="Team schedule">
+<meta property="og:site_name" content="Gather">
 <meta property="og:title" content="${t}">
 <meta property="og:description" content="${dAttr}">
 ${canonical ? `<meta property="og:url" content="${escapeHtml(canonical)}">` : ''}
