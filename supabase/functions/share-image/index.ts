@@ -1,8 +1,8 @@
-// share-image build: 2 (selvtest + wasm ved siden av funksjonen)
-// Draws the week as a 1200×630 PNG for Discord's link preview:
+// share-image build: 3 (større, mer kompakt kort — uke stort, aktivitetene som store rader)
+// Draws the week as a 1200×720 PNG for Discord's link preview:
 //   /functions/v1/share-image/<slug>.png?week=2026-W37
-// Same layout as the "Discord share image" mockup: one card per day, booked activities in
-// their colour with the avatars of everyone who joined, and dashed "Everyone free" blocks.
+// Discord viser bildet rundt halv størrelse, så alt må være stort: ukenummeret i toppen og
+// én bred rad per booket aktivitet. Ledige blokker teller vi bare opp nederst.
 
 import satori from 'npm:satori@0.10.13'
 import { initWasm, Resvg } from 'npm:@resvg/resvg-wasm@2.6.2'
@@ -77,97 +77,160 @@ function initials(name: string): string {
   )
 }
 
-function avatar(name: string, url: string | null, ring: string, first: boolean): El {
+function avatar(name: string, url: string | null, ring: string, first: boolean, size = 22): El {
   const tint = tints[[...name].reduce((a, c) => a + c.charCodeAt(0), 0) % tints.length]
-  const base = { width: 22, height: 22, borderRadius: 999, marginLeft: first ? 0 : -7, boxShadow: `0 0 0 2px ${ring}` }
+  const base = { width: size, height: size, borderRadius: 999, marginLeft: first ? 0 : -Math.round(size / 3), boxShadow: `0 0 0 2px ${ring}` }
   if (url) {
-    return h('img', { src: url, width: 22, height: 22, style: { ...base, objectFit: 'cover' } })
+    return h('img', { src: url, width: size, height: size, style: { ...base, objectFit: 'cover' } })
   }
   return h(
     'div',
-    { style: { ...base, background: tint[0], color: tint[1], fontSize: 9, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center' } },
+    {
+      style: {
+        ...base,
+        background: tint[0],
+        color: tint[1],
+        fontSize: Math.round(size * 0.4),
+        fontWeight: 800,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+      },
+    },
     initials(name),
   )
 }
 
-function eventCard(e: ShareEvent): El {
-  const p = palette[e.color] ?? palette.grey
+const W = 1200
+const H = 720
+const ROWS = 4
+
+type Row = { day: number; date: string; event: ShareEvent }
+
+/** Alle bookede aktiviteter i uka, i rekkefølge, med hvilken dag de hører til. */
+function activityRows(days: ShareDay[]): Row[] {
+  const out: Row[] = []
+  days.forEach((d, i) => d.events.forEach((event) => out.push({ day: i, date: d.date, event })))
+  return out
+}
+
+function activityRow(r: Row): El {
+  const p = palette[r.event.color] ?? palette.grey
+  const people = r.event.people.slice(0, 5)
   return h(
     'div',
-    { style: { display: 'flex', flexDirection: 'column', gap: 2, borderRadius: 12, background: p.soft, padding: '10px 12px' } },
-    h('div', { style: { fontSize: 13, fontWeight: 800, color: p.ink } }, e.title),
-    e.opponent ? h('div', { style: { fontSize: 12, fontWeight: 600, color: p.sub } }, e.opponent) : null,
-    h('div', { style: { fontSize: 13, fontWeight: 600, color: p.sub } }, range(e.start_hour, e.end_hour)),
-    e.people.length > 0
+    {
+      style: {
+        display: 'flex',
+        alignItems: 'center',
+        height: 92,
+        background: '#FFFFFF',
+        borderRadius: 20,
+        boxShadow: CARD_SHADOW,
+        overflow: 'hidden',
+      },
+    },
+    // Fargen på aktiviteten som en stripe, ikke en flate: teksten skal være svart og stor.
+    h('div', { style: { width: 14, height: 92, background: p.ink } }),
+    h(
+      'div',
+      { style: { display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', width: 128 } },
+      h('div', { style: { fontSize: 20, fontWeight: 700, letterSpacing: 1.4, color: MUTED } }, DAYS[r.day].toUpperCase()),
+      h('div', { style: { fontSize: 42, fontWeight: 800, lineHeight: 1, color: INK } }, String(dayNumber(r.date))),
+    ),
+    h(
+      'div',
+      { style: { display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0, paddingRight: 16 } },
+      h('div', { style: { fontSize: 38, fontWeight: 800, color: INK, lineHeight: 1.15 } }, r.event.title),
+      r.event.opponent ? h('div', { style: { fontSize: 24, fontWeight: 700, color: p.sub } }, `vs ${r.event.opponent}`) : null,
+    ),
+    people.length > 0
       ? h(
           'div',
-          { style: { display: 'flex', alignItems: 'center', paddingTop: 4 } },
-          ...e.people.slice(0, 6).map((person, i) => avatar(person.name, person.avatar, p.soft, i === 0)),
-          e.people.length > 6
-            ? h('div', { style: { fontSize: 10, fontWeight: 700, color: p.sub, marginLeft: 6 } }, `+${e.people.length - 6}`)
+          { style: { display: 'flex', alignItems: 'center', paddingRight: 24 } },
+          ...people.map((person, i) => avatar(person.name, person.avatar, '#FFFFFF', i === 0, 40)),
+          r.event.people.length > people.length
+            ? h('div', { style: { fontSize: 20, fontWeight: 700, color: MUTED, marginLeft: 10 } }, `+${r.event.people.length - people.length}`)
             : null,
         )
       : null,
+    h('div', { style: { fontSize: 32, fontWeight: 800, color: INK, paddingRight: 28 } }, range(r.event.start_hour, r.event.end_hour)),
   )
 }
 
-function freeCard(f: { start_hour: number; end_hour: number }): El {
+function emptyRow(text: string, sub: string): El {
   return h(
     'div',
-    { style: { display: 'flex', flexDirection: 'column', gap: 2, borderRadius: 12, background: 'rgba(220,239,224,0.35)', border: '1.5px dashed #9CCBAC', padding: '8.5px 10.5px', opacity: 0.85 } },
-    h('div', { style: { fontSize: 13, fontWeight: 700, color: '#5E8F70' } }, 'Everyone free'),
-    h('div', { style: { fontSize: 13, fontWeight: 600, color: '#7FA88F' } }, range(f.start_hour, f.end_hour)),
-    h('div', { style: { fontSize: 11, fontWeight: 600, color: '#9CB8A5' } }, 'not booked'),
-  )
-}
-
-function dayCard(d: ShareDay, i: number): El {
-  const items: Child[] = [...d.events.map(eventCard), ...d.free.map(freeCard)]
-  return h(
-    'div',
-    { style: { display: 'flex', flexDirection: 'column', gap: 12, background: '#FFFFFF', borderRadius: 18, padding: '16px 14px', height: 300, boxShadow: CARD_SHADOW, flex: 1, minWidth: 0 } },
-    h(
-      'div',
-      { style: { display: 'flex', flexDirection: 'column', gap: 2 } },
-      h('div', { style: { fontSize: 15, fontWeight: 700, color: MUTED } }, DAYS[i]),
-      h('div', { style: { fontSize: 24, fontWeight: 800, color: INK } }, String(dayNumber(d.date))),
-    ),
-    h(
-      'div',
-      { style: { display: 'flex', flexDirection: 'column', gap: 8, overflow: 'hidden' } },
-      items.length > 0 ? items.slice(0, 3) : h('div', { style: { fontSize: 13, fontWeight: 600, color: FAINT, padding: '4px 2px' } }, 'Free'),
-    ),
+    {
+      style: {
+        display: 'flex',
+        flexDirection: 'column',
+        justifyContent: 'center',
+        flex: 1,
+        background: '#FFFFFF',
+        borderRadius: 20,
+        boxShadow: CARD_SHADOW,
+        padding: '0 40px',
+      },
+    },
+    h('div', { style: { fontSize: 40, fontWeight: 800, color: INK } }, text),
+    h('div', { style: { fontSize: 26, fontWeight: 600, color: MUTED, paddingTop: 6 } }, sub),
   )
 }
 
 function render(data: Awaited<ReturnType<typeof fetchShareWeek>> & object, monday: string, footer: string): El {
   const id = weekId(monday)
   const number = Number(id.slice(-2))
-  const activities = data.days.reduce((n, d) => n + d.events.length, 0)
-  const now = new Date()
-  const updated = `Updated ${DAYS[(now.getUTCDay() + 6) % 7]} ${now.getUTCDate()} ${['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][now.getUTCMonth()]}`
+  const all = activityRows(data.days)
+  const shown = all.slice(0, ROWS)
+  const freeCount = data.days.reduce((n, d) => n + d.free.length, 0)
+  const free = freeCount === 0 ? 'No block where everyone is free' : `${freeCount} block${freeCount === 1 ? '' : 's'} where everyone is free`
 
   return h(
     'div',
-    { style: { width: 1200, height: 630, background: BG, padding: '48px 56px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', fontFamily: 'Manrope', color: INK } },
+    {
+      style: {
+        width: W,
+        height: H,
+        background: BG,
+        padding: '44px 56px',
+        display: 'flex',
+        flexDirection: 'column',
+        justifyContent: 'space-between',
+        fontFamily: 'Manrope',
+        color: INK,
+      },
+    },
     h(
       'div',
       { style: { display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between' } },
       h(
         'div',
-        { style: { display: 'flex', flexDirection: 'column', gap: 6 } },
-        h('div', { style: { fontSize: 16, fontWeight: 700, letterSpacing: 1.6, textTransform: 'uppercase', color: MUTED } }, data.team.name),
-        h('div', { style: { fontSize: 48, fontWeight: 800, letterSpacing: -1.2, lineHeight: 1 } }, `Week ${number}`),
+        { style: { display: 'flex', flexDirection: 'column' } },
+        h('div', { style: { fontSize: 24, fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', color: MUTED } }, data.team.name),
+        h('div', { style: { fontSize: 100, fontWeight: 800, letterSpacing: -3, lineHeight: 1.05 } }, `Week ${number}`),
       ),
       h(
         'div',
-        { style: { display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 } },
-        h('div', { style: { fontSize: 20, fontWeight: 700 } }, formatRange(monday)),
-        h('div', { style: { fontSize: 15, color: MUTED } }, activities === 0 ? 'Nothing booked yet' : `${activities} activit${activities === 1 ? 'y' : 'ies'} this week`),
+        { style: { display: 'flex', flexDirection: 'column', alignItems: 'flex-end', paddingBottom: 10 } },
+        h('div', { style: { fontSize: 34, fontWeight: 800 } }, formatRange(monday)),
+        h(
+          'div',
+          { style: { fontSize: 24, fontWeight: 600, color: MUTED, paddingTop: 4 } },
+          all.length === 0 ? 'Nothing booked yet' : `${all.length} activit${all.length === 1 ? 'y' : 'ies'}`,
+        ),
       ),
     ),
-    h('div', { style: { display: 'flex', gap: 12 } }, ...data.days.map(dayCard)),
-    h('div', { style: { display: 'flex', justifyContent: 'flex-end' } }, h('div', { style: { fontSize: 14, fontWeight: 600, color: '#9A9690' } }, `${updated}${footer ? ' · ' + footer : ''}`)),
+    h(
+      'div',
+      { style: { display: 'flex', flexDirection: 'column', gap: 14, flex: 1, paddingTop: 26, paddingBottom: 34 } },
+      shown.length > 0 ? shown.map(activityRow) : emptyRow('Nothing booked yet', free),
+    ),
+    h(
+      'div',
+      { style: { display: 'flex', alignItems: 'center', justifyContent: 'flex-end' } },
+      h('div', { style: { fontSize: 22, fontWeight: 700, color: FAINT } }, footer),
+    ),
   )
 }
 
@@ -181,19 +244,19 @@ function sampleWeek() {
     d.setUTCDate(d.getUTCDate() + i)
     return d.toISOString().slice(0, 10)
   }
-  const people = ['Ada', 'Bo', 'Cato', 'Dina'].map((name) => ({ name, avatar: null }))
+  const people = ['Ada', 'Bo', 'Cato', 'Dina', 'Eli', 'Finn'].map((name) => ({ name, avatar: null }))
   return {
     team: { name: 'Self test', timezone: 'Europe/Oslo' },
     week_start: monday,
     members: 5,
     days: [
-      { date: day(0), events: [{ title: 'Flex 5v5 night', opponent: null, color: 'blue', start_hour: 19, end_hour: 22, people }], free: [] },
-      { date: day(1), events: [], free: [] },
-      { date: day(2), events: [], free: [] },
-      { date: day(3), events: [{ title: 'Scrim', opponent: 'Nordic Wolves', color: 'yellow', start_hour: 19, end_hour: 22, people }], free: [] },
+      { date: day(0), events: [{ title: 'Match', opponent: 'Nordic Wolves', color: 'blue', start_hour: 18, end_hour: 21, people }], free: [] },
+      { date: day(1), events: [], free: [{ start_hour: 19, end_hour: 22 }] },
+      { date: day(2), events: [{ title: 'Scrim', opponent: null, color: 'green', start_hour: 19, end_hour: 23, people }], free: [] },
+      { date: day(3), events: [{ title: 'VOD review', opponent: null, color: 'purple', start_hour: 16, end_hour: 18, people: people.slice(0, 2) }], free: [] },
       { date: day(4), events: [], free: [{ start_hour: 18, end_hour: 22 }] },
-      { date: day(5), events: [{ title: 'VOD review', opponent: null, color: 'purple', start_hour: 16, end_hour: 18, people: [] }], free: [] },
-      { date: day(6), events: [], free: [] },
+      { date: day(5), events: [{ title: 'Scrim', opponent: 'Ionized Esports', color: 'yellow', start_hour: 18, end_hour: 21, people }], free: [] },
+      { date: day(6), events: [{ title: 'Flex night', opponent: null, color: 'orange', start_hour: 20, end_hour: 23, people: people.slice(0, 3) }], free: [] },
     ],
   }
 }
@@ -219,8 +282,8 @@ Deno.serve(async (req) => {
   try {
     ready ??= setup()
     const { fonts } = await ready
-    const svg = await satori(render(data, selfTest ? data.week_start : monday, footer) as never, { width: 1200, height: 630, fonts })
-    const png = new Resvg(svg, { fitTo: { mode: 'width', value: 1200 } }).render().asPng()
+    const svg = await satori(render(data, selfTest ? data.week_start : monday, footer) as never, { width: W, height: H, fonts })
+    const png = new Resvg(svg, { fitTo: { mode: 'width', value: W } }).render().asPng()
     return new Response(png, {
       headers: { 'Content-Type': 'image/png', 'Cache-Control': selfTest ? 'no-store' : 'public, max-age=300' },
     })
