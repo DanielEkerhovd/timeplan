@@ -128,8 +128,9 @@ export default async function handler(req: Request): Promise<Response> {
     }
   }
   const freeCount = data.days.reduce((n, d) => n + d.free.length, 0)
+  // Datoane står på si eiga linje, så listan under startar reint.
   const description =
-    `${formatRange(monday)} · ` +
+    `${formatRange(monday)}\n` +
     (lines.length ? lines.join('\n') : 'Nothing booked yet.') +
     (freeCount ? `\n${freeCount} block${freeCount === 1 ? '' : 's'} where everyone is free.` : '')
 
