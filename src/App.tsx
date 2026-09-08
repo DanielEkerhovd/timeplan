@@ -43,13 +43,13 @@ function Protected() {
   if (teams === null) return <Spinner />
 
   const active = getActiveTeamId()
-  const home = teams.length === 0 ? '/nytt-lag' : `/lag/${teams.some((t) => t.id === active) ? active : teams[0].id}`
+  const home = teams.length === 0 ? '/new-team' : `/team/${teams.some((t) => t.id === active) ? active : teams[0].id}`
 
   return (
     <Routes>
       <Route path="/" element={<Navigate to={home} replace />} />
-      <Route path="/nytt-lag" element={<NoTeam hasTeams={teams.length > 0} onTeamsChanged={reload} />} />
-      <Route path="/lag/:teamId" element={<TeamPage teams={teams} />} />
+      <Route path="/new-team" element={<NoTeam hasTeams={teams.length > 0} onTeamsChanged={reload} />} />
+      <Route path="/team/:teamId" element={<TeamPage teams={teams} />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   )

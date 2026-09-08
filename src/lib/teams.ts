@@ -18,7 +18,7 @@ export async function fetchMyTeams(userId: string): Promise<MyTeam[]> {
       return team ? { ...team, role: row.role as Member['role'] } : null
     })
     .filter((t): t is MyTeam => t !== null)
-    .sort((a, b) => a.name.localeCompare(b.name, 'nb'))
+    .sort((a, b) => a.name.localeCompare(b.name))
 }
 
 export async function createTeam(name: string): Promise<string> {

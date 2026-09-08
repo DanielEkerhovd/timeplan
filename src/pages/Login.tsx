@@ -14,7 +14,7 @@ export default function Login() {
     try {
       await signInWithDiscord()
     } catch {
-      setError('Fikk ikke kontakt med Discord. Prøv igjen.')
+      setError('Could not reach Discord. Please try again.')
     }
   }
 
@@ -25,10 +25,10 @@ export default function Login() {
           <CalendarIcon />
         </div>
         <div className="flex flex-col gap-2.5">
-          <Eyebrow>Timeplan</Eyebrow>
-          <h1 className="text-[30px] font-extrabold leading-tight tracking-tight">Når kan du spille denne uka?</h1>
+          <Eyebrow>Team Schedule</Eyebrow>
+          <h1 className="text-[30px] font-extrabold leading-tight tracking-tight">When can you play this week?</h1>
           <p className="max-w-[300px] text-[15px] leading-relaxed text-muted">
-            Kryss av kveldene du er ledig, så finner laget tidspunkt som passer for alle.
+            Mark the evenings you are free, and the team finds times that work for everyone.
           </p>
         </div>
       </div>
@@ -37,10 +37,10 @@ export default function Login() {
         <ErrorText>{error}</ErrorText>
         <Button onClick={handleLogin} className="h-[52px] w-full">
           <ChatIcon />
-          Logg inn med Discord
+          Sign in with Discord
         </Button>
         <p className="text-center text-[13px] leading-relaxed text-faint">
-          Vi henter bare navn og avatar fra Discord. Ingenting postes på dine vegne.
+          We only use your name and avatar from Discord. Nothing is posted on your behalf.
         </p>
       </div>
     </main>

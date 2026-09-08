@@ -5,9 +5,9 @@
 export type MemberRole = 'owner' | 'coach' | 'player'
 
 export const roleLabel: Record<MemberRole, string> = {
-  owner: 'Eier',
-  coach: 'Trener',
-  player: 'Spiller',
+  owner: 'Owner',
+  coach: 'Coach',
+  player: 'Player',
 }
 
 /** Eier og trener kan redigere planen. */
@@ -81,22 +81,22 @@ export interface SlotCount {
 
 /** Feilkoder databasen kaster (raise exception '<kode>'). */
 export const dbErrors = {
-  not_authenticated: 'Du må logge inn først.',
-  not_owner: 'Bare eieren kan gjøre dette.',
-  not_editor: 'Bare eier og trener kan gjøre dette.',
-  cannot_remove_owner: 'Eieren kan ikke fjernes. Overfør eierskapet først.',
-  owner_cannot_leave: 'Gi eierskapet til noen andre før du forlater laget.',
-  use_transfer_ownership: 'Bruk «Overfør eierskap» for å bytte eier.',
-  not_a_member: 'Personen er ikke med på laget.',
-  team_limit: 'Du kan ikke lage flere enn 3 lag.',
-  team_full: 'Laget er fullt (maks 15).',
-  too_many_invites: 'Laget har allerede 5 aktive koder.',
-  invite_too_long: 'En kode kan vare maks 30 dager.',
-  too_many_attempts: 'For mange feil forsøk. Prøv igjen om en time.',
-  too_many_events: 'Maks 4 aktiviteter per dag.',
-  date_out_of_range: 'Datoen må være innenfor ett år.',
-  name_mismatch: 'Navnet stemmer ikke.',
-  use_leave_team: 'Bruk «Forlat laget» for å fjerne deg selv.',
+  not_authenticated: 'You need to sign in first.',
+  not_owner: 'Only the owner can do this.',
+  not_editor: 'Only the owner and coaches can do this.',
+  cannot_remove_owner: 'The owner cannot be removed. Transfer ownership first.',
+  owner_cannot_leave: 'Transfer ownership to someone else before leaving the team.',
+  use_transfer_ownership: 'Use "Transfer ownership" to change the owner.',
+  not_a_member: 'That person is not on the team.',
+  team_limit: 'You cannot create more than 3 teams.',
+  team_full: 'The team is full (max 15).',
+  too_many_invites: 'The team already has 5 active invite codes.',
+  invite_too_long: 'An invite code can last at most 30 days.',
+  too_many_attempts: 'Too many failed attempts. Try again in an hour.',
+  too_many_events: 'Max 4 activities per day.',
+  date_out_of_range: 'The date must be within one year.',
+  name_mismatch: 'The name does not match.',
+  use_leave_team: 'Use "Leave team" to remove yourself.',
 } as const
 
 /** Gjør en Supabase/Postgres-feil om til en setning folk forstår. */
@@ -105,7 +105,7 @@ export function friendlyError(err: unknown): string {
   for (const [code, text] of Object.entries(dbErrors)) {
     if (msg.includes(code)) return text
   }
-  if (msg.includes('row-level security')) return 'Du har ikke tilgang til dette.'
-  if (msg.includes('permission denied')) return 'Du har ikke tilgang til dette.'
-  return 'Noe gikk galt. Prøv igjen.'
+  if (msg.includes('row-level security')) return 'You do not have access to this.'
+  if (msg.includes('permission denied')) return 'You do not have access to this.'
+  return 'Something went wrong. Please try again.'
 }

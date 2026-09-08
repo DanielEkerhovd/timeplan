@@ -4,7 +4,7 @@ Ukeplan for lag. Spillerne krysser av kveldene de kan, eier og trener ser hvor a
 
 React + Vite + TypeScript + Tailwind i front. Supabase (Postgres, Auth med Discord, Realtime, Edge Functions) bak.
 
-Dette er **steg 1: grunnmur og sikkerhet**. Innlogging, lag, koder, roller og alle tilgangsregler er på plass og testet. Ukevisningen kommer i steg 2.
+Status: **steg 1 (grunnmur og sikkerhet)** og **steg 2 (ukevisningen)** er ferdig. Innlogging, lag, koder, roller, tilgangsregler, og kalenderen der spillerne krysser av intervaller og svarer på aktiviteter. Ledervisningen kommer i steg 3.
 
 ## Roller
 
@@ -50,6 +50,15 @@ npm run dev
 ```
 
 Åpne `http://localhost:5173`, logg inn med Discord, lag et lag.
+
+## Ukevisningen (steg 2)
+
+- Uka ligger i URL-en som `?week=2026-W37`, så en uke kan lenkes til. Uten parameter vises inneværende uke.
+- Knappene kommer fra `team_slots` (hverdag/helg). Et trykk lagrer eller fjerner timene i `availability`. Overlappende intervaller håndteres: slår du av 19–22 mens 18–21 er på, forsvinner bare time 21.
+- Hver knapp viser «3/5»: hvor mange på laget som kan hele blokken.
+- Realtime på `availability`, `events` og `event_responses` gjør at alle ser endringer uten å laste på nytt.
+- Aktiviteter vises på dagen med «Coming» / «Can't make it». Å lage aktiviteter er steg 3.
+- Logikken for knappene ligger i `src/lib/slots.ts` og har enhetstester: `npm test`.
 
 ## Sikkerhetstestene
 

@@ -27,7 +27,7 @@ export default function NoTeam({ hasTeams = false, onTeamsChanged }: Props) {
     setCreateError(null)
     const name = teamName.trim()
     if (name.length < 2) {
-      setCreateError('Lagnavnet må ha minst 2 tegn.')
+      setCreateError('The team name needs at least 2 characters.')
       return
     }
     setBusy('create')
@@ -35,7 +35,7 @@ export default function NoTeam({ hasTeams = false, onTeamsChanged }: Props) {
       const id = await createTeam(name)
       setActiveTeamId(id)
       await onTeamsChanged()
-      navigate(`/lag/${id}`, { replace: true })
+      navigate(`/team/${id}`, { replace: true })
     } catch (err) {
       setCreateError(friendlyError(err))
     } finally {
@@ -47,19 +47,19 @@ export default function NoTeam({ hasTeams = false, onTeamsChanged }: Props) {
     e.preventDefault()
     setJoinError(null)
     if (code.trim().length < 6) {
-      setJoinError('Skriv inn hele koden.')
+      setJoinError('Enter the full code.')
       return
     }
     setBusy('join')
     try {
       const id = await joinTeam(code)
       if (!id) {
-        setJoinError('Koden er feil, utløpt eller oppbrukt. Spør den som sendte den.')
+        setJoinError('That code is wrong, expired or used up. Ask the person who sent it.')
         return
       }
       setActiveTeamId(id)
       await onTeamsChanged()
-      navigate(`/lag/${id}`, { replace: true })
+      navigate(`/team/${id}`, { replace: true })
     } catch (err) {
       setJoinError(friendlyError(err))
     } finally {
@@ -70,22 +70,22 @@ export default function NoTeam({ hasTeams = false, onTeamsChanged }: Props) {
   return (
     <main className="mx-auto flex min-h-screen max-w-md flex-col gap-5 px-5 pb-10 pt-16">
       <div className="flex flex-col gap-1">
-        <Eyebrow>Timeplan</Eyebrow>
+        <Eyebrow>Team Schedule</Eyebrow>
         <h1 className="text-[26px] font-extrabold tracking-tight">
-          {hasTeams ? 'Nytt lag' : 'Du er ikke med på noe lag ennå'}
+          {hasTeams ? 'New team' : 'You are not on a team yet'}
         </h1>
         <p className="text-[15px] leading-relaxed text-muted">
-          Har du fått en kode fra laget ditt? Skriv den inn. Ellers kan du lage et nytt lag og invitere de andre.
+          Got an invite code from your team? Enter it below. Otherwise, create a new team and invite the others.
         </p>
       </div>
 
       <Card>
         <form onSubmit={handleJoin} className="flex flex-col gap-3">
-          <h2 className="text-[15px] font-extrabold">Bli med i et lag</h2>
+          <h2 className="text-[15px] font-extrabold">Join a team</h2>
           <Input
             value={code}
             onChange={(e) => setCode(e.target.value.toUpperCase())}
-            placeholder="Kode, f.eks. K7XM2Q9TB4WZ"
+            placeholder="Invite code, e.g. K7XM2Q9TB4WZ"
             autoCapitalize="characters"
             autoCorrect="off"
             spellCheck={false}
@@ -94,36 +94,36 @@ export default function NoTeam({ hasTeams = false, onTeamsChanged }: Props) {
           />
           <ErrorText>{joinError}</ErrorText>
           <Button type="submit" disabled={busy !== null}>
-            {busy === 'join' ? 'Sjekker …' : 'Bli med'}
+            {busy === 'join' ? 'Checking …' : 'Join'}
           </Button>
         </form>
       </Card>
 
       <Card>
         <form onSubmit={handleCreate} className="flex flex-col gap-3">
-          <h2 className="text-[15px] font-extrabold">Lag et nytt lag</h2>
+          <h2 className="text-[15px] font-extrabold">Create a new team</h2>
           <Input
             value={teamName}
             onChange={(e) => setTeamName(e.target.value)}
-            placeholder="Lagnavn"
+            placeholder="Team name"
             maxLength={40}
           />
           <ErrorText>{createError}</ErrorText>
           <Button type="submit" variant="secondary" disabled={busy !== null}>
-            {busy === 'create' ? 'Lager …' : 'Lag laget'}
+            {busy === 'create' ? 'Creating …' : 'Create team'}
           </Button>
-          <p className="text-[13px] leading-relaxed text-faint">Du blir eier av laget og kan invitere andre med en kode.</p>
+          <p className="text-[13px] leading-relaxed text-faint">You become the owner and can invite others with a code.</p>
         </form>
       </Card>
 
       <div className="flex justify-center gap-4 pt-2 text-sm font-semibold text-muted">
         {hasTeams && (
           <button onClick={() => navigate('/')} className="hover:text-ink">
-            Tilbake
+            Back
           </button>
         )}
         <button onClick={() => signOut()} className="hover:text-ink">
-          Logg ut
+          Sign out
         </button>
       </div>
     </main>

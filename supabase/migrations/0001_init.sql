@@ -68,7 +68,7 @@ begin
     nullif(meta ->> 'full_name', ''),
     nullif(meta ->> 'name', ''),
     nullif(meta ->> 'preferred_username', ''),
-    'Spiller'
+    'Player'
   );
   insert into public.profiles (user_id, display_name, avatar_url, updated_at)
   values (new.id, left(name, 40), left(meta ->> 'avatar_url', 400), now())

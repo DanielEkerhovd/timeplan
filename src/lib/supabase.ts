@@ -5,7 +5,7 @@ const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined
 
 if (!url || !anonKey) {
   throw new Error(
-    'Mangler VITE_SUPABASE_URL eller VITE_SUPABASE_ANON_KEY. Kopier .env.example til .env.local og fyll inn.',
+    'Missing VITE_SUPABASE_URL or VITE_SUPABASE_ANON_KEY. Copy .env.example to .env.local and fill it in.',
   )
 }
 

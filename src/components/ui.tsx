@@ -54,6 +54,6 @@ export function Avatar({ name, url, size = 40 }: { name: string; url?: string | 
 
 export function Spinner() {
   return (
-    <div className="flex min-h-[50vh] items-center justify-center text-sm font-semibold text-muted">Laster …</div>
+    <div className="flex min-h-[50vh] items-center justify-center text-sm font-semibold text-muted">Loading …</div>
   )
 }
