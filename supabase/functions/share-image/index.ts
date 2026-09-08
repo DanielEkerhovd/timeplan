@@ -1,3 +1,4 @@
+// share-image build: 2 (selvtest + wasm ved siden av funksjonen)
 // Draws the week as a 1200×630 PNG for Discord's link preview:
 //   /functions/v1/share-image/<slug>.png?week=2026-W37
 // Same layout as the "Discord share image" mockup: one card per day, booked activities in

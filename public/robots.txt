@@ -1,0 +1,3 @@
+# Delingslenkene skal kunne forhåndsvises på Discord, Slack og lignende.
+User-agent: *
+Allow: /
