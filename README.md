@@ -125,7 +125,7 @@ GitHub Actions (`.github/workflows/security.yml`) kjører testene ved hver push.
 
 Igjen: tidssonehint for spillere i annen sone, og steg 6 drift (deploy, redirect-URL-er, GitHub Actions).
 
-Appen heter **Gather** og bor på `https://www.gatherapp.gg`. Domenet står tre steder utenfor koden, og alle tre må peke på det samme:
+Appen heter **Gatherapp.gg** og bor på `https://www.gatherapp.gg`. Domenet står tre steder utenfor koden, og alle tre må peke på det samme:
 
 - **Vercel → Environment Variables:** `VITE_SHARE_BASE=https://www.gatherapp.gg`. Uten den bygges delingslenkene fra domenet du tilfeldigvis står på.
 - **Supabase → Edge Functions secrets:** `APP_URL=https://www.gatherapp.gg`. Den bestemmer bildet, canonical-lenka og hvor et klikk sender folk — og domenet som står nederst i delingsbildet.

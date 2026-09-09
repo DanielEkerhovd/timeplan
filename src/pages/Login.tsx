@@ -39,13 +39,13 @@ export default function Login() {
             </div>
           </div>
 
-          <div className="flex flex-col gap-3">
-            <h1 className="text-[34px] font-extrabold leading-[1.1] tracking-tight sm:text-[40px]">When can you play this week?</h1>
+          <div className="flex flex-col gap-5">
+            <h1 className="text-[34px] font-extrabold leading-[1.1] tracking-tight sm:text-[50px]">When can you play this week?</h1>
             <p className="max-w-[46ch] text-[15px] leading-relaxed text-muted">
-              Sick of juggling messages and polls on discord? Gatherapp.gg keeps track of your group’s availability. Plan activites, like scrims, matches, hangouts or whatever, and share a link to the week on Discord. No signups, no ads, no tracking.
+              Sick of juggling messages and polls on Discord? Gatherapp.gg keeps track of your group’s availability. Plan activities, like scrims, matches, hangouts or whatever, and share a link to the week on Discord. No signups, no ads, no tracking.
             </p>
             <p className="max-w-[46ch] text-[15px] leading-relaxed text-muted">
-              Made for discord, by people who uses discord. Alot.
+              Made for Discord, by people who use Discord. A lot.
             </p>
           </div>
 
@@ -69,7 +69,7 @@ export default function Login() {
         </div>
       </div>
 
-      <footer className="px-6 pb-8 text-center text-[12px] text-faint">Gather · gatherapp.gg · made in Hardanger, Norway</footer>
+      <footer className="px-6 pb-8 text-center text-[12px] text-faint">Gatherapp.gg · made in Hardanger, Norway</footer>
     </main>
   )
 }

@@ -42,17 +42,17 @@ export default function AboutPage() {
             <div className="flex flex-col leading-tight">
               <Eyebrow>About</Eyebrow>
               <h1 className="text-[30px] font-extrabold tracking-tight">
-                Gather
+                Gatherapp.gg
               </h1>
               <span className="text-[13px] text-muted">
-                Planning tool for teams
+                Planning tool for teams and groups
               </span>
             </div>
           </div>
-          <p className="max-w-[520px] text-[15px] leading-relaxed text-muted lg:border-l lg:border-line-soft lg:pl-10">
-            Everyone marks the hours they are free. The week shows where that
-            overlaps, so you book practice at a time people can actually make —
-            instead of asking five people the same question every Monday.
+          <p className="max-w-[440px] text-[15px] leading-relaxed text-muted lg:border-l lg:border-line-soft lg:pl-10">
+            Keeps track of your group's availability. Plan scrims, matches,
+            hangouts or whatever, and share a link to the week on Discord. No
+            signups, no ads, no tracking.
           </p>
         </section>
 
@@ -230,7 +230,7 @@ export default function AboutPage() {
         </section>
 
         <p className="px-1 pb-2 text-[12px] text-faint">
-          Gather · made in Hardanger, Norway
+          Gatherapp.gg · made in Hardanger, Norway
         </p>
       </div>
     </div>

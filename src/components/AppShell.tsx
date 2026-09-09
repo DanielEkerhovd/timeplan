@@ -345,15 +345,15 @@ export default function AppShell({
             </div>
             <div className="flex min-w-0 flex-col leading-tight">
               <span className="text-[12px] font-extrabold tracking-tight">
-                Gather
+                Gatherapp.gg
               </span>
               <span className="whitespace-nowrap text-[9.5px] leading-[1.3] tracking-tight text-muted">
-                Planning tool for teams
+                Planning tool for teams and groups
               </span>
             </div>
             <NavLink
               to={`/team/${team.id}/about`}
-              aria-label="About Gather"
+              aria-label="About Gatherapp.gg"
               className={({ isActive }) =>
                 `ml-auto flex h-6 w-6 shrink-0 items-center justify-center rounded-full transition ${
                   isActive
@@ -485,7 +485,7 @@ export default function AppShell({
                   navigate(`/team/${team.id}/about`);
                 }}
               >
-                About Gather
+                About Gatherapp.gg
               </MenuItem>
               <MenuItem
                 icon={iconJoinTeam}
