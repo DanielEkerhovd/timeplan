@@ -33,7 +33,7 @@ Supabase, og bildet svarer 500. Feilmeldingen sier hvilken fil som mangler.
    `APP_URL`, så uten den peker forhåndsvisninga på Discord tilbake til Supabase-domenet.
 
    ```bash
-   supabase secrets set APP_URL=https://din-app.no
+   supabase secrets set APP_URL=https://www.gatherapp.gg
    ```
 
 2. Deploy:

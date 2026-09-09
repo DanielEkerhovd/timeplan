@@ -11,7 +11,7 @@ interface Props {
   actions?: React.ReactNode
   /** Desktop: next to the prev/today/next selector (e.g. New activity). */
   leftActions?: React.ReactNode
-  /** Desktop: in the right-hand column slot, aligned with the aside below (e.g. My week / Team overview). */
+  /** Desktop: in the right-hand column slot, aligned with the aside below (e.g. My week / Plan week). */
   rightActions?: React.ReactNode
 }
 

@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Centered availability grid</title>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#141311; --surface:#1f1e1b; --line:#35332e; --line-soft:#2c2a26;
+  --ink:#f2f0eb; --muted:#a8a49d; --faint:#6f6c66; --dot:#4a4741;
+  --green:#4fb277; --green-soft:#1e3628; --green-ink:#9ad8b2; --green-dim:#3f6b50;
+  --shadow:0 1px 2px rgba(0,0,0,.3), 0 8px 24px rgba(0,0,0,.25);
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:Manrope,"Segoe UI",system-ui,sans-serif;padding:32px 28px 80px}
+.wrap{max-width:1240px;margin:0 auto}
+h1{font-size:22px;font-weight:800;margin:0 0 4px}
+.lede{color:var(--muted);font-size:14px;margin:0 0 26px;max-width:72ch;line-height:1.55}
+.opt{margin:0 0 36px}
+.opt-head{display:flex;align-items:baseline;gap:10px;margin:0 0 4px}
+.tag{font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--faint)}
+.opt-head h2{font-size:16px;font-weight:800;margin:0}
+.note{color:var(--muted);font-size:13px;margin:0 0 12px;max-width:78ch;line-height:1.55}
+
+.stage{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:24px;align-items:stretch}
+.card{background:var(--surface);border-radius:20px;padding:20px;box-shadow:var(--shadow);display:flex;flex-direction:column;min-height:0}
+.card h3{font-size:15px;font-weight:800;margin:0}
+.card .sub{font-size:13px;color:var(--muted);margin:2px 0 16px}
+.side{background:var(--surface);border-radius:20px;padding:20px;box-shadow:var(--shadow)}
+.side h3{font-size:15px;font-weight:800;margin:0 0 14px}
+.member{display:flex;align-items:center;gap:10px;margin-bottom:12px}
+.av{width:30px;height:30px;border-radius:50%;background:#23364c;color:#9fbee3;display:grid;place-items:center;font-size:12px;font-weight:800}
+.member .n{font-size:13px;font-weight:700}
+.member .r{font-size:11px;color:var(--muted)}
+
+/* THE FIX: scroll area is the flex child, the grid inside gets margin auto.
+   Fits  -> auto margins split the slack, grid sits in the middle.
+   Too tall -> auto margins become 0, grid is pinned to the top and scrolls. */
+.scroll{flex:1;min-height:0;overflow-y:auto;display:flex;
+  scrollbar-width:thin;scrollbar-color:var(--line) transparent}
+.scroll::-webkit-scrollbar{width:8px}
+.scroll::-webkit-scrollbar-thumb{background:var(--line);border-radius:99px}
+.days{margin:auto 0;width:100%;display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:10px}
+.col{display:flex;flex-direction:column;gap:8px;min-width:0}
+.dh{display:flex;flex-direction:column;align-items:center;gap:2px;padding-bottom:4px}
+.dh .d{font-size:12px;font-weight:700;color:var(--muted)}
+.dh .n{font-size:15px;font-weight:800}
+.dh.today .d{color:var(--green-ink)}
+.dh.today .n{background:var(--ink);color:var(--bg);border-radius:999px;width:26px;height:26px;display:grid;place-items:center}
+.slot{border:1.5px solid var(--line);background:var(--surface);border-radius:12px;height:72px;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;
+  font-size:13px;font-weight:700;cursor:pointer;flex:none}
+.slot.on{border-color:var(--green);background:var(--green-soft);color:var(--green-ink)}
+.dots{display:flex;gap:4px}
+.dots i{width:6px;height:6px;border-radius:50%;background:var(--dot);display:block}
+.dots i.f{background:var(--green)}
+.slot.on .dots i{background:var(--green-dim)} .slot.on .dots i.f{background:var(--green)}
+
+.strip{display:flex;gap:8px;align-items:center;padding-top:16px;flex:none}
+.x{width:36px;height:36px;border-radius:999px;border:1.5px solid var(--line);display:grid;place-items:center}
+.chip{height:32px;border-radius:999px;border:1.5px solid var(--line);padding:0 12px;display:flex;align-items:center;font-size:12px;font-weight:800}
+
+.label{font-size:12px;font-weight:800;color:var(--faint);margin:0 0 8px;letter-spacing:.04em}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:22px;align-items:start}
+.hint{font-size:12px;color:var(--faint);margin-top:8px}
+.drag{resize:vertical;overflow:auto;min-height:260px}
+</style>
+</head>
+<body>
+<div class="wrap">
+<h1>Availability grid, centered until it doesn't fit</h1>
+<p class="lede">The grid sits in the middle of whatever height the card has. The moment the slots need more room than there is, it snaps to the top and the area scrolls instead. Same card, three heights.</p>
+
+<section class="opt">
+  <div class="opt-head"><span class="tag">Tall card</span><h2>Room to spare — grid centers</h2></div>
+  <p class="note">The Members column is taller than the slots need, so the leftover height is split evenly above and below the grid. The Options strip stays where it is, at the bottom.</p>
+  <div class="stage">
+    <div class="card" style="height:540px">
+      <h3>Select your availability</h3>
+      <div class="sub">Tap the times you can play. You can pick more than one per day.</div>
+      <div class="scroll"><div class="days" data-rows="3"></div></div>
+      <div class="strip"><div class="x">✕</div><div class="chip">Save as template</div><div class="chip">Use template</div><div class="chip">Clear week</div></div>
+    </div>
+    <div class="side side-fill"></div>
+  </div>
+</section>
+
+<section class="opt">
+  <div class="opt-head"><span class="tag">Just enough</span><h2>Fits exactly — nothing moves</h2></div>
+  <p class="note">No slack left, so there is nothing to center. This is the state everything passes through on its way between the two others.</p>
+  <div class="stage">
+    <div class="card" style="height:392px">
+      <h3>Select your availability</h3>
+      <div class="sub">Tap the times you can play. You can pick more than one per day.</div>
+      <div class="scroll"><div class="days" data-rows="3"></div></div>
+      <div class="strip"><div class="x">✕</div><div class="chip">Save as template</div><div class="chip">Use template</div><div class="chip">Clear week</div></div>
+    </div>
+    <div class="side side-fill"></div>
+  </div>
+</section>
+
+<section class="opt">
+  <div class="opt-head"><span class="tag">Too tall</span><h2>Five slots a day — pinned to the top, scrolls</h2></div>
+  <p class="note">Now the grid is taller than the card. The centering gives up, the first row stays glued to the top edge, and the area scrolls on its own. The heading above and the Options strip below never move.</p>
+  <div class="stage">
+    <div class="card" style="height:440px">
+      <h3>Select your availability</h3>
+      <div class="sub">Tap the times you can play. You can pick more than one per day.</div>
+      <div class="scroll"><div class="days" data-rows="6"></div></div>
+      <div class="strip"><div class="x">✕</div><div class="chip">Save as template</div><div class="chip">Use template</div><div class="chip">Clear week</div></div>
+    </div>
+    <div class="side side-fill"></div>
+  </div>
+</section>
+
+<section class="opt">
+  <div class="opt-head"><span class="tag">Try it</span><h2>Drag the bottom-right corner</h2></div>
+  <p class="note">Drag this card taller and shorter to watch it switch between the two behaviours. Nothing jumps: the grid drifts to the middle while there is slack, then parks at the top.</p>
+  <div class="stage">
+    <div class="card drag" style="height:430px">
+      <h3>Select your availability</h3>
+      <div class="sub">Tap the times you can play. You can pick more than one per day.</div>
+      <div class="scroll"><div class="days" data-rows="4"></div></div>
+      <div class="strip"><div class="x">✕</div><div class="chip">Save as template</div><div class="chip">Use template</div><div class="chip">Clear week</div></div>
+    </div>
+    <div class="side side-fill"></div>
+  </div>
+  <p class="hint">Resize handle is in the bottom-right corner of the left card.</p>
+</section>
+
+</div>
+<script>
+const days=[{d:'Mon',n:7},{d:'Tue',n:8},{d:'Wed',n:9,today:true},{d:'Thu',n:10},{d:'Fri',n:11},{d:'Sat',n:12},{d:'Sun',n:13}];
+const allTimes=['16:00 - 19:00','17:00 - 20:00','18:00 - 21:00','19:00 - 22:00','20:00 - 23:00','21:00 - 00:00'];
+const base=[[0,1,0],[0,1,0],[0,1,1],[1,1,1],[1,1,0],[0,1,0],[1,1,1]];
+const dots=a=>`<span class="dots">${a.map(v=>`<i class="${v?'f':''}"></i>`).join('')}</span>`;
+document.querySelectorAll('.days').forEach(el=>{
+  const rows=+el.dataset.rows;
+  const times=allTimes.slice(0,rows===3?3:rows);
+  el.innerHTML=days.map((day,di)=>`
+    <div class="col">
+      <div class="dh ${day.today?'today':''}"><span class="d">${day.d}</span><span class="n">${day.n}</span></div>
+      ${times.map((t,ti)=>{const c=base[di].map((v,k)=>(ti%2===0? v : (k===1?1:v)));
+        return `<div class="slot ${c[1]?'on':''}"><span>${t}</span>${dots(c)}</div>`}).join('')}
+    </div>`).join('');
+});
+const people=[['DE','Daniel','Mid · you'],['AM','Amalie','Top · answered'],['KR','Kristian','Jungle · answered']];
+document.querySelectorAll('.side-fill').forEach(el=>{
+  el.innerHTML='<h3>Members</h3>'+people.map(p=>`<div class="member"><div class="av">${p[0]}</div><div><div class="n">${p[1]}</div><div class="r">${p[2]}</div></div></div>`).join('');
+});
+</script>
+</body>
+</html>

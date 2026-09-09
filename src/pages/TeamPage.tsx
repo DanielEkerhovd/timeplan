@@ -10,6 +10,7 @@ import { useWeekData } from '../lib/useWeekData'
 import { weekId } from '../lib/week'
 import AppShell from '../components/AppShell'
 import { ToastProvider } from '../components/ui'
+import AboutPage from './AboutPage'
 import PlayersPage from './PlayersPage'
 import SettingsPage from './SettingsPage'
 import WeekPage from './WeekPage'
@@ -19,7 +20,7 @@ interface Props {
   onTeamsChanged: () => Promise<void>
 }
 
-/** One team: the app frame plus the Week / Players / Settings pages. */
+/** One team: the app frame plus the Week / Members / Settings pages. */
 export default function TeamPage({ teams, onTeamsChanged }: Props) {
   const { teamId } = useParams()
   const team = teams.find((t) => t.id === teamId)
@@ -69,7 +70,7 @@ function TeamContent({ team, teams, onTeamsChanged }: { team: MyTeam } & Props) 
           <Route
             path="/players"
             element={
-              <AppShell team={team} teams={teams} profile={profile} onProfileChanged={week.reloadTeam} mobileTitle="Players">
+              <AppShell team={team} teams={teams} profile={profile} onProfileChanged={week.reloadTeam} mobileTitle="Members">
                 <PlayersPage team={team} week={week} onTeamsChanged={onTeamsChanged} />
               </AppShell>
             }
@@ -84,6 +85,14 @@ function TeamContent({ team, teams, onTeamsChanged }: { team: MyTeam } & Props) 
               ) : (
                 <Navigate to={`/team/${team.id}`} replace />
               )
+            }
+          />
+          <Route
+            path="/about"
+            element={
+              <AppShell team={team} teams={teams} profile={profile} onProfileChanged={week.reloadTeam} mobileTitle="About">
+                <AboutPage />
+              </AppShell>
             }
           />
           <Route path="*" element={<Navigate to={`/team/${team.id}`} replace />} />

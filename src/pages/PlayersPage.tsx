@@ -8,8 +8,8 @@ import {
   inviteIsActive,
   leaveTeam,
   removeMember,
-  setPosition,
-  setRole,
+  setAccess,
+  setMemberRole,
 } from "../lib/settings";
 import { inviteLink, type MyTeam } from "../lib/teams";
 import {
@@ -18,8 +18,7 @@ import {
   roleLabel,
   type Invite,
   type MemberWithProfile,
-  type Position,
-  positionLabel,
+  type TeamRole,
 } from "../lib/types";
 import type { WeekData } from "../lib/useWeekData";
 import {
@@ -55,6 +54,7 @@ export default function PlayersPage({ team, week, onTeamsChanged }: Props) {
   } | null>(null);
 
   const members = week.members;
+  const roles = week.roles;
 
   async function run(key: string, fn: () => Promise<void>, done?: string) {
     setBusy(key);
@@ -87,9 +87,9 @@ export default function PlayersPage({ team, week, onTeamsChanged }: Props) {
   if (!members || !user) return <Spinner />;
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-5 lg:overflow-y-auto">
+    <div className="flex min-h-0 flex-1 flex-col gap-5 lg:-mr-8 lg:overflow-y-auto lg:pr-8">
       <div className="hidden flex-col gap-1 lg:flex">
-        <Eyebrow>Players</Eyebrow>
+        <Eyebrow>Members</Eyebrow>
         <h1 className="text-[26px] font-extrabold tracking-tight">
           {team.name}
         </h1>
@@ -118,21 +118,17 @@ export default function PlayersPage({ team, week, onTeamsChanged }: Props) {
                     setConfirm({ kind, userId: m.user_id })
                   }
                   onCancel={() => setConfirm(null)}
-                  onSetRole={(role) =>
+                  roles={roles}
+                  onSetAccess={(access) =>
                     void run(
                       m.user_id,
-                      async () => {
-                        await setRole(team.id, m.user_id, role);
-                        // A coach has no lane; clear it so the list stays tidy.
-                        if (role === "coach" && m.position)
-                          await setPosition(team.id, m.user_id, null);
-                      },
-                      `${m.profile?.display_name ?? "Player"} is now ${roleLabel[role].toLowerCase()}`,
+                      () => setAccess(team.id, m.user_id, access),
+                      `${m.profile?.display_name ?? "They"} is now ${roleLabel[access].toLowerCase()}`,
                     )
                   }
-                  onSetPosition={(p) =>
+                  onSetRole={(roleId) =>
                     void run(m.user_id, () =>
-                      setPosition(team.id, m.user_id, p),
+                      setMemberRole(team.id, m.user_id, roleId),
                     )
                   }
                   onRemove={() =>
@@ -171,7 +167,13 @@ export default function PlayersPage({ team, week, onTeamsChanged }: Props) {
           </Card>
         </div>
 
-        {editor && <InviteCard teamId={team.id} onError={setError} />}
+        {editor && (
+          <InviteCard
+            teamId={team.id}
+            onError={setError}
+            memberCount={members?.length ?? 0}
+          />
+        )}
       </div>
     </div>
   );
@@ -182,107 +184,95 @@ function MemberRow({
   me,
   isOwner,
   editor,
+  roles,
   busy,
   confirm,
   onAskConfirm,
   onCancel,
+  onSetAccess,
   onSetRole,
-  onSetPosition,
   onRemove,
 }: {
   m: MemberWithProfile;
   me: boolean;
   isOwner: boolean;
   editor: boolean;
+  roles: TeamRole[];
   busy: boolean;
   confirm: "remove" | "leave" | null;
   onAskConfirm: (kind: "remove") => void;
   onCancel: () => void;
-  onSetRole: (role: "coach" | "player") => void;
-  onSetPosition: (position: Position | null) => void;
+  onSetAccess: (access: "admin" | "member") => void;
+  onSetRole: (roleId: string | null) => void;
   onRemove: () => void;
 }) {
   const name = m.profile?.display_name ?? "Unknown";
-  // Owner manages everyone but themselves. Coaches can only remove players.
-  const canManage = !me && (isOwner || (editor && m.role === "player"));
+  // The owner manages everyone but themselves. Admins can only remove members.
+  const canManage = !me && (isOwner || (editor && m.role === "member"));
   const isOwnerRow = m.role === "owner";
-  // Only players pick a lane. The owner counts as a player unless their seat is set to coach.
-  const showLane =
-    m.role === "player" || (isOwnerRow && m.position !== "coach");
-  const laneEditable = showLane && (me || editor);
+  const roleName = roles.find((r) => r.id === m.role_id)?.name ?? null;
+  // Anyone can carry a role, the owner included. Only the team's own list decides the names.
+  const showRoles = roles.length > 0;
+  const roleEditable = showRoles && (me || editor);
+
   return (
     <li className="flex flex-wrap items-center gap-3 rounded-xl bg-bg px-3 py-2.5">
       <Avatar name={name} url={m.profile?.avatar_url} size={34} />
       <div className="flex min-w-0 flex-1 flex-col">
         <span className="flex items-center gap-1.5 truncate text-sm font-bold">
           {name}
-          {m.role !== "player" && (
+          {isOwnerRow && (
             <span className="rounded-full bg-green-soft px-2 py-px text-[10px] font-extrabold uppercase tracking-[0.06em] text-green-ink">
-              {roleLabel[m.role]}
+              {roleLabel.owner}
             </span>
           )}
         </span>
         <span className="text-xs text-muted">
-          {m.position
-            ? positionLabel[m.position]
-            : showLane
-              ? "No position yet"
-              : roleLabel[m.role]}
+          {roleName ?? (showRoles ? "No role yet" : roleLabel[m.role])}
           {me ? " · you" : ""}
         </span>
       </div>
       {confirm === null && (
         <div className="flex items-center gap-1.5">
-          {/* Column 1: lane. Same slot on every row; hidden but still there when it does not apply. */}
-          <Dropdown
-            value={m.position ?? ""}
-            options={[
-              { value: "", label: "No position" },
-              ...lanes.map((p) => ({ value: p, label: positionLabel[p] })),
-            ]}
-            onChange={(v) => onSetPosition((v || null) as Position | null)}
-            disabled={busy}
-            aria-label="Position"
-            look="pill"
-            placeholder="Position …"
-            className={`w-[118px] ${laneEditable ? "" : "pointer-events-none invisible"}`}
-          />
-
-          {/* Column 2: Coach | Player. Role for others (owner only), seat for the owner's own row. */}
-          {isOwner && (
-            <div
-              className="flex gap-0.5 rounded-full bg-surface p-0.5 shadow-[0_1px_2px_rgba(0,0,0,0.04)]"
-              role="radiogroup"
-              aria-label={isOwnerRow ? "Seat" : "Role"}
-            >
-              {(["coach", "player"] as const).map((r) => {
-                const on = isOwnerRow
-                  ? r === "coach"
-                    ? m.position === "coach"
-                    : m.position !== "coach"
-                  : m.role === r;
-                return (
-                  <button
-                    key={r}
-                    type="button"
-                    role="radio"
-                    aria-checked={on}
-                    disabled={busy || on}
-                    onClick={() =>
-                      isOwnerRow
-                        ? onSetPosition(r === "coach" ? "coach" : null)
-                        : onSetRole(r)
-                    }
-                    className={`h-7 rounded-full px-3 text-xs font-bold transition ${
-                      on ? "bg-ink text-on-ink" : "text-muted hover:text-ink"
-                    }`}
-                  >
-                    {roleLabel[r]}
-                  </button>
-                );
-              })}
-            </div>
+          {/* Column 1: the role from the team's own list. Same slot on every row. */}
+          {showRoles && (
+            <Dropdown
+              value={m.role_id ?? ""}
+              options={[
+                { value: "", label: "No role" },
+                ...roles.map((r) => ({ value: r.id, label: r.name })),
+              ]}
+              onChange={(v) => onSetRole(v ? String(v) : null)}
+              disabled={busy}
+              aria-label="Role"
+              look="pill"
+              placeholder="Role …"
+              className={`w-[126px] ${roleEditable ? "" : "pointer-events-none invisible"}`}
+            />
           )}
+
+          {/* Column 2: access. Only the owner hands it out, and never on their own row. */}
+          <div
+            className={`flex gap-0.5 rounded-full bg-surface p-0.5 shadow-[0_1px_2px_rgba(0,0,0,0.04)] ${isOwner && !isOwnerRow ? "" : "pointer-events-none invisible"}`}
+            role="radiogroup"
+            aria-label="Access"
+          >
+            {(["member", "admin"] as const).map((r) => (
+              <button
+                key={r}
+                type="button"
+                role="radio"
+                aria-checked={m.role === r}
+                disabled={busy || m.role === r}
+                onClick={() => onSetAccess(r)}
+                className={`h-7 rounded-full px-3 text-xs font-bold transition ${
+                  m.role === r ? "bg-ink text-on-ink" : "text-muted hover:text-ink"
+                }`}
+              >
+                {roleLabel[r]}
+              </button>
+            ))}
+          </div>
 
           {/* Column 3: remove. Placeholder keeps the columns lined up on rows you cannot remove. */}
           {canManage ? (
@@ -325,12 +315,16 @@ function MemberRow({
   );
 }
 
+
 function InviteCard({
   teamId,
   onError,
+  memberCount,
 }: {
   teamId: string;
   onError: (e: string | null) => void;
+  /** Endrer seg når noen blir med, og da er «x of y left» utdatert. */
+  memberCount: number;
 }) {
   const [invites, setInvites] = useState<Invite[] | null>(null);
   const [days, setDays] = useState(7);
@@ -348,7 +342,7 @@ function InviteCard({
 
   useEffect(() => {
     void load();
-  }, [load]);
+  }, [load, memberCount]);
 
   async function make() {
     setBusy(true);
@@ -440,7 +434,7 @@ export function InviteCardView({ invites, days, uses, busy, onDays, onUses, onCr
   return (
     <Card className="flex flex-col gap-3.5">
       <div className="flex flex-col gap-0.5">
-        <h2 className="text-[15px] font-extrabold">Invite players</h2>
+        <h2 className="text-[15px] font-extrabold">Invite members</h2>
         <p className="text-[13px] leading-relaxed text-muted">
           Paste the link in Discord. One click, sign in, and they are on the team.
         </p>
@@ -451,7 +445,7 @@ export function InviteCardView({ invites, days, uses, busy, onDays, onUses, onCr
       ) : !first ? (
         <div className="flex flex-col items-start gap-1 rounded-2xl border-[1.5px] border-dashed border-line px-4 py-5">
           <span className="text-sm font-bold">No invite link yet</span>
-          <span className="text-[13px] text-muted">Make one below and paste it where your players are.</span>
+          <span className="text-[13px] text-muted">Make one below and paste it where your team is.</span>
         </div>
       ) : (
         <div className="flex flex-col gap-2.5 rounded-2xl bg-bg p-3.5">
@@ -542,15 +536,11 @@ export function InviteCardView({ invites, days, uses, busy, onDays, onUses, onCr
 }
 
 const MAX_SEATS = 15;
-// Lanes a player can pick. 'coach' is the owner's seat, not a lane.
-const lanes: Position[] = ["top", "jungle", "mid", "bot", "support", "sub"];
 
-/** Seats used and the role split, in one compact card. */
+/** Seats used and the access split, in one compact card. */
 function TeamStats({ members }: { members: MemberWithProfile[] }) {
-  const coaches = members.filter(
-    (m) => m.role === "coach" || (m.role === "owner" && m.position === "coach"),
-  ).length;
-  const players = members.length - coaches;
+  const admins = members.filter((m) => canEdit(m.role)).length;
+  const rest = members.length - admins;
   const Stat = ({ n, label }: { n: number; label: string }) => (
     <div className="flex items-baseline gap-1.5">
       <span className="text-[22px] font-extrabold leading-none tracking-tight">
@@ -571,8 +561,8 @@ function TeamStats({ members }: { members: MemberWithProfile[] }) {
           </span>
         </div>
         <div className="flex gap-4">
-          <Stat n={coaches} label={coaches === 1 ? "coach" : "coaches"} />
-          <Stat n={players} label={players === 1 ? "player" : "players"} />
+          <Stat n={admins} label={admins === 1 ? "admin" : "admins"} />
+          <Stat n={rest} label={rest === 1 ? "member" : "members"} />
         </div>
       </div>
       <div className="flex gap-1">

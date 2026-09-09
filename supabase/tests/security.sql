@@ -31,7 +31,7 @@ begin
   execute stmt;
   raise exception 'FEIL  %  -> gikk gjennom, men skulle vært nektet: %', label, stmt;
 exception
-  when insufficient_privilege or check_violation or foreign_key_violation or undefined_table then
+  when insufficient_privilege or check_violation or foreign_key_violation or unique_violation or undefined_table then
     raise notice 'ok    %  (nektet: %)', label, sqlerrm;
 end $$;
 
@@ -81,7 +81,12 @@ select pg_temp.expect_count('profiler lages av trigger', 'select * from public.p
 select pg_temp.become(:'eier_a');
 set local role authenticated;
 
-select public.create_team('Quackers') as team_a \gset
+select public.create_team('Quackers', 'Europe/Oslo', array['Top', 'Mid', 'Sub']) as team_a \gset
+select id as rolle_top from public.team_roles where team_id = :'team_a' and name = 'Top' \gset
+select id as rolle_mid from public.team_roles where team_id = :'team_a' and name = 'Mid' \gset
+select id as rolle_sub from public.team_roles where team_id = :'team_a' and name = 'Sub' \gset
+select pg_temp.expect_count('nytt lag får rollene som ble sendt inn',
+  format('select * from public.team_roles where team_id = %L', :'team_a'), 3);
 select id as type_scrim from public.activity_types where team_id = :'team_a' and name = 'Scrim' \gset
 select pg_temp.expect_count('nytt lag får 3 standardtyper',
   format('select * from public.activity_types where team_id = %L', :'team_a'), 3);
@@ -105,7 +110,7 @@ select pg_temp.expect_denied('eier kan ikke sette share_slug selv',
 
 -- Eier kan ikke skrive rett i members
 select pg_temp.expect_denied('eier kan ikke skrive rett i members',
-  format('insert into public.members (team_id, user_id, role) values (%L, %L, %L)', :'team_a', :'spiller_a', 'player'));
+  format('insert into public.members (team_id, user_id, role) values (%L, %L, %L)', :'team_a', :'spiller_a', 'member'));
 
 -- Eier kan ikke forlate laget uten å gi det videre
 select pg_temp.expect_denied('eier kan ikke forlate laget',
@@ -155,7 +160,8 @@ reset role;
 select pg_temp.become(:'fremmed_b');
 set local role authenticated;
 
-select public.create_team('Fremmede') as team_b \gset
+select public.create_team('Fremmede', 'Europe/Oslo', array['Duelist']) as team_b \gset
+select id as rolle_b from public.team_roles where team_id = :'team_b' and name = 'Duelist' \gset
 
 select pg_temp.expect_count('fremmed ser bare sitt eget lag', 'select * from public.teams', 1);
 select pg_temp.expect_count('fremmed ser ikke lag A selv med riktig id',
@@ -210,7 +216,7 @@ select pg_temp.expect_ok('fremmed sitt forsøk på å slette aktivitet i lag A t
 select pg_temp.expect_denied('fremmed kan ikke overføre eierskap i lag A',
   format('select public.transfer_ownership(%L, %L)', :'team_a', :'fremmed_b'));
 select pg_temp.expect_denied('fremmed kan ikke sette roller i lag A',
-  format('select public.set_role(%L, %L, ''coach'')', :'team_a', :'fremmed_b'));
+  format('select public.set_role(%L, %L, ''admin'')', :'team_a', :'fremmed_b'));
 select pg_temp.expect_denied('fremmed kan ikke fjerne medlemmer i lag A',
   format('select public.remove_member(%L, %L)', :'team_a', :'eier_a'));
 select pg_temp.expect_denied('fremmed kan ikke slette lag A',
@@ -267,16 +273,25 @@ select pg_temp.expect_count('slot_counts viser 2 ledige på 19–22',
 select pg_temp.expect_count('slot_counts viser 0 ledige på 18–21',
   format('select * from public.slot_counts where team_id = %L and date = %L and start_hour = 18 and available_count = 0', :'team_a', :'dato'), 1);
 
-select pg_temp.expect_ok('spiller setter egen posisjon',
-  format('update public.members set position = ''mid'' where team_id = %L and user_id = %L', :'team_a', :'spiller_a'));
-select pg_temp.expect_count('posisjonen er lagret',
-  format('select * from public.members where team_id = %L and user_id = %L and position = ''mid''', :'team_a', :'spiller_a'), 1);
-select pg_temp.expect_denied('ugyldig posisjon avvises',
-  format('update public.members set position = ''ceo'' where team_id = %L and user_id = %L', :'team_a', :'spiller_a'));
-select pg_temp.expect_ok('spiller sitt forsøk på å sette eierens posisjon treffer ingen rader',
-  format('update public.members set position = ''sub'' where team_id = %L and user_id = %L', :'team_a', :'eier_a'));
-select pg_temp.expect_count('eierens posisjon er uendret',
-  format('select * from public.members where team_id = %L and user_id = %L and position is null', :'team_a', :'eier_a'), 1);
+-- Roller: lagets egen liste. Spilleren setter sin egen, ikke andres.
+select pg_temp.expect_ok('spiller setter egen rolle',
+  format('update public.members set role_id = %L where team_id = %L and user_id = %L', :'rolle_mid', :'team_a', :'spiller_a'));
+select pg_temp.expect_count('rollen er lagret',
+  format('select * from public.members where team_id = %L and user_id = %L and role_id = %L', :'team_a', :'spiller_a', :'rolle_mid'), 1);
+select pg_temp.expect_denied('rolle fra et annet lag avvises',
+  format('update public.members set role_id = %L where team_id = %L and user_id = %L', :'rolle_b', :'team_a', :'spiller_a'));
+select pg_temp.expect_ok('spiller sitt forsøk på å sette eierens rolle treffer ingen rader',
+  format('update public.members set role_id = %L where team_id = %L and user_id = %L', :'rolle_sub', :'team_a', :'eier_a'));
+select pg_temp.expect_count('eierens rolle er uendret',
+  format('select * from public.members where team_id = %L and user_id = %L and role_id is null', :'team_a', :'eier_a'), 1);
+select pg_temp.expect_denied('spiller kan ikke lage nye roller',
+  format('insert into public.team_roles (team_id, name, sort) values (%L, ''Cheerleader'', 9)', :'team_a'));
+select pg_temp.expect_ok('spiller sitt forsøk på å slette en rolle treffer ingen rader',
+  format('delete from public.team_roles where id = %L', :'rolle_sub'));
+select pg_temp.expect_count('rollen står der fortsatt',
+  format('select * from public.team_roles where id = %L', :'rolle_sub'), 1);
+select pg_temp.expect_count('spiller ser ikke rollene til et annet lag',
+  format('select * from public.team_roles where team_id = %L', :'team_b'), 0);
 
 -- Eget navn: vinner over Discord til du nullstiller
 select pg_temp.expect_ok('spiller setter eget navn', 'select public.set_display_name(''  Fabe  '')');
@@ -309,6 +324,34 @@ select pg_temp.expect_ok('tom sone nullstiller', 'update public.profiles set tim
 select pg_temp.expect_count('sonen er nullstilt',
   format('select * from public.profiles where user_id = %L and timezone is null', :'spiller_a'), 1);
 
+-- Vanlig uke: bytt ut og tøm. Bare dine egne timer, og bare uker som ikke har vært.
+select public.week_monday(current_date) as mandag,
+       public.week_monday(current_date) + 2 as dato_ikke_mandag,
+       public.week_monday(current_date) - 7 as gammel_mandag \gset
+insert into public.availability (team_id, date, hour) values
+  (:'team_a', :'mandag', 19), (:'team_a', :'mandag', 20);
+select pg_temp.expect_ok('spiller lagrer sin vanlige uke',
+  format('select public.save_default_week(%L, %L)', :'team_a', :'mandag'));
+select pg_temp.expect_ok('spiller bytter uka mot den vanlige uka',
+  format('select public.replace_with_default_week(%L, %L)', :'team_a', :'mandag'));
+-- Spilleren har allerede 3 timer fra en tidligere test, pluss de 2 her.
+select pg_temp.expect_count('timene står der fortsatt etter byttet',
+  format('select * from public.availability where team_id = %L and user_id = %L', :'team_a', :'spiller_a'), 5);
+select pg_temp.expect_denied('bytte krever mandag',
+  format('select public.replace_with_default_week(%L, %L)', :'team_a', :'dato_ikke_mandag'));
+select pg_temp.expect_denied('kan ikke bytte ut en uke som har vært',
+  format('select public.replace_with_default_week(%L, %L)', :'team_a', :'gammel_mandag'));
+select pg_temp.expect_denied('spiller kan ikke tømme uka i et lag han ikke er med i',
+  format('select public.clear_week(%L, %L)', :'team_b', :'mandag'));
+select pg_temp.expect_ok('spiller tømmer sin egen uke',
+  format('select public.clear_week(%L, %L)', :'team_a', :'mandag'));
+select pg_temp.expect_count('spillerens timer er borte',
+  format('select * from public.availability where team_id = %L and user_id = %L', :'team_a', :'spiller_a'), 0);
+select pg_temp.expect_count('eierens timer står urørt',
+  format('select * from public.availability where team_id = %L and user_id = %L', :'team_a', :'eier_a'), 3);
+select pg_temp.expect_ok('spiller sletter sin vanlige uke',
+  format('select public.clear_default_week(%L)', :'team_a'));
+
 select pg_temp.expect_ok('spiller svarer på aktivitet',
   format('insert into public.event_responses (event_id, status) values (%L, ''coming'')', :'event_a'));
 select pg_temp.expect_denied('spiller kan ikke svare på vegne av andre',
@@ -329,7 +372,7 @@ select pg_temp.expect_denied('spiller kan ikke endre intervaller',
 select pg_temp.expect_denied('spiller kan ikke endre egen rolle',
   format('update public.members set role = ''owner'' where team_id = %L and user_id = %L', :'team_a', :'spiller_a'));
 select pg_temp.expect_denied('spiller kan ikke gi seg selv trenerrolle',
-  format('select public.set_role(%L, %L, ''coach'')', :'team_a', :'spiller_a'));
+  format('select public.set_role(%L, %L, ''admin'')', :'team_a', :'spiller_a'));
 select pg_temp.expect_denied('spiller kan ikke fjerne eieren',
   format('select public.remove_member(%L, %L)', :'team_a', :'eier_a'));
 select pg_temp.expect_denied('spiller kan ikke slette laget',
@@ -357,9 +400,9 @@ set local role authenticated;
 select pg_temp.expect_denied('eier kan ikke sette noen til eier via set_role',
   format('select public.set_role(%L, %L, ''owner'')', :'team_a', :'trener_a'));
 select pg_temp.expect_denied('eier kan ikke endre egen rolle via set_role',
-  format('select public.set_role(%L, %L, ''coach'')', :'team_a', :'eier_a'));
+  format('select public.set_role(%L, %L, ''admin'')', :'team_a', :'eier_a'));
 select pg_temp.expect_ok('eier gjør trener A til trener',
-  format('select public.set_role(%L, %L, ''coach'')', :'team_a', :'trener_a'));
+  format('select public.set_role(%L, %L, ''admin'')', :'team_a', :'trener_a'));
 reset role;
 
 select pg_temp.become(:'trener_a');
@@ -379,16 +422,22 @@ select pg_temp.expect_ok('aktivitet med arkivert type kan fortsatt flyttes',
   format('update public.events set start_hour = 20 where team_id = %L and type_id = %L', :'team_a', :'type_clash'));
 select pg_temp.expect_denied('arkivert type kan ikke brukes på nye aktiviteter',
   format('insert into public.events (team_id, date, start_hour, end_hour, type_id) values (%L, %L, 20, 23, %L)', :'team_a', :'dato', :'type_clash'));
-select pg_temp.expect_ok('trener setter posisjon på en spiller',
-  format('update public.members set position = ''top'' where team_id = %L and user_id = %L', :'team_a', :'spiller_a'));
-select pg_temp.expect_count('spillerens posisjon ble endret av treneren',
-  format('select * from public.members where team_id = %L and user_id = %L and position = ''top''', :'team_a', :'spiller_a'), 1);
+select pg_temp.expect_ok('trener setter rolle på en spiller',
+  format('update public.members set role_id = %L where team_id = %L and user_id = %L', :'rolle_top', :'team_a', :'spiller_a'));
+select pg_temp.expect_count('spillerens rolle ble endret av treneren',
+  format('select * from public.members where team_id = %L and user_id = %L and role_id = %L', :'team_a', :'spiller_a', :'rolle_top'), 1);
+select pg_temp.expect_ok('trener legger til en rolle',
+  format('insert into public.team_roles (team_id, name, sort) values (%L, ''Analyst'', 9)', :'team_a'));
+select pg_temp.expect_denied('samme rollenavn to ganger i ett lag avvises',
+  format('insert into public.team_roles (team_id, name, sort) values (%L, ''Analyst'', 10)', :'team_a'));
+select pg_temp.expect_ok('to spillere kan ha samme rolle',
+  format('update public.members set role_id = %L where team_id = %L and user_id = %L', :'rolle_top', :'team_a', :'trener_a'));
 select pg_temp.expect_ok('trener kan lage kode',
   format('insert into public.invites (team_id) values (%L)', :'team_a'));
 select pg_temp.expect_ok('trener kan endre intervaller',
   format('insert into public.team_slots (team_id, day_type, start_hour, end_hour) values (%L, ''weekday'', 17, 20)', :'team_a'));
 select pg_temp.expect_denied('trener kan ikke gi andre trenerrolle',
-  format('select public.set_role(%L, %L, ''coach'')', :'team_a', :'spiller_a'));
+  format('select public.set_role(%L, %L, ''admin'')', :'team_a', :'spiller_a'));
 select pg_temp.expect_denied('trener kan ikke overføre eierskap',
   format('select public.transfer_ownership(%L, %L)', :'team_a', :'trener_a'));
 select pg_temp.expect_denied('trener kan ikke fjerne eieren',
@@ -439,7 +488,152 @@ select pg_temp.expect_denied('kan ikke fylle vanlig uke for langt fram',
 select pg_temp.expect_denied('ingen kan kalle oppryddingen',
   'select public.prune_old_availability()');
 
+-- ------------------------------------------------------------
+-- Discord-navnet (0015): hentes fra auth.users, ikke fra klienten
+-- ------------------------------------------------------------
+select pg_temp.expect_count('refresh henter navnet fra auth.users',
+  'select 1 where public.refresh_discord_name() is not null', 1);
+select pg_temp.expect_denied('navneregelen er ikke åpen for klienter',
+  'select public.discord_name_from(''{}''::jsonb)');
+
+-- ------------------------------------------------------------
+-- Stengte dager (0012): eier og admin styrer, alle ser
+-- ------------------------------------------------------------
+select pg_temp.expect_count('dagen har rader i slot_counts før den stenges',
+  format('select 1 from public.slot_counts where team_id = %L and date = %L limit 1', :'team_a', :'dato'), 1);
+select pg_temp.expect_denied('medlem kan ikke stenge en dag',
+  format('insert into public.closed_days (team_id, date, closed_by) values (%L, %L, %L)', :'team_a', :'dato', :'spiller_a'));
 reset role;
+
+select pg_temp.become(:'trener_a');
+set local role authenticated;
+select pg_temp.expect_denied('admin kan ikke stenge en dag i en annens navn',
+  format('insert into public.closed_days (team_id, date, closed_by) values (%L, %L, %L)', :'team_a', :'dato', :'spiller_a'));
+select pg_temp.expect_denied('admin kan ikke stenge en dag i fortida',
+  format('insert into public.closed_days (team_id, date, closed_by) values (%L, date %L - 7, %L)', :'team_a', :'mandag', :'trener_a'));
+select pg_temp.expect_denied('admin kan ikke stenge en dag for langt fram',
+  format('insert into public.closed_days (team_id, date, closed_by) values (%L, current_date + 100, %L)', :'team_a', :'trener_a'));
+select pg_temp.expect_ok('admin stenger dagen',
+  format('insert into public.closed_days (team_id, date, closed_by) values (%L, %L, %L)', :'team_a', :'dato', :'trener_a'));
+reset role;
+
+select pg_temp.become(:'spiller_a');
+set local role authenticated;
+select pg_temp.expect_count('medlemmet ser at dagen er stengt',
+  format('select 1 from public.closed_days where team_id = %L and date = %L', :'team_a', :'dato'), 1);
+select pg_temp.expect_count('stengt dag er borte fra slot_counts',
+  format('select 1 from public.slot_counts where team_id = %L and date = %L', :'team_a', :'dato'), 0);
+select pg_temp.expect_count('timene ligger urørt i basen',
+  format('select 1 from public.availability where team_id = %L and date = %L and user_id = %L and hour = 19', :'team_a', :'dato', :'spiller_a'), 1);
+select pg_temp.expect_ok('medlemmets forsøk på å åpne dagen treffer ingen rader',
+  format('delete from public.closed_days where team_id = %L and date = %L', :'team_a', :'dato'));
+select pg_temp.expect_count('dagen er fortsatt stengt',
+  format('select 1 from public.closed_days where team_id = %L and date = %L', :'team_a', :'dato'), 1);
+reset role;
+
+select pg_temp.become(:'fremmed_b');
+set local role authenticated;
+select pg_temp.expect_count('utenforstående ser ingen stengte dager',
+  format('select 1 from public.closed_days where team_id = %L', :'team_a'), 0);
+reset role;
+
+select pg_temp.become(:'trener_a');
+set local role authenticated;
+select pg_temp.expect_ok('admin åpner dagen igjen',
+  format('delete from public.closed_days where team_id = %L and date = %L', :'team_a', :'dato'));
+reset role;
+
+select pg_temp.become(:'spiller_a');
+set local role authenticated;
+select pg_temp.expect_count('dagen er tilbake i slot_counts, med timene i behold',
+  format('select 1 from public.slot_counts where team_id = %L and date = %L limit 1', :'team_a', :'dato'), 1);
+reset role;
+
+-- ------------------------------------------------------------
+-- Faste fridager (0014): mønster på laget, unntak per dato
+-- ------------------------------------------------------------
+select pg_temp.become(:'spiller_a');
+set local role authenticated;
+select pg_temp.expect_ok('medlemmets forsok pa a sette fast fri treffer ingen rader',
+  format('update public.teams set off_weekdays = array[3]::smallint[] where id = %L', :'team_a'));
+select pg_temp.expect_count('mønsteret er fortsatt tomt', 
+  format('select 1 from public.teams where id = %L and off_weekdays = ''{}''::smallint[]', :'team_a'), 1);
+reset role;
+
+select pg_temp.become(:'eier_a');
+set local role authenticated;
+select pg_temp.expect_denied('eier kan ikke sette en ugyldig vekedag',
+  format('update public.teams set off_weekdays = array[0, 9]::smallint[] where id = %L', :'team_a'));
+-- Vekedagen til :dato, så testen treffer uansett når den kjøres.
+select extract(isodow from date :'dato')::int as dow \gset
+select pg_temp.expect_ok('eier setter dagen som fast fri',
+  format('update public.teams set off_weekdays = array[%s]::smallint[] where id = %L', :'dow', :'team_a'));
+reset role;
+
+select pg_temp.become(:'spiller_a');
+set local role authenticated;
+select pg_temp.expect_count('fast fri tar dagen ut av slot_counts',
+  format('select 1 from public.slot_counts where team_id = %L and date = %L', :'team_a', :'dato'), 0);
+select pg_temp.expect_count('timene ligger fortsatt urørt',
+  format('select 1 from public.availability where team_id = %L and date = %L and user_id = %L and hour = 19', :'team_a', :'dato', :'spiller_a'), 1);
+reset role;
+
+select pg_temp.become(:'trener_a');
+set local role authenticated;
+select pg_temp.expect_ok('admin åpner den faste fridagen for denne ene uka',
+  format('insert into public.closed_days (team_id, date, closed_by, is_off) values (%L, %L, %L, false)', :'team_a', :'dato', :'trener_a'));
+reset role;
+
+select pg_temp.become(:'spiller_a');
+set local role authenticated;
+select pg_temp.expect_count('unntaket vinner over mønsteret',
+  format('select 1 from public.slot_counts where team_id = %L and date = %L limit 1', :'team_a', :'dato'), 1);
+reset role;
+
+select pg_temp.become(:'trener_a');
+set local role authenticated;
+select pg_temp.expect_ok('admin fjerner unntaket igjen',
+  format('delete from public.closed_days where team_id = %L and date = %L', :'team_a', :'dato'));
+reset role;
+
+select pg_temp.become(:'eier_a');
+set local role authenticated;
+select pg_temp.expect_ok('eier fjerner den faste fridagen',
+  format('update public.teams set off_weekdays = ''{}''::smallint[] where id = %L', :'team_a'));
+
+reset role;
+
+-- ------------------------------------------------------------
+-- Lagets tidssone (0016): eier kan bytte, og bare til ekte soner
+-- ------------------------------------------------------------
+select pg_temp.become(:'trener_a');
+set local role authenticated;
+select pg_temp.expect_ok('admin sitt forsok pa a bytte lagets sone treffer ingen rader',
+  format('update public.teams set timezone = ''Asia/Tokyo'' where id = %L', :'team_a'));
+select pg_temp.expect_count('sonen er urørt etter admin',
+  format('select 1 from public.teams where id = %L and timezone = ''Europe/Oslo''', :'team_a'), 1);
+reset role;
+
+select pg_temp.become(:'eier_a');
+set local role authenticated;
+select pg_temp.expect_denied('oppdiktet sone blir avvist for laget',
+  format('update public.teams set timezone = ''Mars/Olympus'' where id = %L', :'team_a'));
+select pg_temp.expect_ok('eier bytter lagets sone',
+  format('update public.teams set timezone = ''  Asia/Tokyo  '' where id = %L', :'team_a'));
+select pg_temp.expect_count('sonen er lagret uten mellomrom rundt',
+  format('select 1 from public.teams where id = %L and timezone = ''Asia/Tokyo''', :'team_a'), 1);
+select pg_temp.expect_ok('eier setter sonen tilbake',
+  format('update public.teams set timezone = ''Europe/Oslo'' where id = %L', :'team_a'));
+
+reset role;
+
+-- Selve navneregelen, kjørt som eier (den er ikke åpen for innloggede).
+select pg_temp.expect_count('visningsnavnet på Discord vinner over kontonavnet',
+  'select 1 where public.discord_name_from(''{"preferred_username": "fabbiel", "full_name": "fabbiel", "global_name": "Fabe"}''::jsonb) = ''Fabe''', 1);
+select pg_temp.expect_count('global_name under custom_claims teller også',
+  'select 1 where public.discord_name_from(''{"name": "fabbiel", "custom_claims": {"global_name": "Fabe"}}''::jsonb) = ''Fabe''', 1);
+select pg_temp.expect_count('uten noe brukbart blir det Member',
+  'select 1 where public.discord_name_from(''{}''::jsonb) = ''Member''', 1);
 
 select pg_temp.become(:'fremmed_b');
 set local role authenticated;

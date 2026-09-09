@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { format } from "date-fns";
 import { applyToggle, coversSlot, planToggle } from "../lib/availability";
 import {
@@ -8,15 +8,14 @@ import {
   type EventWithResponses,
 } from "../lib/events";
 import {
-  applyDefaultWeek,
-  hasDefaultWeek,
-  saveDefaultWeek,
+  defaultWeekHours,
+  replaceWithDefaultWeek,
+  roleName,
 } from "../lib/settings";
 import type { MyTeam } from "../lib/teams";
 import {
   canEdit,
   friendlyError,
-  positionLabel,
   roleLabel,
   type MemberWithProfile,
   type TeamSlot,
@@ -31,6 +30,7 @@ import {
   type WeekDay,
 } from "../lib/week";
 import SessionsList from "./SessionsList";
+import WeekOptions from "./WeekOptions";
 import ShareWeekButton from "./ShareWeekButton";
 import {
   Avatar,
@@ -49,8 +49,9 @@ interface Props {
   week: WeekData;
 }
 
-/** The player's week: "Planned this week" on top, then the slot buttons for each day. */
+/** The member's week: "Planned this week" on top, then the slot buttons for each day. */
 export default function PlayerWeek({ team, userId, members, week }: Props) {
+  const roles = week.roles;
   const {
     days,
     slots,
@@ -62,6 +63,7 @@ export default function PlayerWeek({ team, userId, members, week }: Props) {
     loaded,
     error,
     setError,
+    isOff,
   } = week;
   const zone = useZone();
   // Lagringer som er underveis. Ref-en er fasit i klikkhåndteringen, så et raskt
@@ -70,15 +72,17 @@ export default function PlayerWeek({ team, userId, members, week }: Props) {
   const [pending, setPending] = useState<Set<string>>(new Set());
   // Trykk som kom mens forrige lagring var underveis, og som skal kjøres etterpå.
   const queued = useRef(new Map<string, () => void>());
-  const [hasUsual, setHasUsual] = useState<boolean | null>(null);
+  // Timer i malen di. Brukes både i det grønne feltet og i options-stripa.
+  const [templateHours, setTemplateHours] = useState<number | null>(null);
+  const hasTemplate = templateHours !== null && templateHours > 0;
   const [busy, setBusy] = useState(false);
   const toast = useToast();
 
   useEffect(() => {
     let cancelled = false;
-    hasDefaultWeek(team.id, userId)
-      .then((v) => {
-        if (!cancelled) setHasUsual(v);
+    defaultWeekHours(team.id, userId)
+      .then((n) => {
+        if (!cancelled) setTemplateHours(n);
       })
       .catch(() => {});
     return () => {
@@ -91,14 +95,9 @@ export default function PlayerWeek({ team, userId, members, week }: Props) {
     [days, hours, userId],
   );
 
-  // Decide once per loaded week whether to show the "not answered" banner, so it does not
-  // pop away under your finger on the first tap. It goes when you change week or come back.
-  const weekKey = days[0].key;
-  const [bannerFor, setBannerFor] = useState<string | null>(null);
-  useEffect(() => {
-    if (loaded) setBannerFor(myHourCount === 0 ? weekKey : null);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loaded, weekKey]);
+  // Det grønne feltet følger uka: det er der så lenge du ikke har svart, glir bort
+  // ved første trykk og kommer tilbake om du tømmer uka igjen. Ingen egen tilstand
+  // å holde styr på — det er bare timene dine, sett fra en annen kant.
 
   async function toggle(day: WeekDay, slot: TeamSlot, daySlots: TeamSlot[]) {
     const key = `${day.key}:${slot.id}`;
@@ -173,29 +172,16 @@ export default function PlayerWeek({ team, userId, members, week }: Props) {
     }
   }
 
-  async function fillUsual() {
+  async function fillFromTemplate() {
     setBusy(true);
     try {
-      const n = await applyDefaultWeek(team.id, toDateKey(week.monday));
+      const n = await replaceWithDefaultWeek(team.id, toDateKey(week.monday));
       await week.reload();
       toast(
         n > 0
-          ? `Filled in ${n} hour${n === 1 ? "" : "s"} from your usual week`
-          : "Nothing new to add",
+          ? `Filled in ${n} hour${n === 1 ? "" : "s"} from your template`
+          : "Nothing to fill in",
       );
-    } catch (err) {
-      setError(friendlyError(err));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function saveUsual() {
-    setBusy(true);
-    try {
-      const n = await saveDefaultWeek(team.id, toDateKey(week.monday));
-      setHasUsual(n > 0);
-      toast(n > 0 ? "Saved as your usual week" : "Usual week cleared");
     } catch (err) {
       setError(friendlyError(err));
     } finally {
@@ -213,33 +199,8 @@ export default function PlayerWeek({ team, userId, members, week }: Props) {
   if (!slots) return <Spinner />;
 
   const lock = weekLock(week.monday);
-  const showBanner = bannerFor === weekKey && !lock;
+  const showBanner = !lock && loaded && myHourCount === 0;
   const weekNo = weekId(week.monday).slice(-2).replace(/^0/, "");
-
-  const usualButton = (
-    <Button
-      variant="secondary"
-      size="sm"
-      onClick={() => void saveUsual()}
-      disabled={busy || myHourCount === 0 || lock !== null}
-      className="w-full lg:w-auto"
-    >
-      <svg
-        width="14"
-        height="14"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="2.2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      >
-        <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
-        <path d="M17 21v-8H7v8M7 3v5h8" />
-      </svg>
-      Use as my usual week
-    </Button>
-  );
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4">
@@ -267,30 +228,41 @@ export default function PlayerWeek({ team, userId, members, week }: Props) {
         </div>
       )}
 
-      {showBanner && (
-        <div className="flex flex-col gap-3 rounded-2xl border-[1.5px] border-green bg-green-soft px-4 py-3.5 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex flex-col gap-0.5 text-green-ink">
-            <div className="text-sm font-extrabold">
-              You haven't answered for week {weekNo} yet
+      {/* Alltid montert, så det kan gli begge veier. Sammenslått tar det ingen plass,
+          og -mb-4 spiser mellomrommet det ellers ville lagt igjen i kolonnen. */}
+      <div
+        className={`grid transition-all duration-200 ease-out ${
+          showBanner
+            ? "grid-rows-[1fr] opacity-100"
+            : "-mb-4 grid-rows-[0fr] opacity-0"
+        }`}
+        aria-hidden={!showBanner}
+      >
+        <div className="overflow-hidden">
+          <div className="flex flex-col gap-3 rounded-2xl border-[1.5px] border-green bg-green-soft px-4 py-3.5 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex flex-col gap-0.5 text-green-ink">
+              <div className="text-sm font-extrabold">
+                You haven't answered for week {weekNo} yet
+              </div>
+              <div className="text-[13px]">
+                {hasTemplate
+                  ? "Tap the times you can, or start from your template and adjust."
+                  : "Tap the times you can play. You can pick more than one per day."}
+              </div>
             </div>
-            <div className="text-[13px]">
-              {hasUsual
-                ? "Tap the times you can, or start from your usual week and adjust."
-                : "Tap the times you can play. You can pick more than one per day."}
-            </div>
+            {hasTemplate && (
+              <Button
+                size="sm"
+                onClick={() => void fillFromTemplate()}
+                disabled={busy || !showBanner}
+                className="h-[38px]"
+              >
+                Use my template
+              </Button>
+            )}
           </div>
-          {hasUsual && (
-            <Button
-              size="sm"
-              onClick={() => void fillUsual()}
-              disabled={busy}
-              className="h-[38px]"
-            >
-              Fill in my usual week
-            </Button>
-          )}
         </div>
-      )}
+      </div>
 
       {/* Desktop: a 2x2 grid so the two rows line up exactly. Mobile: a plain stack. */}
       <div className="flex min-h-0 flex-1 flex-col gap-4 lg:grid lg:grid-cols-[minmax(0,1fr)_300px] lg:grid-rows-[auto_minmax(0,1fr)] lg:gap-x-6">
@@ -304,48 +276,93 @@ export default function PlayerWeek({ team, userId, members, week }: Props) {
           hint={lock ? undefined : "tap to join or leave"}
         />
 
-        <div className="hidden flex-col gap-2.5 rounded-[20px] bg-surface p-5 shadow-card lg:flex">
-          <h2 className="text-[15px] font-extrabold">Saved as you go</h2>
-          <p className="text-[13px] leading-relaxed text-muted">
-            Every tap is saved right away. Nothing to submit.
-          </p>
-          <div className="mt-auto">{usualButton}</div>
-        </div>
-
-        {/* Desktop: 7 columns, with the hint pinned to the bottom of the card */}
-        <div className="hidden min-h-0 flex-1 flex-col rounded-[20px] bg-surface p-5 shadow-card lg:flex">
-          <h2 className="whitespace-nowrap text-[15px] font-extrabold mb-5">
-            Select your availability
-          </h2>
-          <div className="grid min-h-0 flex-1 grid-cols-7 content-start gap-2.5 overflow-auto">
-            {days.map((day) => {
-              const daySlots = slots.filter(
-                (s) => s.day_type === (day.isWeekend ? "weekend" : "weekday"),
-              );
-              return (
-                <div key={day.key} className="flex min-w-0 flex-col gap-2">
-                  <DayHeader day={day} />
-                  {daySlots.length === 0 && (
-                    <div className="rounded-xl border-[1.5px] border-dashed border-line-soft py-3 text-center text-[11px] text-faint">
-                      no slots
-                    </div>
-                  )}
-                  {daySlots.map((slot) => renderSlot(day, slot, daySlots))}
-                </div>
-              );
-            })}
+        {/* Desktop: 7 kolonner. Options-stripa står nederst i kortet. */}
+        <div className="hidden min-h-0 flex-1 flex-col rounded-[20px] bg-surface p-5 shadow-card lg:col-start-1 lg:row-start-2 lg:flex">
+          <div className="mb-4 flex flex-col gap-0.5">
+            <h2 className="whitespace-nowrap text-[15px] font-extrabold">
+              Select your availability
+            </h2>
+            <p className="text-[13px] text-muted">
+              {lock
+                ? "Looking back at what the week looked like."
+                : "Tap the times you can play. You can pick more than one per day."}
+            </p>
           </div>
-          <p className="pt-4 text-[13px] text-muted">
-            {lock
-              ? "Looking back at what the week looked like."
-              : "Tap the times you can play. You can pick more than one per day."}
-          </p>
+          {/* Rutenettet ligger midt i kortet så lenge det er plass. Blir det høyere enn
+              kortet, blir auto-margene null av seg selv: da står det fast i toppen og
+              scroller. (justify-center ville kuttet toppen bort når det renner over.) */}
+          <div className="flex min-h-0 flex-1 overflow-y-auto">
+            {/* Uke og helg har hver sin plan, og gjerne ulikt antall bolker. De står
+                ved siden av hverandre med en strek imellom, og høyden holdes inne i
+                hver gruppe — så en fridag fyller akkurat sin egen gruppe. */}
+            <div className="my-auto flex w-full items-start gap-3">
+              {[days.slice(0, 5), days.slice(5)].map((group, gi) => (
+                <Fragment key={gi}>
+                  {gi === 1 && (
+                    <div className="w-px shrink-0 self-stretch bg-line" />
+                  )}
+                  <div
+                    className="grid min-w-0 gap-2.5"
+                    style={{
+                      flex: `${group.length} 1 0%`,
+                      gridTemplateColumns: `repeat(${group.length}, minmax(0, 1fr))`,
+                    }}
+                  >
+                    {group.map((day) => {
+                      const daySlots = slots.filter(
+                        (s) =>
+                          s.day_type ===
+                          (day.isWeekend ? "weekend" : "weekday"),
+                      );
+                      const off = isOff(day);
+                      return (
+                        <div
+                          key={day.key}
+                          className="flex min-w-0 flex-col gap-2"
+                        >
+                          <DayHeader day={day} off={off} />
+                          {off ? (
+                            <OffBlock />
+                          ) : (
+                            <>
+                              {daySlots.length === 0 && (
+                                <div className="rounded-xl border-[1.5px] border-dashed border-line-soft py-3 text-center text-[11px] text-faint">
+                                  no slots
+                                </div>
+                              )}
+                              {daySlots.map((slot) =>
+                                renderSlot(day, slot, daySlots),
+                              )}
+                            </>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </Fragment>
+              ))}
+            </div>
+          </div>
+          {!lock && (
+            <div className="pt-4">
+              <WeekOptions
+                teamId={team.id}
+                mondayKey={toDateKey(week.monday)}
+                myHours={myHourCount}
+                template={templateHours ?? 0}
+                onTemplate={setTemplateHours}
+                onChanged={week.reload}
+                onToast={toast}
+                onError={setError}
+              />
+            </div>
+          )}
         </div>
 
-        {/* Right column: Players, with the share bar locked to the bottom. */}
-        <div className="hidden min-h-0 flex-col gap-4 lg:flex">
-          <div className="flex min-h-0 flex-col gap-3.5 rounded-[20px] bg-surface p-5 shadow-card">
-            <h2 className="text-[15px] font-extrabold">Players</h2>
+        {/* Right column: Members, with the share bar locked to the bottom. */}
+        <div className="hidden min-h-0 flex-col gap-4 lg:col-start-2 lg:row-start-1 lg:row-span-2 lg:flex">
+          <div className="flex min-h-0 flex-1 flex-col gap-3.5 rounded-[20px] bg-surface p-5 shadow-card">
+            <h2 className="text-[15px] font-extrabold">Members</h2>
             <ul className="flex min-h-0 flex-col gap-2.5 overflow-y-auto">
               {members.map((m) => (
                 <li key={m.user_id} className="flex items-center gap-2.5">
@@ -359,10 +376,7 @@ export default function PlayerWeek({ team, userId, members, week }: Props) {
                       {m.profile?.display_name ?? "Unknown"}
                     </span>
                     <span className="text-[11px] text-muted">
-                      {m.position
-                        ? positionLabel[m.position]
-                        : roleLabel[m.role]}{" "}
-                      ·{" "}
+                      {roleName(m, roles) ?? roleLabel[m.role]} ·{" "}
                       {m.user_id === userId
                         ? "you"
                         : answered.has(m.user_id)
@@ -380,18 +394,24 @@ export default function PlayerWeek({ team, userId, members, week }: Props) {
         </div>
         {/* Mobile: one card per day */}
         <div className="flex flex-col gap-2.5 lg:hidden">
+          <p className="px-1 text-[13px] text-muted">
+            {lock
+              ? "Looking back at what the week looked like."
+              : "Tap the times you can play. You can pick more than one per day."}
+          </p>
           {days.map((day) => {
             const daySlots = slots.filter(
               (s) => s.day_type === (day.isWeekend ? "weekend" : "weekday"),
             );
+            const off = isOff(day);
             return (
               <div
                 key={day.key}
-                className="flex items-center gap-2.5 rounded-2xl bg-surface py-3.5 pl-3.5 pr-3 shadow-card"
+                className={`flex items-center gap-2.5 rounded-2xl bg-surface py-3.5 pl-3.5 pr-3 shadow-card ${off ? "opacity-55" : ""}`}
               >
                 <div className="flex w-[46px] shrink-0 flex-col whitespace-nowrap">
                   <span
-                    className={`text-[15px] font-extrabold ${day.isToday ? "text-green-ink" : ""}`}
+                    className={`text-[15px] font-extrabold ${day.isToday && !off ? "text-green-ink" : ""}`}
                   >
                     {dayShort[day.isoDay - 1]}
                   </span>
@@ -399,7 +419,9 @@ export default function PlayerWeek({ team, userId, members, week }: Props) {
                     {format(day.date, "d MMM")}
                   </span>
                 </div>
-                {daySlots.length === 0 ? (
+                {off ? (
+                  <span className="text-sm font-bold text-faint">Day off</span>
+                ) : daySlots.length === 0 ? (
                   <span className="text-sm text-faint">
                     No time slots for this day.
                   </span>
@@ -418,12 +440,20 @@ export default function PlayerWeek({ team, userId, members, week }: Props) {
               </div>
             );
           })}
-          <p className="px-1 pt-1 text-[13px] text-muted">
-            {lock
-              ? "Looking back at what the week looked like."
-              : "Tap the times you can play. You can pick more than one per day."}
-          </p>
-          <div className="pt-1">{usualButton}</div>
+          {!lock && (
+            <div className="px-1 pt-1">
+              <WeekOptions
+                teamId={team.id}
+                mondayKey={toDateKey(week.monday)}
+                myHours={myHourCount}
+                template={templateHours ?? 0}
+                onTemplate={setTemplateHours}
+                onChanged={week.reload}
+                onToast={toast}
+                onError={setError}
+              />
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -470,23 +500,33 @@ export default function PlayerWeek({ team, userId, members, week }: Props) {
   }
 }
 
-function DayHeader({ day }: { day: WeekDay }) {
+/** En dag laget har tatt fri. Timene ligger der fortsatt, de er bare ikke i veien. */
+function OffBlock() {
   return (
-    <div className="flex flex-col items-center gap-0.5 pb-1">
+    <div className="flex flex-1 items-center justify-center rounded-xl border-[1.5px] border-dashed border-line-soft text-[12px] font-bold text-faint">
+      Day off
+    </div>
+  );
+}
+
+function DayHeader({ day, off = false }: { day: WeekDay; off?: boolean }) {
+  return (
+    <div
+      className={`flex flex-col items-center gap-0.5 pb-1 ${off ? "opacity-55" : ""}`}
+    >
       <span
-        className={`text-xs font-bold ${day.isToday ? "text-green-ink" : "text-muted"}`}
+        className={`text-xs font-bold ${day.isToday && !off ? "text-green-ink" : "text-muted"}`}
       >
         {dayShort[day.isoDay - 1]}
       </span>
-      {day.isToday ? (
-        <span className="flex h-[26px] w-[26px] items-center justify-center rounded-full bg-ink text-[13px] font-extrabold text-on-ink">
-          {format(day.date, "d")}
-        </span>
-      ) : (
-        <span className="text-[15px] font-extrabold">
-          {format(day.date, "d")}
-        </span>
-      )}
+      {/* Samme boks hver dag, ellers dytter ringen rundt dagens dato kolonnen ned. */}
+      <span
+        className={`flex h-[26px] min-w-[26px] items-center justify-center rounded-full px-1 font-extrabold ${
+          day.isToday && !off ? "bg-ink text-[13px] text-on-ink" : "text-[15px]"
+        }`}
+      >
+        {format(day.date, "d")}
+      </span>
     </div>
   );
 }

@@ -7,35 +7,46 @@ import {
   type HoursByDayUser,
 } from "./availability";
 import {
+  dayIsOff,
+  fetchDayOverrides,
+  fetchOffWeekdays,
+} from "./closedDays";
+import {
   fetchActivityTypes,
   fetchEvents,
   type EventWithResponses,
 } from "./events";
-import { fetchMembers } from "./settings";
+import { fetchMembers, fetchTeamRoles } from "./settings";
 import { writingNow } from "./writes";
 import { supabase } from "./supabase";
 import {
   friendlyError,
   type ActivityType,
   type MemberWithProfile,
+  type TeamRole,
   type TeamSlot,
 } from "./types";
 import {
   daysOfWeek,
   shiftWeek,
+  toDateKey,
   weekId,
   weekStart,
   weekStartFromId,
+  type WeekDay,
 } from "./week";
 
 interface WeekPayload {
   hours: HoursByDayUser;
   events: EventWithResponses[];
+  /** Unntak fra malen denne uka: dato → er dagen fri. Tom for de aller fleste uker. */
+  overrides: Map<string, boolean>;
 }
 
 // Stable empties, so an unloaded week does not hand out a fresh object on every render.
 const EMPTY_HOURS: HoursByDayUser = {};
 const EMPTY_EVENTS: EventWithResponses[] = [];
+const EMPTY_OVERRIDES: ReadonlyMap<string, boolean> = new Map<string, boolean>();
 
 /**
  * Everything one week of a team needs: the slots, who is free when, the events, the activity
@@ -55,6 +66,10 @@ export function useWeekData(teamId: string) {
   const [slots, setSlots] = useState<TeamSlot[] | null>(null);
   const [types, setTypes] = useState<ActivityType[]>([]);
   const [members, setMembers] = useState<MemberWithProfile[] | null>(null);
+  // Lagets egen rolleliste. Tom liste = laget bruker ikke roller, og da vises ingen rollekolonne.
+  const [roles, setRoles] = useState<TeamRole[]>([]);
+  // Vekedagene laget normalt har fri. Del av malen, satt i Settings.
+  const [offWeekdays, setOffWeekdays] = useState<number[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   // One entry per week, keyed by the Monday. The neighbours are prefetched into the same place.
@@ -62,6 +77,7 @@ export function useWeekData(teamId: string) {
   const week = cache[fromKey];
   const hours = week?.hours ?? EMPTY_HOURS;
   const events = week?.events ?? EMPTY_EVENTS;
+  const overrides = week?.overrides ?? EMPTY_OVERRIDES;
   // The very first load has nothing to show; every later one keeps the old week on screen.
   const loaded = week !== undefined;
 
@@ -79,9 +95,16 @@ export function useWeekData(teamId: string) {
   const write = useCallback((key: string, next: Partial<WeekPayload>) => {
     setCache((c) => ({
       ...c,
-      [key]: { ...(c[key] ?? { hours: {}, events: [] }), ...next },
+      [key]: {
+        ...(c[key] ?? { hours: {}, events: [], overrides: new Map<string, boolean>() }),
+        ...next,
+      },
     }));
   }, []);
+
+  // Uker som er på vei inn. Uten dette henter vi samme uke om igjen hver gang du
+  // blar forbi den, og svarene kan komme i feil rekkefølge.
+  const inFlight = useRef(new Set<string>());
 
   /** Fetch one week into the cache. `quiet` weeks are the prefetched neighbours. */
   const fetchWeek = useCallback(
@@ -89,15 +112,23 @@ export function useWeekData(teamId: string) {
       const week = daysOfWeek(start);
       const mondayKey = week[0].key;
       const to = week[6].key;
+      if (quiet && inFlight.current.has(mondayKey)) return;
+      inFlight.current.add(mondayKey);
       try {
-        const [h, e] = await Promise.all([
+        const [h, e, ov] = await Promise.all([
           fetchAvailability(teamId, mondayKey, to),
           fetchEvents(teamId, mondayKey, to),
+          fetchDayOverrides(teamId, mondayKey, to),
         ]);
-        setCache((c) => ({ ...c, [mondayKey]: { hours: h, events: e } }));
+        setCache((c) => ({
+          ...c,
+          [mondayKey]: { hours: h, events: e, overrides: ov },
+        }));
         if (!quiet) setError(null);
       } catch (err) {
         if (!quiet) setError(friendlyError(err));
+      } finally {
+        inFlight.current.delete(mondayKey);
       }
     },
     [teamId],
@@ -109,14 +140,18 @@ export function useWeekData(teamId: string) {
 
   const loadTeam = useCallback(async () => {
     try {
-      const [s, t, m] = await Promise.all([
+      const [s, t, m, r, off] = await Promise.all([
         fetchTeamSlots(teamId),
         fetchActivityTypes(teamId),
         fetchMembers(teamId),
+        fetchTeamRoles(teamId),
+        fetchOffWeekdays(teamId),
       ]);
       setSlots(s);
       setTypes(t);
       setMembers(m);
+      setRoles(r);
+      setOffWeekdays(off);
     } catch (err) {
       setError(friendlyError(err));
     }
@@ -126,14 +161,17 @@ export function useWeekData(teamId: string) {
     void loadTeam();
   }, [loadTeam]);
 
-  // The week in the URL, then its neighbours a moment later so stepping is instant.
+  // Uka i URL-en, og naboene med det samme, så et steg til siden er ferdig lastet
+  // før du trykker. To uker ut til hver side: blar du fort, rekker du ellers å løpe
+  // fra hurtiglageret, og da tegnes uka tom før den fylles — det er det som blinker.
   useEffect(() => {
     let cancelled = false;
     void fetchWeek(monday);
+    for (const step of [-1, 1]) void fetchWeek(shiftWeek(monday, step), true);
     const timer = setTimeout(() => {
       if (cancelled) return;
-      for (const step of [-1, 1]) void fetchWeek(shiftWeek(monday, step), true);
-    }, 300);
+      for (const step of [-2, 2]) void fetchWeek(shiftWeek(monday, step), true);
+    }, 400);
     return () => {
       cancelled = true;
       clearTimeout(timer);
@@ -192,6 +230,26 @@ export function useWeekData(teamId: string) {
         {
           event: "*",
           schema: "public",
+          table: "closed_days",
+          filter: `team_id=eq.${teamId}`,
+        },
+        refresh,
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "teams",
+          filter: `id=eq.${teamId}`,
+        },
+        () => void loadTeam(),
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
           table: "members",
           filter: `team_id=eq.${teamId}`,
         },
@@ -240,6 +298,15 @@ export function useWeekData(teamId: string) {
 
   const activeTypes = useMemo(() => types.filter((t) => !t.archived), [types]);
 
+  // Mandag i inneværende uke. Mønsteret gjelder bare fra og med den, så en uke
+  // som er ferdig ikke endrer seg fordi noen endret malen etterpå.
+  const thisMondayKey = toDateKey(weekStart(new Date()));
+  const isOff = useCallback(
+    (day: WeekDay) =>
+      dayIsOff(day.key, day.isoDay, overrides, offWeekdays, thisMondayKey),
+    [overrides, offWeekdays, thisMondayKey],
+  );
+
   return {
     monday,
     days,
@@ -251,9 +318,13 @@ export function useWeekData(teamId: string) {
     types,
     activeTypes,
     members,
+    roles,
     hours,
     setHours,
     hoursRef,
+    overrides,
+    offWeekdays,
+    isOff,
     events,
     setEvents,
     loaded,

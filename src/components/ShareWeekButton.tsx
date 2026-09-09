@@ -10,7 +10,13 @@ export function useCopyWeekLink(team: MyTeam) {
   const toast = useToast();
   return async function copyWeekLink() {
     if (!team.share_enabled) {
-      toast("Turn on sharing in Settings first");
+      // Bare eieren kan slå den på, og bare eier og admin ser Settings i det
+      // hele tatt. Da skal ikke alle andre sendes dit.
+      toast(
+        team.role === "owner"
+          ? "Turn on sharing in Settings first"
+          : "Sharing is off · ask the owner to turn it on",
+      );
       return;
     }
     const link = shareLink(
@@ -41,7 +47,9 @@ export default function ShareWeekButton({
       title={
         team.share_enabled
           ? "Copy the link for this week"
-          : "Sharing is off · turn it on in Settings"
+          : team.role === "owner"
+            ? "Sharing is off · turn it on in Settings"
+            : "Sharing is off · only the owner can turn it on"
       }
       className={`flex h-11 w-full shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-xl bg-ink px-3 text-[13px] font-bold text-on-ink hover:opacity-90 ${className}`}
     >

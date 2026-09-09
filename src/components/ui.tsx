@@ -121,11 +121,54 @@ export function Eyebrow({ children }: { children: ReactNode }) {
   );
 }
 
+/**
+ * Feilen glir inn og ut, som det grønne feltet i uka: samme grep med grid-rows,
+ * så høyden animeres uten at vi vet hvor høy teksten blir.
+ *
+ * To ting må til for at det skal virke begge veier. Inn: den må stå i treet ett
+ * bilde med høyde null før vi åpner, ellers har den ingenting å gli fra. Ut:
+ * teksten blir stående til den er ferdig ute — ellers ville boksen vært tom mens
+ * den lukket seg. Når den er ute, tar vi den ut av treet igjen, så den ikke
+ * legger igjen et mellomrom i kolonnen den står i.
+ */
 export function ErrorText({ children }: { children: ReactNode }) {
-  if (!children) return null;
+  const has = Boolean(children);
+  const [mounted, setMounted] = useState(has);
+  const [open, setOpen] = useState(false);
+  const last = useRef<ReactNode>(children);
+  if (has) last.current = children;
+
+  useEffect(() => {
+    if (has) {
+      setMounted(true);
+      // Ett bilde til høyde null, så ett til for å åpne. Gjør vi begge i samme
+      // bilde ser nettleseren bare sluttverdien, og det blir ingen overgang.
+      let frame = requestAnimationFrame(() => {
+        frame = requestAnimationFrame(() => setOpen(true));
+      });
+      return () => cancelAnimationFrame(frame);
+    }
+    setOpen(false);
+    // Egen klokke i stedet for transitionend: med redusert bevegelse kommer den
+    // aldri, og da ville teksten blitt hengende igjen usynlig.
+    const done = setTimeout(() => setMounted(false), 220);
+    return () => clearTimeout(done);
+  }, [has]);
+
+  if (!mounted) return null;
+
   return (
-    <div className="rounded-xl bg-red-soft px-4 py-3 text-sm font-semibold text-red-ink">
-      {children}
+    <div
+      className={`grid transition-all duration-200 ease-out ${
+        open ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"
+      }`}
+      aria-hidden={!open}
+    >
+      <div className="overflow-hidden">
+        <div className="rounded-xl bg-red-soft px-4 py-3 text-sm font-semibold text-red-ink">
+          {has ? children : last.current}
+        </div>
+      </div>
     </div>
   );
 }

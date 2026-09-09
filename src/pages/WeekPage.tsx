@@ -12,7 +12,7 @@ import TeamOverview, { type FormState } from "../components/TeamOverview";
 import WeekNav from "../components/WeekNav";
 import { Button, Spinner } from "../components/ui";
 
-/** The Week tab: My week for everyone, Team overview for owner and coaches. */
+/** The Week tab: My week for everyone, Plan week for owner and admins. */
 export default function WeekPage({
   team,
   week,
@@ -34,8 +34,8 @@ export default function WeekPage({
   }
 
   const members = useMemo(
-    () => lineupOrder(week.members ?? []),
-    [week.members],
+    () => lineupOrder(week.members ?? [], week.roles),
+    [week.members, week.roles],
   );
 
   // Klokkeslettene vises i din sone. Står du et annet sted enn laget, må det stå hvor
@@ -48,8 +48,8 @@ export default function WeekPage({
         My week
       </TabButton>
       <TabButton active={tab === "team"} onClick={() => setTab("team")}>
-        <span className="sm:hidden">Overview</span>
-        <span className="hidden sm:inline">Team overview</span>
+        <span className="sm:hidden">Plan</span>
+        <span className="hidden sm:inline">Plan week</span>
       </TabButton>
     </div>
   );

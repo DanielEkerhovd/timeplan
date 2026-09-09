@@ -1,0 +1,224 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Settings content</title>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#f6f5f2;--surface:#fff;--surface2:#efede8;--line:#e6e3dd;--soft:#eceae5;--ink:#1c1b19;--muted:#6f6c66;--faint:#a8a49d;--dot:#cfcbc4;--on-ink:#fff;
+--green:#3e9a63;--green-soft:#dcefe0;--green-ink:#2f6b45;--green-dim:#9ccbac;--red-ink:#8a3a2c;--red-line:#e8c4bb;
+--shadow:0 1px 2px rgba(0,0,0,.04),0 8px 24px rgba(28,27,25,.05)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:Manrope,system-ui,sans-serif;padding:26px 24px 70px}
+.wrap{max-width:1560px;margin:0 auto}
+h1{font-size:21px;font-weight:800;margin:0 0 4px}
+.lede{color:var(--muted);font-size:14px;margin:0 0 24px;max-width:70ch;line-height:1.55}
+.opt{margin:0 0 40px}
+.tag{font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--faint)}
+.opt h2{font-size:16px;font-weight:800;margin:2px 0 4px}
+.note{color:var(--muted);font-size:13px;margin:0 0 14px;max-width:82ch;line-height:1.55}
+.frame{background:var(--bg);border:1px solid var(--line);border-radius:20px;padding:20px}
+.eyebrow{font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--faint)}
+.h1{font-size:24px;font-weight:800;letter-spacing:-.02em;margin:2px 0 14px}
+.tabs{display:flex;gap:3px;background:var(--surface);padding:3px;border-radius:12px;width:fit-content;margin:0 0 16px;box-shadow:var(--shadow)}
+.tabs button{border:0;background:none;font:inherit;font-size:13px;font-weight:800;color:var(--muted);padding:8px 14px;border-radius:9px;cursor:pointer}
+.tabs button.on{background:var(--ink);color:var(--on-ink)}
+.card{background:var(--surface);border-radius:18px;padding:18px 20px;box-shadow:var(--shadow)}
+.rowhead{display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin-bottom:14px}
+.card h3{font-size:14px;font-weight:800;margin:0}
+.sub{font-size:12px;color:var(--muted)}
+
+/* week canvas */
+.week{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:10px}
+.dayhead{display:flex;flex-direction:column;align-items:center;gap:5px;padding-bottom:2px}
+.dayhead .name{font-size:13px;font-weight:800}
+.dayhead .sw{width:100%;height:26px;border-radius:9px;background:var(--surface2);position:relative;cursor:pointer}
+.dayhead .sw::after{content:'on';position:absolute;inset:2px 50% 2px 2px;border-radius:7px;background:var(--ink);color:var(--on-ink);font-size:10px;font-weight:800;display:grid;place-items:center;transition:.2s}
+.dayhead.off .name{color:var(--faint);text-decoration:line-through}
+.dayhead.off .sw::after{content:'off';inset:2px 2px 2px 50%;background:var(--dot);color:var(--surface)}
+.band{grid-column:span 5;background:var(--surface);border-radius:16px;padding:14px;box-shadow:var(--shadow)}
+.band.we{grid-column:span 2}
+.bandhead{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:10px}
+.bandhead b{font-size:13px}
+.slots{display:flex;flex-wrap:wrap;gap:8px}
+.slot{display:inline-flex;align-items:center;gap:6px;height:38px;padding:0 6px 0 14px;border:1.5px solid var(--line);border-radius:12px;font-size:14px;font-weight:800;background:var(--surface)}
+.slot .x{width:22px;height:22px;border-radius:8px;display:grid;place-items:center;color:var(--faint);font-size:13px}
+.slot.add{border-style:dashed;color:var(--muted);padding:0 14px;font-weight:800}
+.prev{grid-column:1/-1;margin-top:4px}
+.prevgrid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:8px}
+.pcol{display:flex;flex-direction:column;gap:6px}
+.pslot{height:52px;border:1.5px solid var(--line);border-radius:12px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;font-size:12px;font-weight:700;background:var(--surface)}
+.pslot .d{display:flex;gap:3px}
+.pslot .d i{width:5px;height:5px;border-radius:50%;background:var(--dot)}
+.pcol.off .pslot{border-style:dashed;background:none;color:var(--faint);justify-content:center}
+.offlab{flex:1;border:1.5px dashed var(--soft);border-radius:12px;display:grid;place-items:center;font-size:12px;font-weight:800;color:var(--faint)}
+
+/* activity cards */
+.tgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:12px}
+.tcard{background:var(--surface);border-radius:16px;padding:14px;box-shadow:var(--shadow);display:flex;flex-direction:column;gap:10px;border-top:4px solid}
+.tcard .top{display:flex;align-items:center;gap:8px}
+.tcard .nm{font-size:15px;font-weight:800;flex:1}
+.chip{font-size:11px;font-weight:800;padding:5px 10px;border-radius:999px;background:var(--surface2);color:var(--muted);border:0;cursor:pointer;font-family:inherit}
+.chip.on{background:var(--green-soft);color:var(--green-ink)}
+.tcard .foot{display:flex;gap:6px;align-items:center}
+.swatches{display:flex;gap:4px}
+.swatches i{width:14px;height:14px;border-radius:5px;display:block}
+.tadd{border:1.5px dashed var(--dot);border-radius:16px;display:grid;place-items:center;color:var(--muted);font-weight:800;font-size:13px;min-height:120px}
+
+/* roles */
+.rgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:10px}
+.rcard{background:var(--surface);border-radius:14px;padding:10px 12px;box-shadow:var(--shadow);display:flex;align-items:center;gap:9px}
+.rcard .g{color:var(--faint);font-size:12px;letter-spacing:-1px;cursor:grab}
+.rcard .n{font-size:14px;font-weight:800;flex:1}
+.rcard .who{font-size:11px;color:var(--muted)}
+.rcard .x{color:var(--faint);font-size:13px}
+.lineup{display:flex;gap:10px;flex-wrap:wrap;margin-top:6px}
+.person{display:flex;align-items:center;gap:8px;background:var(--surface);border-radius:999px;padding:5px 12px 5px 5px;box-shadow:var(--shadow)}
+.av{width:26px;height:26px;border-radius:50%;background:#dcefe0;color:#2f6b45;display:grid;place-items:center;font-size:11px;font-weight:800}
+.person .nm{font-size:13px;font-weight:800}
+.person .rl{font-size:11px;color:var(--muted)}
+
+/* team */
+.tteam{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
+.input{height:40px;border:1.5px solid var(--line);border-radius:12px;background:var(--surface);padding:0 12px;font-size:14px;font-weight:700;display:flex;align-items:center}
+.btn{height:40px;padding:0 14px;border-radius:12px;border:1.5px solid var(--line);background:var(--surface);font:inherit;font-size:13px;font-weight:800;cursor:pointer}
+.danger{border:1.5px solid var(--red-line);background:#fdf4f2;border-radius:18px;padding:16px 20px}
+.danger h3{color:var(--red-ink)}
+.toggle{width:42px;height:24px;border-radius:999px;background:var(--green);position:relative}
+.toggle::after{content:'';position:absolute;top:3px;right:3px;width:18px;height:18px;border-radius:50%;background:#fff}
+</style></head><body><div class="wrap">
+
+<h1>Settings — the content, not the tabs</h1>
+<p class="lede">Each tab shows the thing you are setting up, the way it actually looks in the app. That fills the page, and it tells you what the setting does without a paragraph explaining it.</p>
+
+<section class="opt">
+  <span class="tag">Week plan</span><h2>The week itself is the interface</h2>
+  <p class="note">Seven day columns across the top, like the week your team sees. The switch under each day turns it off. The blocks live in bands under the days they belong to — Mon–Fri share one set, Sat–Sun another — and under it all, a preview of the buttons everyone will tap.</p>
+  <div class="frame">
+    <div class="tabs"><button class="on">Week plan</button><button>Activities</button><button>Roles</button><button>Team</button></div>
+    <div class="week">
+      <div class="dayhead"><span class="name">Mon</span><span class="sw"></span></div>
+      <div class="dayhead"><span class="name">Tue</span><span class="sw"></span></div>
+      <div class="dayhead off"><span class="name">Wed</span><span class="sw"></span></div>
+      <div class="dayhead"><span class="name">Thu</span><span class="sw"></span></div>
+      <div class="dayhead"><span class="name">Fri</span><span class="sw"></span></div>
+      <div class="dayhead"><span class="name">Sat</span><span class="sw"></span></div>
+      <div class="dayhead"><span class="name">Sun</span><span class="sw"></span></div>
+
+      <div class="band">
+        <div class="bandhead"><b>Weekday blocks</b><span class="sub">Mon–Fri</span></div>
+        <div class="slots">
+          <span class="slot">18:00 – 21:00 <span class="x">×</span></span>
+          <span class="slot">19:00 – 22:00 <span class="x">×</span></span>
+          <span class="slot">20:00 – 23:00 <span class="x">×</span></span>
+          <span class="slot add">+ Add block</span>
+        </div>
+      </div>
+      <div class="band we">
+        <div class="bandhead"><b>Weekend</b><span class="sub">Sat–Sun</span></div>
+        <div class="slots">
+          <span class="slot">13:00 – 16:00 <span class="x">×</span></span>
+          <span class="slot">16:00 – 19:00 <span class="x">×</span></span>
+          <span class="slot add">+ Add</span>
+        </div>
+      </div>
+
+      <div class="prev">
+        <div class="rowhead" style="margin-bottom:8px"><h3>What everyone will see</h3><span class="sub">Europe/Oslo · shown to each member in their own zone</span></div>
+        <div class="prevgrid">
+          <div class="pcol"><div class="pslot">18:00 - 21:00<span class="d"><i></i><i></i><i></i><i></i><i></i></span></div><div class="pslot">19:00 - 22:00<span class="d"><i></i><i></i><i></i><i></i><i></i></span></div><div class="pslot">20:00 - 23:00<span class="d"><i></i><i></i><i></i><i></i><i></i></span></div></div>
+          <div class="pcol"><div class="pslot">18:00 - 21:00<span class="d"><i></i><i></i><i></i><i></i><i></i></span></div><div class="pslot">19:00 - 22:00<span class="d"><i></i><i></i><i></i><i></i><i></i></span></div><div class="pslot">20:00 - 23:00<span class="d"><i></i><i></i><i></i><i></i><i></i></span></div></div>
+          <div class="pcol off"><div class="offlab">Day off</div></div>
+          <div class="pcol"><div class="pslot">18:00 - 21:00<span class="d"><i></i><i></i><i></i><i></i><i></i></span></div><div class="pslot">19:00 - 22:00<span class="d"><i></i><i></i><i></i><i></i><i></i></span></div><div class="pslot">20:00 - 23:00<span class="d"><i></i><i></i><i></i><i></i><i></i></span></div></div>
+          <div class="pcol"><div class="pslot">18:00 - 21:00<span class="d"><i></i><i></i><i></i><i></i><i></i></span></div><div class="pslot">19:00 - 22:00<span class="d"><i></i><i></i><i></i><i></i><i></i></span></div><div class="pslot">20:00 - 23:00<span class="d"><i></i><i></i><i></i><i></i><i></i></span></div></div>
+          <div class="pcol"><div class="pslot">13:00 - 16:00<span class="d"><i></i><i></i><i></i><i></i><i></i></span></div><div class="pslot">16:00 - 19:00<span class="d"><i></i><i></i><i></i><i></i><i></i></span></div></div>
+          <div class="pcol"><div class="pslot">13:00 - 16:00<span class="d"><i></i><i></i><i></i><i></i><i></i></span></div><div class="pslot">16:00 - 19:00<span class="d"><i></i><i></i><i></i><i></i><i></i></span></div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="opt">
+  <span class="tag">Activities</span><h2>One card per type</h2>
+  <p class="note">A card each instead of a long list. The colour is the top edge, so you see the palette at a glance. The two settings sit under the name as chips you click. Cards flow to fill the row, however wide the window is.</p>
+  <div class="frame">
+    <div class="tabs"><button>Week plan</button><button class="on">Activities</button><button>Roles</button><button>Team</button></div>
+    <div class="tgrid">
+      <div class="tcard" style="border-top-color:#f0cf7e">
+        <div class="top"><span class="nm">Scrim</span><span class="x" style="color:var(--faint)">×</span></div>
+        <div class="swatches"><i style="background:#f0cf7e;outline:2px solid var(--ink);outline-offset:2px"></i><i style="background:#f0a58e"></i><i style="background:#8fcba6"></i><i style="background:#9fbee3"></i><i style="background:#c9b8ea"></i><i style="background:#8fd0c8"></i><i style="background:#efa9c4"></i><i style="background:#c9c5be"></i></div>
+        <div class="foot"><button class="chip on">Asks for opponent</button><button class="chip">3 h</button></div>
+      </div>
+      <div class="tcard" style="border-top-color:#f0a58e">
+        <div class="top"><span class="nm">Match</span><span class="x" style="color:var(--faint)">×</span></div>
+        <div class="swatches"><i style="background:#f0cf7e"></i><i style="background:#f0a58e;outline:2px solid var(--ink);outline-offset:2px"></i><i style="background:#8fcba6"></i><i style="background:#9fbee3"></i><i style="background:#c9b8ea"></i><i style="background:#8fd0c8"></i><i style="background:#efa9c4"></i><i style="background:#c9c5be"></i></div>
+        <div class="foot"><button class="chip on">Asks for opponent</button><button class="chip">3 h</button></div>
+      </div>
+      <div class="tcard" style="border-top-color:#c9b8ea">
+        <div class="top"><span class="nm">VOD review</span><span class="x" style="color:var(--faint)">×</span></div>
+        <div class="swatches"><i style="background:#f0cf7e"></i><i style="background:#f0a58e"></i><i style="background:#8fcba6"></i><i style="background:#9fbee3"></i><i style="background:#c9b8ea;outline:2px solid var(--ink);outline-offset:2px"></i><i style="background:#8fd0c8"></i><i style="background:#efa9c4"></i><i style="background:#c9c5be"></i></div>
+        <div class="foot"><button class="chip">No opponent</button><button class="chip">2 h</button></div>
+      </div>
+      <div class="tadd">+ Add type</div>
+    </div>
+  </div>
+</section>
+
+<section class="opt">
+  <span class="tag">Roles</span><h2>Roles as a grid, and the lineup they make</h2>
+  <p class="note">The roles flow across the page instead of stacking in a narrow column, and each one says who has it. Under them, the lineup in the order you have dragged them into — which is exactly how the week lists people.</p>
+  <div class="frame">
+    <div class="tabs"><button>Week plan</button><button>Activities</button><button class="on">Roles</button><button>Team</button></div>
+    <div class="rgrid">
+      <div class="rcard"><span class="g">⠿</span><span class="n">Top</span><span class="who">Mathias</span><span class="x">×</span></div>
+      <div class="rcard"><span class="g">⠿</span><span class="n">Jungle</span><span class="who">Jonas</span><span class="x">×</span></div>
+      <div class="rcard"><span class="g">⠿</span><span class="n">Mid</span><span class="who">Daniel</span><span class="x">×</span></div>
+      <div class="rcard"><span class="g">⠿</span><span class="n">ADC</span><span class="who">—</span><span class="x">×</span></div>
+      <div class="rcard"><span class="g">⠿</span><span class="n">Support</span><span class="who">—</span><span class="x">×</span></div>
+      <div class="rcard"><span class="g">⠿</span><span class="n">Sub</span><span class="who">—</span><span class="x">×</span></div>
+      <div class="rcard"><span class="g">⠿</span><span class="n">Coach</span><span class="who">Sander</span><span class="x">×</span></div>
+      <div class="rcard" style="border:1.5px dashed var(--dot);box-shadow:none;background:none;color:var(--muted);font-weight:800;font-size:13px;justify-content:center">+ Add a role</div>
+    </div>
+    <div class="card" style="margin-top:14px">
+      <div class="rowhead"><h3>The lineup this makes</h3><span class="sub">the order members are listed in the week</span></div>
+      <div class="lineup">
+        <span class="person"><span class="av">M</span><span><span class="nm">Mathias</span> <span class="rl">Top</span></span></span>
+        <span class="person"><span class="av">J</span><span><span class="nm">Jonas</span> <span class="rl">Jungle</span></span></span>
+        <span class="person"><span class="av">D</span><span><span class="nm">Daniel</span> <span class="rl">Mid</span></span></span>
+        <span class="person"><span class="av">S</span><span><span class="nm">Sander</span> <span class="rl">Coach</span></span></span>
+        <span class="person" style="opacity:.6"><span class="av" style="background:var(--surface2);color:var(--muted)">E</span><span><span class="nm">Emil</span> <span class="rl">no role yet</span></span></span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="opt">
+  <span class="tag">Team</span><h2>Three columns, and the danger across the bottom</h2>
+  <p class="note">Name, sharing and ownership side by side, each as tall as it needs. The share link gets room to show the whole address instead of cutting it off.</p>
+  <div class="frame">
+    <div class="tabs"><button>Week plan</button><button>Activities</button><button>Roles</button><button class="on">Team</button></div>
+    <div class="tteam">
+      <div class="card">
+        <div class="rowhead"><h3>Name</h3></div>
+        <div style="display:flex;gap:8px"><span class="input" style="flex:1">Playwell Quackers</span><button class="btn">Rename</button></div>
+        <p class="note" style="margin:10px 0 0;font-size:12px">Shown to everyone on the team, and on a shared week.</p>
+      </div>
+      <div class="card">
+        <div class="rowhead"><h3>Share on Discord</h3><span class="toggle"></span></div>
+        <span class="input" style="font-weight:600;color:var(--muted);font-size:13px">gather.app/w/WRZWPPF96DZ7W4</span>
+        <div style="display:flex;gap:8px;margin-top:8px"><button class="btn">Copy link</button><button class="btn">New link</button></div>
+        <p class="note" style="margin:10px 0 0;font-size:12px">Booked activities and the blocks where everyone is free. Never who is free when.</p>
+      </div>
+      <div class="card">
+        <div class="rowhead"><h3>Ownership</h3></div>
+        <div style="display:flex;gap:8px"><span class="input" style="flex:1;color:var(--faint)">Pick a member …</span><button class="btn">Transfer</button></div>
+        <p class="note" style="margin:10px 0 0;font-size:12px">Hand the team to someone else. You become an admin.</p>
+      </div>
+    </div>
+    <div class="danger" style="margin-top:14px">
+      <div class="rowhead" style="margin-bottom:6px"><h3>Delete team</h3></div>
+      <p class="note" style="margin:0 0 12px">Removes the team, every member, all availability and all bookings. There is no undo.</p>
+      <button class="btn" style="border-color:var(--red-line);color:var(--red-ink)">Delete team …</button>
+    </div>
+  </div>
+</section>
+
+</div></body></html>

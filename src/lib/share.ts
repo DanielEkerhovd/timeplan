@@ -53,6 +53,14 @@ export function shareLink(slug: string, weekId: string): string {
   return `${appBase()}/w/${slug}?week=${weekId}`;
 }
 
+/**
+ * The picture Discord shows for that link. Same path, with .png — Vercel rewrites
+ * it to the image function, so it works from the app's own domain.
+ */
+export function shareImage(slug: string, weekId: string): string {
+  return `${appBase()}/w/${slug}.png?week=${weekId}`;
+}
+
 export async function setShareEnabled(teamId: string, enabled: boolean) {
   const { error } = await supabase
     .from("teams")

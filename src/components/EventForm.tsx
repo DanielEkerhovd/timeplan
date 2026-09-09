@@ -325,7 +325,7 @@ export default function EventForm({
                 )
                 .join(", ")}
             </div>
-            <div>Players can join both. Book anyway?</div>
+            <div>Members can join both. Book anyway?</div>
           </div>
         )}
 

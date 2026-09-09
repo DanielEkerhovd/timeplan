@@ -18,7 +18,7 @@ interface Props {
   /** Join / Joined toggle for this user … */
   userId?: string;
   onToggleJoin?: (event: EventWithResponses) => void;
-  /** … or an Edit button (team overview). Both can be shown. */
+  /** … or an Edit button (plan week). Both can be shown. */
   onEdit?: (event: EventWithResponses) => void;
   hint?: string;
   /** Past or too-far-ahead weeks: show the sessions, but no Join / Edit. */

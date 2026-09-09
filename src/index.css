@@ -29,8 +29,10 @@
 
   --color-red-soft: #f8e1dc;
   --color-red-ink: #8a3a2c;
+  /* Kanten rundt det som ikke kan angres. */
+  --color-red-line: #e8c4bb;
 
-  /* Team overview cells: everyone / all but one / fewer */
+  /* Plan week cells: everyone / all but one / fewer */
   --color-cell-all: #dcefe0;
   --color-cell-nearly: #eaf4ec;
   --color-cell-few: #f6f5f2;
@@ -87,6 +89,7 @@
 
   --color-red-soft: #3b1f1a;
   --color-red-ink: #f0a58e;
+  --color-red-line: #5c3229;
 
   --color-cell-all: #1e3628;
   --color-cell-nearly: #1c2a22;
@@ -116,3 +119,23 @@
 
 html, body, #root { min-height: 100%; }
 body { @apply bg-bg text-ink font-sans antialiased; }
+
+/* Tailwind v4 gir knapper vanlig peker. Det som kan trykkes skal se ut som det. */
+button:not(:disabled),
+[role="button"]:not(:disabled),
+label[for],
+summary { cursor: pointer; }
+button:disabled { cursor: not-allowed; }
+
+/* Valgene i options-stripa glir ut fra venstre, ett og ett. */
+@keyframes week-option-in {
+  from { opacity: 0; transform: translateX(-14px) scale(0.96); }
+  to   { opacity: 1; transform: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  @keyframes week-option-in {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+  }
+}
+

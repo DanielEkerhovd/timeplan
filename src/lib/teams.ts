@@ -22,8 +22,9 @@ export async function fetchMyTeams(userId: string): Promise<MyTeam[]> {
     .sort((a, b) => a.name.localeCompare(b.name))
 }
 
-export async function createTeam(name: string): Promise<string> {
-  const { data, error } = await supabase.rpc('create_team', { team_name: name })
+/** `roles` er navnene i rekkefølge. Tom liste = laget bruker ikke roller. */
+export async function createTeam(name: string, roles: string[] = []): Promise<string> {
+  const { data, error } = await supabase.rpc('create_team', { team_name: name, roles })
   if (error) throw error
   return data as string
 }

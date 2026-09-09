@@ -1,0 +1,255 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Settings overhaul</title>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#f6f5f2;--surface:#fff;--surface2:#efede8;--line:#e6e3dd;--soft:#eceae5;--ink:#1c1b19;--muted:#6f6c66;--faint:#a8a49d;--on-ink:#fff;
+--green:#3e9a63;--green-soft:#dcefe0;--green-ink:#2f6b45;--red-soft:#f8e1dc;--red-ink:#8a3a2c;
+--shadow:0 1px 2px rgba(0,0,0,.04),0 8px 24px rgba(28,27,25,.05)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:Manrope,system-ui,sans-serif;padding:28px 26px 70px}
+.wrap{max-width:1500px;margin:0 auto}
+h1{font-size:21px;font-weight:800;margin:0 0 4px}
+.lede{color:var(--muted);font-size:14px;margin:0 0 26px;max-width:70ch;line-height:1.55}
+.opt{margin:0 0 42px}
+.tag{font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--faint)}
+.opt h2{font-size:16px;font-weight:800;margin:2px 0 4px}
+.note{color:var(--muted);font-size:13px;margin:0 0 14px;max-width:80ch;line-height:1.55}
+
+.frame{background:var(--bg);border:1px solid var(--line);border-radius:20px;padding:22px}
+.eyebrow{font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--faint)}
+.h1{font-size:24px;font-weight:800;letter-spacing:-.02em;margin:2px 0 0}
+
+/* tabs */
+.tabs{display:flex;gap:3px;background:var(--surface2);padding:3px;border-radius:12px;width:fit-content;margin:16px 0 18px}
+.tabs button{border:0;background:none;font:inherit;font-size:13px;font-weight:800;color:var(--muted);padding:8px 14px;border-radius:9px;cursor:pointer}
+.tabs button.on{background:var(--ink);color:var(--on-ink)}
+
+/* index rail */
+.rail{position:sticky;top:10px;display:flex;flex-direction:column;gap:2px}
+.rail a{font-size:13px;font-weight:700;color:var(--muted);text-decoration:none;padding:8px 12px;border-radius:10px}
+.rail a.on{background:var(--surface);color:var(--ink);box-shadow:var(--shadow)}
+.rail .sep{height:1px;background:var(--line);margin:8px 12px}
+
+.card{background:var(--surface);border-radius:18px;padding:18px 20px;box-shadow:var(--shadow)}
+.card h3{font-size:14px;font-weight:800;margin:0}
+.card .sub{font-size:12px;color:var(--muted)}
+.rowhead{display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin-bottom:14px}
+
+.days{display:flex;gap:6px;flex-wrap:wrap}
+.days button{height:36px;min-width:54px;padding:0 12px;border-radius:11px;border:1.5px solid var(--ink);background:var(--ink);color:var(--on-ink);font:inherit;font-size:13px;font-weight:800;cursor:pointer}
+.days button.off{background:var(--bg);border-color:var(--line);color:var(--faint)}
+
+.slotline{display:flex;align-items:center;gap:10px;padding:9px 0;border-top:1px solid var(--soft)}
+.slotline:first-of-type{border-top:0}
+.slotline .lab{width:96px;flex:none;font-size:12px;font-weight:800;color:var(--muted)}
+.slot{display:inline-flex;align-items:center;gap:7px;height:32px;padding:0 6px 0 12px;border:1.5px solid var(--line);border-radius:999px;font-size:13px;font-weight:700;background:var(--surface)}
+.slot b{font-weight:800}
+.slot .x{width:19px;height:19px;border-radius:999px;display:grid;place-items:center;color:var(--faint);font-size:12px;background:var(--surface2)}
+.add{height:32px;padding:0 12px;border:1.5px dashed var(--line);border-radius:999px;background:none;font:inherit;font-size:13px;font-weight:800;color:var(--muted);cursor:pointer}
+
+.typerow{display:grid;grid-template-columns:16px 1fr auto auto 26px;align-items:center;gap:12px;padding:9px 0;border-top:1px solid var(--soft)}
+.typerow:first-of-type{border-top:0}
+.dot{width:14px;height:14px;border-radius:5px}
+.tname{font-size:13px;font-weight:800}
+.chip{font-size:11px;font-weight:800;padding:4px 9px;border-radius:999px;background:var(--surface2);color:var(--muted)}
+.chip.on{background:var(--green-soft);color:var(--green-ink)}
+.x2{width:24px;height:24px;border-radius:8px;display:grid;place-items:center;color:var(--faint);font-size:13px}
+
+.roles{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}
+.role{display:flex;align-items:center;gap:9px;height:36px;padding:0 10px;border-radius:11px;background:var(--bg);font-size:13px;font-weight:800}
+.role .grip{color:var(--faint);font-size:12px;letter-spacing:-1px}
+.role .x{margin-left:auto;color:var(--faint);font-size:13px}
+
+.field{display:flex;align-items:center;gap:8px}
+.input{height:38px;border:1.5px solid var(--line);border-radius:11px;background:var(--surface);padding:0 12px;font:inherit;font-size:13px;font-weight:700;min-width:220px;display:flex;align-items:center}
+.btn{height:38px;padding:0 14px;border-radius:11px;border:1.5px solid var(--line);background:var(--surface);font:inherit;font-size:13px;font-weight:800;cursor:pointer}
+.btn.dark{background:var(--ink);border-color:var(--ink);color:var(--on-ink)}
+.toggle{width:40px;height:23px;border-radius:999px;background:var(--green);position:relative;flex:none}
+.toggle::after{content:'';position:absolute;top:3px;right:3px;width:17px;height:17px;border-radius:50%;background:#fff}
+.danger{border:1.5px solid #e8c4bb;background:#fdf4f2;border-radius:18px;padding:16px 20px}
+.danger h3{color:var(--red-ink)}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.grid3{display:grid;grid-template-columns:1.15fr 1fr .85fr;gap:14px;align-items:start}
+.stack{display:flex;flex-direction:column;gap:14px}
+
+.railitem{font-size:14px;font-weight:800;color:var(--muted);padding:9px 12px;border-radius:11px;text-decoration:none}
+.railitem.on{background:var(--surface);color:var(--ink);box-shadow:var(--shadow)}
+.subitem{font-size:13px;font-weight:700;color:var(--muted);padding:7px 10px;border-radius:9px;text-decoration:none}
+.subitem.on{background:var(--surface2);color:var(--ink)}
+.sectitle{font-size:12px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--faint);margin:6px 2px 0}
+</style></head><body><div class="wrap">
+
+<h1>Settings — two ways to lay it out</h1>
+<p class="lede">Same content in both, merged and tightened: one Time slots card instead of two, compact rows, roles in two columns, and deleting the team pulled out into its own block.</p>
+
+<!-- A: TABS -->
+<section class="opt">
+  <span class="tag">Option 1</span><h2>Tabs at the top</h2>
+  <p class="note">One row of tabs, and the page under it is short enough to see at once. Same pattern as My week / Plan week, so it is already familiar. The tab you are on is not in the URL unless we put it there.</p>
+  <div class="frame">
+    <span class="eyebrow">Settings</span>
+    <div class="h1">Playwell Quackers</div>
+    <div class="tabs">
+      <button class="on">Week plan</button><button>Activities</button><button>Roles</button><button>Team</button>
+    </div>
+    <div class="grid3">
+      <div class="card">
+        <div class="rowhead"><h3>Days you play</h3><span class="sub">Every day</span></div>
+        <div class="days">
+          <button>Mon</button><button>Tue</button><button class="off">Wed</button><button>Thu</button><button>Fri</button><button>Sat</button><button>Sun</button>
+        </div>
+        <p class="note" style="margin:14px 0 0;font-size:12px">A day you turn off shows as <b>Day off</b> every week. Weeks that have passed stay as they were.</p>
+      </div>
+      <div class="card">
+        <div class="rowhead"><h3>Time slots</h3><span class="sub">the buttons everyone taps</span></div>
+        <div class="slotline"><span class="lab">Weekdays</span>
+          <span class="slot"><b>18–21</b><span class="x">×</span></span>
+          <span class="slot"><b>19–22</b><span class="x">×</span></span>
+          <span class="slot"><b>20–23</b><span class="x">×</span></span>
+          <button class="add">+ Add</button>
+        </div>
+        <div class="slotline"><span class="lab">Weekend</span>
+          <span class="slot"><b>13–16</b><span class="x">×</span></span>
+          <span class="slot"><b>16–19</b><span class="x">×</span></span>
+          <button class="add">+ Add</button>
+        </div>
+      </div>
+      <div class="card">
+        <div class="rowhead"><h3>Timezone</h3><span class="sub">the team plans in</span></div>
+        <div class="field"><span class="input" style="min-width:0;flex:1">Europe/Oslo</span></div>
+        <p class="note" style="margin:12px 0 0;font-size:12px">Everyone sees these hours in their own zone.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- B: RAIL -->
+<section class="opt">
+  <span class="tag">Option 3</span><h2>One page, index down the left</h2>
+  <p class="note">Everything stays on one page, but the index follows you as you scroll and marks where you are. You can still scroll past things, and a deep link to one section works.</p>
+  <div class="frame">
+    <span class="eyebrow">Settings</span>
+    <div class="h1">Playwell Quackers</div>
+    <div style="display:grid;grid-template-columns:168px minmax(0,1fr);gap:26px;margin-top:16px">
+      <nav class="rail">
+        <a class="on">Week plan</a><a>Activities</a><a>Roles</a><a>Team</a><div class="sep"></div><a style="color:#8a3a2c">Delete team</a>
+      </nav>
+      <div class="stack">
+        <div class="sectitle">Week plan</div>
+        <div class="grid2">
+          <div class="card">
+            <div class="rowhead"><h3>Days you play</h3><span class="sub">Every day</span></div>
+            <div class="days">
+              <button>Mon</button><button>Tue</button><button class="off">Wed</button><button>Thu</button><button>Fri</button><button>Sat</button><button>Sun</button>
+            </div>
+          </div>
+          <div class="card">
+            <div class="rowhead"><h3>Time slots</h3><span class="sub">the buttons everyone taps</span></div>
+            <div class="slotline"><span class="lab">Weekdays</span>
+              <span class="slot"><b>18–21</b><span class="x">×</span></span><span class="slot"><b>19–22</b><span class="x">×</span></span><span class="slot"><b>20–23</b><span class="x">×</span></span><button class="add">+</button>
+            </div>
+            <div class="slotline"><span class="lab">Weekend</span>
+              <span class="slot"><b>13–16</b><span class="x">×</span></span><span class="slot"><b>16–19</b><span class="x">×</span></span><button class="add">+</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="sectitle">Activities</div>
+        <div class="card">
+          <div class="rowhead"><h3>Activity types</h3><span class="sub">the name and colour a booking gets</span></div>
+          <div class="typerow"><span class="dot" style="background:#f0cf7e"></span><span class="tname">Scrim</span><span class="chip on">Asks for opponent</span><span class="chip">3 h</span><span class="x2">×</span></div>
+          <div class="typerow"><span class="dot" style="background:#f0a58e"></span><span class="tname">Match</span><span class="chip on">Asks for opponent</span><span class="chip">3 h</span><span class="x2">×</span></div>
+          <div class="typerow"><span class="dot" style="background:#c9b8ea"></span><span class="tname">VOD review</span><span class="chip">No opponent</span><span class="chip">2 h</span><span class="x2">×</span></div>
+          <div style="padding-top:12px"><button class="add">+ Add type</button></div>
+        </div>
+
+        <div class="sectitle">Roles</div>
+        <div class="card">
+          <div class="rowhead"><h3>Roles</h3><span class="sub">drag to reorder · 7 of 20</span></div>
+          <div class="roles">
+            <div class="role"><span class="grip">⠿</span>Top<span class="x">×</span></div>
+            <div class="role"><span class="grip">⠿</span>Jungle<span class="x">×</span></div>
+            <div class="role"><span class="grip">⠿</span>Mid<span class="x">×</span></div>
+            <div class="role"><span class="grip">⠿</span>ADC<span class="x">×</span></div>
+            <div class="role"><span class="grip">⠿</span>Support<span class="x">×</span></div>
+            <div class="role"><span class="grip">⠿</span>Sub<span class="x">×</span></div>
+            <div class="role"><span class="grip">⠿</span>Coach<span class="x">×</span></div>
+          </div>
+          <div style="display:flex;gap:8px;margin-top:12px"><span class="input" style="flex:1;color:var(--faint)">Add a role …</span><button class="btn">Add</button></div>
+        </div>
+
+        <div class="sectitle">Team</div>
+        <div class="grid2">
+          <div class="card">
+            <div class="rowhead"><h3>Name</h3></div>
+            <div class="field"><span class="input" style="flex:1">Playwell Quackers</span><button class="btn">Rename</button></div>
+          </div>
+          <div class="card">
+            <div class="rowhead"><h3>Share on Discord</h3><span class="toggle"></span></div>
+            <div class="field"><span class="input" style="flex:1;font-weight:600;color:var(--muted)">gather.app/w/WRZWPPF96DZ7W4</span><button class="btn">Copy</button><button class="btn">New link</button></div>
+          </div>
+          <div class="card" style="grid-column:1 / -1">
+            <div class="rowhead"><h3>Transfer ownership</h3><span class="sub">you become an admin</span></div>
+            <div class="field"><span class="input" style="color:var(--faint)">Pick a member …</span><button class="btn">Transfer</button></div>
+          </div>
+        </div>
+
+        <div class="sectitle" style="color:#8a3a2c">Danger</div>
+        <div class="danger">
+          <div class="rowhead" style="margin-bottom:8px"><h3>Delete team</h3></div>
+          <p class="note" style="margin:0 0 12px">Removes the team, every member, all availability and all bookings. There is no undo.</p>
+          <button class="btn" style="border-color:#e0a99c;color:#8a3a2c">Delete team …</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+
+<!-- C: SUBPAGES -->
+<section class="opt">
+  <span class="tag">Option 2</span><h2>Undersider i sidemenyen</h2>
+  <p class="note">Settings folder seg ut i menyen til venstre. Kvar underside har si eiga adresse, så du kan bokmerke ho eller sende lenka til nokon. Innhaldet er akkurat som med faner — forskjellen er kvar navigasjonen bur.</p>
+  <div class="frame" style="display:grid;grid-template-columns:196px minmax(0,1fr);gap:26px">
+    <nav style="display:flex;flex-direction:column;gap:3px;border-right:1px solid var(--line);padding-right:16px">
+      <a class="railitem">Week</a>
+      <a class="railitem">Players</a>
+      <a class="railitem on">Settings</a>
+      <div style="display:flex;flex-direction:column;gap:2px;margin:2px 0 0 14px;border-left:1.5px solid var(--line);padding-left:8px">
+        <a class="subitem on">Week plan</a>
+        <a class="subitem">Activities</a>
+        <a class="subitem">Roles</a>
+        <a class="subitem">Team</a>
+      </div>
+    </nav>
+    <div>
+      <span class="eyebrow">Settings · Playwell Quackers</span>
+      <div class="h1" style="margin-bottom:16px">Week plan</div>
+      <div class="grid3">
+        <div class="card">
+          <div class="rowhead"><h3>Days you play</h3><span class="sub">Every day</span></div>
+          <div class="days">
+            <button>Mon</button><button>Tue</button><button class="off">Wed</button><button>Thu</button><button>Fri</button><button>Sat</button><button>Sun</button>
+          </div>
+          <p class="note" style="margin:14px 0 0;font-size:12px">A day you turn off shows as <b>Day off</b> every week.</p>
+        </div>
+        <div class="card">
+          <div class="rowhead"><h3>Time slots</h3><span class="sub">the buttons everyone taps</span></div>
+          <div class="slotline"><span class="lab">Weekdays</span>
+            <span class="slot"><b>18–21</b><span class="x">×</span></span><span class="slot"><b>19–22</b><span class="x">×</span></span><span class="slot"><b>20–23</b><span class="x">×</span></span><button class="add">+</button>
+          </div>
+          <div class="slotline"><span class="lab">Weekend</span>
+            <span class="slot"><b>13–16</b><span class="x">×</span></span><span class="slot"><b>16–19</b><span class="x">×</span></span><button class="add">+</button>
+          </div>
+        </div>
+        <div class="card">
+          <div class="rowhead"><h3>Timezone</h3><span class="sub">the team plans in</span></div>
+          <div class="field"><span class="input" style="min-width:0;flex:1">Europe/Oslo</span></div>
+          <p class="note" style="margin:12px 0 0;font-size:12px">Everyone sees these hours in their own zone.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+</div></body></html>

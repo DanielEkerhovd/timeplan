@@ -1,6 +1,6 @@
 # Timeplan
 
-Ukeplan for lag. Spillerne krysser av kveldene de kan, eier og trener ser hvor alle er ledige, legger inn aktiviteter og deler uka på Discord.
+Ukeplan for lag. Medlemmene krysser av kveldene de kan, eier og admin ser hvor alle er ledige, legger inn aktiviteter og deler uka på Discord.
 
 React + Vite + TypeScript + Tailwind i front. Supabase (Postgres, Auth med Discord, Realtime, Edge Functions) bak.
 
@@ -10,9 +10,11 @@ Status: steg 1 (grunnmur og sikkerhet), steg 2 (ukevisningen), steg 3 (ledervisn
 
 | Rolle | Kan |
 |---|---|
-| Eier (`owner`) | Alt. Én per lag. Gir og tar trenerrolle, endrer laginnstillinger, overfører eierskap, sletter laget. |
-| Trener (`coach`) | Redigere planen: aktiviteter, intervaller, invitasjonskoder. Fjerne spillere. |
-| Spiller (`player`) | Krysse av egen tid, svare på aktiviteter, se laget. |
+| Eier (`owner`) | Alt. Én per lag. Gir og tar admin-tilgang, endrer laginnstillinger, overfører eierskap, sletter laget. |
+| Admin (`admin`) | Redigere planen: aktiviteter, intervaller, invitasjonskoder. Fjerne medlemmer. |
+| Medlem (`member`) | Krysse av egen tid, svare på aktiviteter, se laget. |
+
+Tilgang er ikke det samme som tittel. Hva folk *kalles* — Top, Mid, Coach, Sub, Duelist — ligger i lagets egen rolleliste (`team_roles`), som eier og admin styrer under Settings.
 
 ## Kom i gang
 
@@ -57,18 +59,20 @@ npm run dev
 
 ## Slik henger appen sammen
 
-Skjermene følger mockupene. På PC er appen fullskjerm med sidemeny (Week / Players / Settings); lange lister ruller inne i sin egen boks, ikke hele sida. På mobil er det topptekst og fanelinje nederst.
+Skjermene følger mockupene. På PC er appen fullskjerm med sidemeny (Week / Members / Settings); lange lister ruller inne i sin egen boks, ikke hele sida. På mobil er det topptekst og fanelinje nederst.
 
 **Week → My week** (alle)
 - Uka ligger i URL-en som `?week=2026-W37`. Uten parameter vises inneværende uke.
 - «Planned this week» øverst: aktivitetene med dag, tittel, tid og Discord-avatarene til de som er med. Én knapp: Join / Joined. Eier og trener blir med her de også.
 - Under: knappene fra `team_slots` (hverdag/helg), sju kolonner på PC og ett kort per dag på mobil. Prikkraden på knappen er én prikk per lagkamerat, fylt = kan hele blokken. Et trykk lagrer med en gang («Saved»-toast); overlappende intervaller håndteres i `src/lib/slots.ts` (enhetstester: `npm test`).
-- Har du ikke svart for uka, får du et banner med «Fill in my usual week». «Use this week as my usual week» lagrer mønsteret (`save_default_week` / `apply_default_week`).
+- Har du ikke svart for uka, får du et banner med «Use my template». Options-stripa nederst i kortet har «Save as template», «Use template» og «Clear week» (`save_default_week` / `replace_with_default_week` / `clear_week`); alt som fjerner noe spør først.
 
-**Week → Team overview** (eier og trener, `?view=team`)
+**Week → Plan week** (eier og admin, `?view=team`)
 - Samme «Planned this week»-kort, med Edit-knapp per aktivitet.
 - Rutenettet viser bare hvem som er ledige: antall, prikker, grønn ramme når alle kan. Ligger det en aktivitet i blokka, får cella en tynn stripe øverst i aktivitetens farge og navnet under tallet («2 activities» og delt stripe ved to). Klikk på en blokk for å booke der.
 - «Everyone can» til høyre: blokkene der alle er ledige og ingenting er booket. Lista ruller.
+- **Cancel day** / **Open day** under datoen (vises når du peker på dagen) tar bort en dag for den uka, eller åpner en fast fridag for én uke. Kolonnen blir grå med «Day off» i My week, dagen forsvinner fra `slot_counts` og fra «alle er ledige» i delingslenka. Timene folk har krysset av blir liggende, så åpner du dagen igjen er alt som før. Bare eier og admin, og bare fra mandag denne uka og tre måneder fram.
+- Faste fridager settes i Settings → **Days you play** (bare eier). Mønsteret gjelder framover: endrer du det i dag, blir ikke ukene som har vært grå i ettertid. Regelen står tre steder med samme ordlyd — `slot_counts`, `share_week` og `dayIsOff()` i `src/lib/closedDays.ts`: finnes det et unntak for datoen vinner det, ellers gjelder mønsteret (0013, 0014).
 - Skjemaet: dato, fra/til, «What» = lagets typer eller Custom. Typer med «Ask for opponent» får et motstanderfelt; Custom får tittel og en av 8 farger. «Shows as» viser resultatet. Overlapper det en annen aktivitet, advarer skjemaet men lar deg booke likevel (maks 4 per dag).
 
 **Players**: du kan sette ditt eget visningsnavn (trykk på navnet ditt nederst i sidemenyen, eller avataren på mobil); det vinner over Discord-navnet i alle lag til du velger «Use Discord name». Medlemmer med rolle (tilgang) og lane-posisjon (Top, Jungle, Mid, Bot, Support, Sub, Coach; bare visning). Du setter din egen posisjon, eier og trener kan sette alle. Eier bytter Coach/Player, overfører eierskap og fjerner folk; trener fjerner spillere; alle andre kan forlate laget. Eier og trener lager invitasjonskoder (varighet og antall bruk). «Copy link» gir en lenke (`/join/<kode>`) du limer i Discord: mottakeren klikker, logger inn med Discord og står i laget — ingen kode å skrive av. Selve koden kan fortsatt kopieres og tastes inn manuelt på `/new-team`. Lenka viser ikke lagnavnet før du er innlogget; å slå opp koden uten pålogging ville gitt en måte å teste koder på utenom grensa i `join_team` (10 bomskudd per time).
@@ -119,6 +123,12 @@ GitHub Actions (`.github/workflows/security.yml`) kjører testene ved hver push.
 
 ## Neste steg
 
-Igjen: tidssonehint for spillere i annen sone, navn på appen (ikke bestemt ennå; står som «Schedule»/«Team Schedule» i appen og bruker `APP_URL` i delingsbildet), og steg 6 drift (deploy, domene, redirect-URL-er, GitHub Actions).
+Igjen: tidssonehint for spillere i annen sone, og steg 6 drift (deploy, redirect-URL-er, GitHub Actions).
+
+Appen heter **Gather** og bor på `https://www.gatherapp.gg`. Domenet står tre steder utenfor koden, og alle tre må peke på det samme:
+
+- **Vercel → Environment Variables:** `VITE_SHARE_BASE=https://www.gatherapp.gg`. Uten den bygges delingslenkene fra domenet du tilfeldigvis står på.
+- **Supabase → Edge Functions secrets:** `APP_URL=https://www.gatherapp.gg`. Den bestemmer bildet, canonical-lenka og hvor et klikk sender folk — og domenet som står nederst i delingsbildet.
+- **Supabase → Authentication → URL Configuration:** Site URL og `https://www.gatherapp.gg/**` under Redirect URLs, ellers virker ikke innlogging med Discord på det nye domenet.
 
 Når du legger til tabeller eller funksjoner: legg til tester i `security.sql` i samme commit.

@@ -1,15 +1,27 @@
-import { useMemo, type CSSProperties } from "react";
+import { useState, useMemo, type CSSProperties } from "react";
 import { format } from "date-fns";
+import { useAuth } from "../lib/auth";
 import { coversSlot } from "../lib/availability";
+import {
+  clearDayOverride,
+  dayIsOff,
+  setDayOverride,
+} from "../lib/closedDays";
 import {
   eventPalette,
   eventTitle,
   type EventWithResponses,
 } from "../lib/events";
 import type { MyTeam } from "../lib/teams";
-import type { MemberWithProfile } from "../lib/types";
+import { friendlyError, type MemberWithProfile } from "../lib/types";
 import type { WeekData } from "../lib/useWeekData";
-import { dayShort, weekLock, type WeekDay } from "../lib/week";
+import {
+  dayShort,
+  toDateKey,
+  weekLock,
+  weekStart,
+  type WeekDay,
+} from "../lib/week";
 import { useZone } from "../lib/zone";
 import EventForm, { type EventDraft } from "./EventForm";
 import SessionsList from "./SessionsList";
@@ -40,7 +52,7 @@ interface Cell {
   events: EventWithResponses[];
 }
 
-/** The owner/coach view: sessions on top, then who is free in every block, and booking. */
+/** The owner/admin view: sessions on top, then who is free in every block, and booking. */
 export default function TeamOverview({
   team,
   members,
@@ -48,9 +60,46 @@ export default function TeamOverview({
   form,
   setForm,
 }: Props) {
-  const { days, slots, hours, events, error, reload, types } = week;
+  const {
+    days,
+    slots,
+    hours,
+    events,
+    error,
+    reload,
+    types,
+    isOff,
+    offWeekdays,
+  } = week;
   const zone = useZone();
   const total = members.length;
+  const { user } = useAuth();
+  // Dagen du holder på å stenge eller åpne. Knappen venter, resten av uka gjør ikke det.
+  const [busyDay, setBusyDay] = useState<string | null>(null);
+
+  async function toggleDay(day: WeekDay) {
+    if (busyDay || weekLock(week.monday) || !user) return;
+    setBusyDay(day.key);
+    try {
+      const want = !isOff(day);
+      // Havner vi på det malen sier likevel, er unntaket overflødig. Da fjerner vi
+      // det, så dagen følger laget videre i stedet for å stå fast på et gammelt valg.
+      const fromPattern = dayIsOff(
+        day.key,
+        day.isoDay,
+        new Map(),
+        offWeekdays,
+        toDateKey(weekStart(new Date())),
+      );
+      if (want === fromPattern) await clearDayOverride(team.id, day.key);
+      else await setDayOverride(team.id, day.key, user.id, want);
+      await reload();
+    } catch (err) {
+      week.setError(friendlyError(err));
+    } finally {
+      setBusyDay(null);
+    }
+  }
 
   // Rows are every distinct interval across weekday and weekend slots, sorted by start.
   const rows = useMemo(() => {
@@ -70,6 +119,11 @@ export default function TeamOverview({
     for (const row of rows) {
       const cells: (Cell | null)[] = [];
       for (const day of days) {
+        // En stengt dag har ingen blokker å booke, uansett hva folk har krysset av.
+        if (isOff(day)) {
+          cells.push(null);
+          continue;
+        }
         const type = day.isWeekend ? "weekend" : "weekday";
         const exists = (slots ?? []).some(
           (s) =>
@@ -105,7 +159,7 @@ export default function TeamOverview({
       out.push(cells);
     }
     return out;
-  }, [rows, days, slots, hours, events, members]);
+  }, [rows, days, slots, hours, events, members, isOff]);
 
   const everyoneCan = useMemo(
     () =>
@@ -249,27 +303,50 @@ export default function TeamOverview({
               style={{ gridTemplateColumns: "100px repeat(7, minmax(0, 1fr))" }}
             >
               <div />
-              {days.map((d) => (
-                <div
-                  key={d.key}
-                  className="flex flex-col items-center gap-0.5 pb-1.5"
-                >
-                  <span
-                    className={`text-xs font-bold ${d.isToday ? "text-green-ink" : "text-muted"}`}
+              {days.map((d) => {
+                const off = isOff(d);
+                return (
+                  <div
+                    key={d.key}
+                    className="group flex flex-col items-center gap-0.5 pb-1.5"
                   >
-                    {dayShort[d.isoDay - 1]}
-                  </span>
-                  {d.isToday ? (
-                    <span className="flex h-[26px] w-[26px] items-center justify-center rounded-full bg-ink text-[13px] font-extrabold text-on-ink">
+                    <span
+                      className={`text-xs font-bold ${d.isToday && !off ? "text-green-ink" : "text-muted"} ${off ? "opacity-55" : ""}`}
+                    >
+                      {dayShort[d.isoDay - 1]}
+                    </span>
+                    {/* Samme boks hver dag, ellers dytter ringen rundt i dag raden ned. */}
+                    <span
+                      className={`flex h-[26px] min-w-[26px] items-center justify-center rounded-full px-1 font-extrabold ${
+                        d.isToday && !off
+                          ? "bg-ink text-[13px] text-on-ink"
+                          : "text-sm"
+                      } ${off ? "opacity-55" : ""}`}
+                    >
                       {format(d.date, "d")}
                     </span>
-                  ) : (
-                    <span className="text-sm font-extrabold">
-                      {format(d.date, "d")}
-                    </span>
-                  )}
-                </div>
-              ))}
+                    {/* Plassen står der hele tiden, så rutenettet ikke hopper når pillen
+                        dukker opp. Den vises når du peker på dagen, eller tabber deg dit. */}
+                    {!lock && (
+                      <button
+                        type="button"
+                        onClick={() => void toggleDay(d)}
+                        disabled={busyDay !== null}
+                        aria-pressed={off}
+                        className={`mt-1 h-[22px] whitespace-nowrap rounded-full border-[1.5px] px-2.5 text-[11px] font-bold opacity-0 transition focus-visible:opacity-100 disabled:opacity-50 group-hover:opacity-100 ${
+                          // Er dagen alt avlyst, står kolonnen grå. Da skal veien tilbake
+                          // være det tydeligste i den kolonnen, ikke enda et blekt element.
+                          off
+                            ? "border-ink bg-ink text-on-ink"
+                            : "border-line bg-surface text-muted hover:border-faint hover:text-ink"
+                        }`}
+                      >
+                        {off ? "Open day" : "Cancel day"}
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
             </div>
             {rows.map((row, ri) => (
               <div
@@ -364,16 +441,33 @@ export default function TeamOverview({
               >
                 <div className="flex items-baseline gap-2 px-0.5">
                   <span
-                    className={`text-[15px] font-extrabold ${day.isToday ? "text-green-ink" : ""}`}
+                    className={`text-[15px] font-extrabold ${day.isToday && !isOff(day) ? "text-green-ink" : ""}`}
                   >
                     {dayShort[day.isoDay - 1]}
                   </span>
                   <span className="text-xs text-muted">
                     {format(day.date, "d MMM")}
                   </span>
+                  {!lock && (
+                    <button
+                      type="button"
+                      onClick={() => void toggleDay(day)}
+                      disabled={busyDay !== null}
+                      aria-pressed={isOff(day)}
+                      className="ml-auto h-[24px] whitespace-nowrap rounded-full border-[1.5px] border-line px-2.5 text-[11px] font-bold text-muted disabled:opacity-50"
+                    >
+                      {isOff(day) ? "Open day" : "Cancel day"}
+                    </button>
+                  )}
                 </div>
-                {cells.length === 0 && (
-                  <div className="text-[13px] text-faint">No time slots.</div>
+                {isOff(day) ? (
+                  <div className="text-[13px] font-bold text-faint">
+                    Off this week.
+                  </div>
+                ) : (
+                  cells.length === 0 && (
+                    <div className="text-[13px] text-faint">No time slots.</div>
+                  )
                 )}
                 {cells.map((c) => (
                   <button
@@ -414,12 +508,12 @@ export default function TeamOverview({
 
       {/* Desktop aside */}
       <aside className="hidden w-[300px] shrink-0 flex-col gap-4 lg:flex lg:min-h-0">
-        <div className="flex min-h-0 flex-col gap-3.5 rounded-[20px] bg-surface p-5 shadow-card">
+        <div className="flex min-h-0 flex-1 flex-col gap-3.5 rounded-[20px] bg-surface p-5 shadow-card">
           <h2 className="text-[15px] font-extrabold">Everyone can</h2>
           {everyoneCan.length === 0 ? (
             <p className="text-[13px] leading-relaxed text-muted">
               {total === 0
-                ? "No players yet."
+                ? "No members yet."
                 : "No block this week where everyone is free and nothing is booked."}
             </p>
           ) : (

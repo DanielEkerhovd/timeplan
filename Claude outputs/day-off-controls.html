@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Day off controls</title>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#f6f5f2; --surface:#fff; --surface2:#efede8; --line:#e6e3dd; --line-soft:#eceae5;
+  --ink:#1c1b19; --muted:#6f6c66; --faint:#a8a49d; --on-ink:#fff;
+  --green:#3e9a63; --green-ink:#2f6b45;
+  --cell-all:#dcefe0; --cell-nearly:#eaf4ec; --cell-few:#f6f5f2;
+  --shadow:0 1px 2px rgba(0,0,0,.04), 0 8px 24px rgba(28,27,25,.05);
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:Manrope,"Segoe UI",system-ui,sans-serif;padding:32px 28px 90px}
+.wrap{max-width:1180px;margin:0 auto}
+h1{font-size:22px;font-weight:800;margin:0 0 4px}
+.lede{color:var(--muted);font-size:14px;margin:0 0 28px;max-width:72ch;line-height:1.55}
+.opt{margin:0 0 40px}
+.opt-head{display:flex;align-items:baseline;gap:10px;margin:0 0 4px}
+.tag{font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--faint)}
+.opt-head h2{font-size:16px;font-weight:800;margin:0}
+.note{color:var(--muted);font-size:13px;margin:0 0 14px;max-width:78ch;line-height:1.55}
+.card{background:var(--surface);border-radius:20px;padding:20px;box-shadow:var(--shadow)}
+
+.grid{display:grid;grid-template-columns:100px repeat(7,minmax(0,1fr));gap:8px}
+.hd{display:flex;flex-direction:column;align-items:center;gap:2px;padding-bottom:6px;position:relative}
+.hd .d{font-size:12px;font-weight:700;color:var(--muted)}
+.hd .n{height:26px;min-width:26px;padding:0 4px;display:flex;align-items:center;justify-content:center;border-radius:999px;font-size:14px;font-weight:800}
+.hd.today .d{color:var(--green-ink)}
+.hd.today .n{background:var(--ink);color:var(--on-ink);font-size:13px}
+.hd.off .d,.hd.off .n{opacity:.5}
+.hd.off.today .n{background:none;color:var(--ink)}
+.rowlab{display:flex;align-items:center;font-size:12px;font-weight:700;color:var(--muted)}
+.cell{height:66px;border-radius:12px;padding:8px 10px;display:flex;flex-direction:column;justify-content:space-between;border:1.5px solid transparent;background:var(--cell-few)}
+.cell.all{background:var(--cell-all);border-color:var(--green)}
+.cell.nearly{background:var(--cell-nearly)}
+.cell .c{font-size:15px;font-weight:800;line-height:1}
+.cell .c s{font-size:12px;font-weight:600;color:var(--faint);text-decoration:none}
+.cell.all .c{color:var(--green-ink)}
+.dots{display:flex;gap:3px}
+.dots i{width:8px;height:8px;border-radius:50%;background:#cfcbc4;display:block}
+.dots i.f{background:var(--green)}
+.cell.empty{background:none;border:1.5px dashed var(--line-soft)}
+
+/* current: chip under every day */
+.chip-off{margin-top:5px;height:22px;border-radius:999px;border:1.5px solid var(--line);padding:0 8px;font-size:10px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--faint);background:none;cursor:pointer}
+.chip-off.on{background:var(--ink);border-color:var(--ink);color:var(--on-ink)}
+
+/* A: hover */
+.colhover .hd .x{opacity:0;transition:opacity .15s;margin-top:5px}
+.colhover .hd:hover .x, .colhover .hd.off .x{opacity:1}
+.x{height:22px;width:22px;border-radius:999px;border:1.5px solid var(--line);background:var(--surface);color:var(--muted);
+   display:grid;place-items:center;cursor:pointer;font-size:12px;line-height:1}
+.hd.off .x{border-color:var(--ink);background:var(--ink);color:var(--on-ink)}
+
+/* B: one strip */
+.strip{display:flex;align-items:center;gap:10px;padding:0 2px 14px}
+.strip .lab{font-size:12px;font-weight:800;color:var(--muted)}
+.dayset{display:flex;gap:4px;background:var(--surface2);padding:3px;border-radius:999px}
+.dayset button{width:30px;height:26px;border:0;border-radius:999px;background:none;font:inherit;font-size:12px;font-weight:800;color:var(--muted);cursor:pointer}
+.dayset button.on{background:var(--ink);color:var(--on-ink)}
+.strip .hint{font-size:12px;color:var(--faint);margin-left:2px}
+
+/* C: whole column is the target */
+.colclick .hd{cursor:pointer;border-radius:10px;padding-top:4px}
+.colclick .hd:hover{background:var(--surface2)}
+.colclick .hd .menu{position:absolute;top:100%;left:50%;transform:translateX(-50%);z-index:5;
+  background:var(--surface);border:1.5px solid var(--line);border-radius:12px;padding:4px;box-shadow:0 12px 32px rgba(28,27,25,.16);display:none;white-space:nowrap}
+.colclick .hd.open .menu{display:block}
+.colclick .menu button{border:0;background:none;font:inherit;font-size:12px;font-weight:700;padding:7px 12px;border-radius:8px;cursor:pointer;display:block;width:100%;text-align:left}
+.colclick .menu button:hover{background:var(--surface2)}
+.offlabel{grid-row:span 3;display:flex;align-items:center;justify-content:center;border:1.5px dashed var(--line-soft);border-radius:12px;font-size:12px;font-weight:800;color:var(--faint)}
+.foot{font-size:12px;color:var(--faint);margin-top:10px}
+</style>
+</head>
+<body>
+<div class="wrap">
+<h1>Taking a day off — four controls</h1>
+<p class="lede">Same grid, four ways to reach the same action. Everything here is live: click around.</p>
+
+<section class="opt">
+  <div class="opt-head"><span class="tag">Now</span><h2>A chip under every date</h2></div>
+  <p class="note">Seven buttons for something you use a few times a year. They sit in the header row, so they push the grid down and compete with the dates.</p>
+  <div class="card"><div class="grid" id="g-now"></div></div>
+</section>
+
+<section class="opt">
+  <div class="opt-head"><span class="tag">Option A</span><h2>Only when you point at the day</h2></div>
+  <p class="note">A quiet round button that appears when the mouse is over the day, and stays visible on a day that is already off, so you can always put it back. Nothing to see the rest of the time.</p>
+  <div class="card colhover"><div class="grid" id="g-hover"></div></div>
+  <p class="foot">Hover a date to see it. Wednesday is off, so its button stays.</p>
+</section>
+
+<section class="opt">
+  <div class="opt-head"><span class="tag">Option B</span><h2>One row above the grid</h2></div>
+  <p class="note">All seven days in a single control, out of the grid. It reads as one sentence — these are the days we are not playing — and it is the same control on phone and desktop.</p>
+  <div class="card">
+    <div class="strip">
+      <span class="lab">Days off</span>
+      <div class="dayset" id="dayset"></div>
+      <span class="hint">nobody has to answer for these</span>
+    </div>
+    <div class="grid" id="g-strip"></div>
+  </div>
+</section>
+
+<section class="opt">
+  <div class="opt-head"><span class="tag">Option C</span><h2>Click the date itself</h2></div>
+  <p class="note">The date becomes the button and opens a small menu. Nothing is added to the layout at all, but you have to know it is there — the header does not look clickable until you touch it.</p>
+  <div class="card colclick"><div class="grid" id="g-click"></div></div>
+  <p class="foot">Click a date.</p>
+</section>
+
+</div>
+<script>
+const days=[['Mon',7],['Tue',8],['Wed',9,'today'],['Thu',10],['Fri',11],['Sat',12],['Sun',13]];
+const times=['16:00 - 19:00','17:00 - 20:00','18:00 - 21:00'];
+const counts=[[0,5,3],[0,0,5],[2,2,2],[0,5,0],[2,2,2],[0,0,0],[0,0,0]];
+const TOTAL=5;
+
+function cell(n){
+  const cls = n===TOTAL ? 'all' : n===TOTAL-1 ? 'nearly' : '';
+  const dots=[...Array(TOTAL)].map((_,i)=>`<i class="${i<n?'f':''}"></i>`).join('');
+  return `<div class="cell ${cls}"><div class="c">${n}<s>/${TOTAL}</s></div><div class="dots">${dots}</div></div>`;
+}
+
+function render(el, mode, offSet){
+  let html = '<div></div>';
+  days.forEach((d,di)=>{
+    const off = offSet.has(di);
+    let extra='';
+    if(mode==='chip') extra = `<button class="chip-off ${off?'on':''}" data-i="${di}">Off</button>`;
+    if(mode==='hover') extra = `<button class="x" data-i="${di}" title="${off?'Bring the day back':'Take the day off'}">${off?'↺':'✕'}</button>`;
+    if(mode==='click') extra = `<div class="menu"><button data-i="${di}">${off?'Bring Wednesday back':'Take this day off'}</button></div>`;
+    html += `<div class="hd ${d[2]?'today':''} ${off?'off':''}" data-i="${di}"><span class="d">${d[0]}</span><span class="n">${d[1]}</span>${extra}</div>`;
+  });
+  times.forEach((t,ti)=>{
+    html += `<div class="rowlab">${t}</div>`;
+    days.forEach((d,di)=> html += offSet.has(di) ? (ti===0?`<div class="offlabel" style="grid-row:span 3">Off</div>`:'') : cell(counts[di][ti]));
+  });
+  el.innerHTML = html;
+}
+
+function wire(id, mode, initial){
+  const el=document.getElementById(id);
+  const off=new Set(initial);
+  const draw=()=>{
+    render(el,mode,off);
+    el.querySelectorAll('[data-i]').forEach(node=>{
+      if(mode==='click' && node.classList.contains('hd')){
+        node.onclick=(e)=>{ if(e.target.closest('.menu')) return;
+          const open=node.classList.contains('open');
+          el.querySelectorAll('.hd').forEach(h=>h.classList.remove('open'));
+          if(!open) node.classList.add('open'); };
+        return;
+      }
+      if(node.tagName!=='BUTTON') return;
+      node.onclick=()=>{ const i=+node.dataset.i; off.has(i)?off.delete(i):off.add(i); draw(); };
+    });
+  };
+  draw();
+}
+wire('g-now','chip',[2]);
+wire('g-hover','hover',[2]);
+wire('g-click','click',[2]);
+
+// strip
+const stripOff=new Set([2]);
+const ds=document.getElementById('dayset');
+function drawStrip(){
+  ds.innerHTML=days.map((d,i)=>`<button class="${stripOff.has(i)?'on':''}" data-i="${i}">${d[0][0]}</button>`).join('');
+  ds.querySelectorAll('button').forEach(b=>b.onclick=()=>{const i=+b.dataset.i; stripOff.has(i)?stripOff.delete(i):stripOff.add(i); drawStrip(); render(document.getElementById('g-strip'),'none',stripOff);});
+}
+drawStrip();
+render(document.getElementById('g-strip'),'none',stripOff);
+</script>
+</body>
+</html>

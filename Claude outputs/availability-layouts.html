@@ -1,0 +1,231 @@
+<!doctype html>
+<html lang="en" class="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Availability layouts</title>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#141311; --surface:#1f1e1b; --surface2:#2b2926; --line:#35332e; --line-soft:#2c2a26;
+  --ink:#f2f0eb; --muted:#a8a49d; --faint:#6f6c66; --dot:#4a4741;
+  --green:#4fb277; --green-soft:#1e3628; --green-ink:#9ad8b2; --green-dim:#3f6b50;
+  --shadow:0 1px 2px rgba(0,0,0,.3), 0 8px 24px rgba(0,0,0,.25);
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:Manrope,"Segoe UI",system-ui,sans-serif;padding:32px 28px 80px}
+.wrap{max-width:1240px;margin:0 auto}
+h1{font-size:22px;font-weight:800;margin:0 0 4px}
+.lede{color:var(--muted);font-size:14px;margin:0 0 28px;max-width:70ch;line-height:1.55}
+.opt{margin:0 0 38px}
+.opt-head{display:flex;align-items:baseline;gap:10px;margin:0 0 4px}
+.tag{font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--faint)}
+.opt-head h2{font-size:16px;font-weight:800;margin:0}
+.opt p.note{color:var(--muted);font-size:13px;margin:0 0 12px;max-width:78ch;line-height:1.55}
+
+/* --- shared card chrome --- */
+.card{background:var(--surface);border-radius:20px;padding:20px;box-shadow:var(--shadow);display:flex;flex-direction:column}
+.card h3{font-size:15px;font-weight:800;margin:0}
+.card .sub{font-size:13px;color:var(--muted);margin:2px 0 16px}
+.stage{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:24px;align-items:stretch}
+.side{background:var(--surface);border-radius:20px;padding:20px;box-shadow:var(--shadow)}
+.side h3{font-size:15px;font-weight:800;margin:0 0 14px}
+.member{display:flex;align-items:center;gap:10px;margin-bottom:12px}
+.av{width:30px;height:30px;border-radius:50%;background:#23364c;color:#9fbee3;display:grid;place-items:center;font-size:12px;font-weight:800}
+.member .n{font-size:13px;font-weight:700}
+.member .r{font-size:11px;color:var(--muted)}
+
+/* day columns */
+.days{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:10px;align-content:start}
+.col{display:flex;flex-direction:column;gap:8px;min-width:0}
+.dh{display:flex;flex-direction:column;align-items:center;gap:2px;padding-bottom:4px}
+.dh .d{font-size:12px;font-weight:700;color:var(--muted)}
+.dh .n{font-size:15px;font-weight:800}
+.dh.today .d{color:var(--green-ink)}
+.dh.today .n{background:var(--ink);color:var(--bg);border-radius:999px;width:26px;height:26px;display:grid;place-items:center}
+.slot{border:1.5px solid var(--line);background:var(--surface);border-radius:12px;height:72px;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;
+  font-size:13px;font-weight:700;color:var(--ink);cursor:pointer}
+.slot.on{border-color:var(--green);background:var(--green-soft);color:var(--green-ink)}
+.dots{display:flex;gap:4px}
+.dots i{width:6px;height:6px;border-radius:50%;background:var(--dot);display:block}
+.dots i.f{background:var(--green)}
+.slot.on .dots i{background:var(--green-dim)} .slot.on .dots i.f{background:var(--green)}
+
+/* options strip */
+.strip{display:flex;gap:8px;align-items:center;padding-top:16px}
+.x{width:36px;height:36px;border-radius:999px;border:1.5px solid var(--line);display:grid;place-items:center;color:var(--ink)}
+.chip{height:32px;border-radius:999px;border:1.5px solid var(--line);padding:0 12px;display:flex;align-items:center;font-size:12px;font-weight:800}
+.void{flex:1;min-height:0}
+.voidmark{flex:1;border:1.5px dashed #4a2f2f;border-radius:12px;margin:14px 0;display:grid;place-items:center;color:#c98a8a;font-size:12px;font-weight:700}
+
+/* --- B: matrix --- */
+.mx{display:grid;grid-template-columns:96px repeat(7,minmax(0,1fr));gap:8px}
+.mx .corner{}
+.mx .hd{display:flex;flex-direction:column;align-items:center;gap:1px;padding-bottom:2px}
+.mx .hd .d{font-size:11px;font-weight:700;color:var(--muted)}
+.mx .hd .n{font-size:14px;font-weight:800}
+.mx .hd.today .d{color:var(--green-ink)}
+.mx .rowlab{display:flex;align-items:center;font-size:13px;font-weight:800;color:var(--muted);white-space:nowrap}
+.cell{border:1.5px solid var(--line);background:var(--surface);border-radius:10px;height:46px;display:flex;align-items:center;justify-content:center;gap:4px;cursor:pointer}
+.cell.on{border-color:var(--green);background:var(--green-soft)}
+.cell .dots i{width:7px;height:7px}
+
+/* --- C: stretch --- */
+.days.fill{align-content:stretch;height:100%}
+.days.fill .col{height:100%}
+.days.fill .slot{flex:1;height:auto}
+
+/* --- D: two column --- */
+.split{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:24px}
+.legend{display:flex;gap:16px;align-items:center;font-size:12px;color:var(--muted);padding-top:14px}
+.legend .k{display:flex;align-items:center;gap:6px}
+.sw{width:14px;height:14px;border-radius:5px;border:1.5px solid var(--line)}
+.sw.on{border-color:var(--green);background:var(--green-soft)}
+.foot{color:var(--faint);font-size:12px;margin-top:8px}
+</style>
+</head>
+<body>
+<div class="wrap">
+<h1>Select your availability — layout options</h1>
+<p class="lede">Same week, same data, four ways to lay it out. The card sits next to the Members column, which is what sets the row height — that is where the empty space comes from.</p>
+
+<!-- NOW -->
+<section class="opt">
+  <div class="opt-head"><span class="tag">Now</span><h2>The card stretches, the grid does not</h2></div>
+  <p class="note">The grid packs to the top, the Options strip is pinned to the bottom, and everything between is dead air. It gets worse the taller the window is.</p>
+  <div class="stage">
+    <div class="card" style="height:520px">
+      <h3>Select your availability</h3>
+      <div class="sub">Tap the times you can play. You can pick more than one per day.</div>
+      <div class="days" id="now-days"></div>
+      <div class="voidmark">empty space</div>
+      <div class="strip"><div class="x">✕</div><div class="chip">Save as template</div><div class="chip">Use template</div><div class="chip">Clear week</div></div>
+    </div>
+    <div class="side" id="side1"></div>
+  </div>
+</section>
+
+<!-- A -->
+<section class="opt">
+  <div class="opt-head"><span class="tag">Option A</span><h2>Let the card hug its content</h2></div>
+  <p class="note">Smallest change: the card stops where the grid stops, and the Options strip follows right under it. The Members column keeps its own height. Nothing else moves.</p>
+  <div class="stage" style="align-items:start">
+    <div class="card">
+      <h3>Select your availability</h3>
+      <div class="sub">Tap the times you can play. You can pick more than one per day.</div>
+      <div class="days" id="a-days"></div>
+      <div class="strip"><div class="x">✕</div><div class="chip">Save as template</div><div class="chip">Use template</div><div class="chip">Clear week</div></div>
+    </div>
+    <div class="side" id="side2" style="height:520px"></div>
+  </div>
+</section>
+
+<!-- B -->
+<section class="opt">
+  <div class="opt-head"><span class="tag">Option B</span><h2>One time column, seven day columns</h2></div>
+  <p class="note">The time is written once per row instead of 21 times. Cells become small targets that only carry the dots, so the whole thing is about half as tall and reads like a table. Works well when every day shares the same slots.</p>
+  <div class="stage" style="align-items:start">
+    <div class="card">
+      <h3>Select your availability</h3>
+      <div class="sub">Tap the times you can play. You can pick more than one per day.</div>
+      <div class="mx" id="b-mx"></div>
+      <div class="strip"><div class="x">✕</div><div class="chip">Save as template</div><div class="chip">Use template</div><div class="chip">Clear week</div></div>
+    </div>
+    <div class="side" id="side3" style="height:400px"></div>
+  </div>
+</section>
+
+<!-- C -->
+<section class="opt">
+  <div class="opt-head"><span class="tag">Option C</span><h2>Let the slots grow into the space</h2></div>
+  <p class="note">Keeps today's shape but the slot buttons stretch to fill whatever height the row has. No dead air, and much bigger tap targets. The downside: with two slots a day the buttons get very tall.</p>
+  <div class="stage">
+    <div class="card" style="height:520px">
+      <h3>Select your availability</h3>
+      <div class="sub">Tap the times you can play. You can pick more than one per day.</div>
+      <div class="days fill" id="c-days"></div>
+      <div class="strip"><div class="x">✕</div><div class="chip">Save as template</div><div class="chip">Use template</div><div class="chip">Clear week</div></div>
+    </div>
+    <div class="side" id="side4"></div>
+  </div>
+</section>
+
+<!-- D -->
+<section class="opt">
+  <div class="opt-head"><span class="tag">Option D</span><h2>B, plus the space goes to the week summary</h2></div>
+  <p class="note">The compact grid from B, and the height it frees up is spent on something worth showing: which blocks the whole team can make. The card ends where it has something to say.</p>
+  <div class="stage" style="align-items:start">
+    <div class="card">
+      <h3>Select your availability</h3>
+      <div class="sub">Tap the times you can play. You can pick more than one per day.</div>
+      <div class="mx" id="d-mx"></div>
+      <div style="height:1.5px;background:var(--line-soft);margin:18px 0 16px"></div>
+      <h3 style="font-size:14px">Everyone is free</h3>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
+        <div class="chip" style="border-color:var(--green);background:var(--green-soft);color:var(--green-ink)">Thu 10 · 18:00–21:00</div>
+        <div class="chip" style="border-color:var(--green);background:var(--green-soft);color:var(--green-ink)">Thu 10 · 19:00–22:00</div>
+        <div class="chip" style="border-color:var(--green);background:var(--green-soft);color:var(--green-ink)">Fri 11 · 20:00–23:00</div>
+        <div class="chip" style="border-color:var(--green);background:var(--green-soft);color:var(--green-ink)">Sun 13 · 20:00–23:00</div>
+      </div>
+      <div class="strip"><div class="x">✕</div><div class="chip">Save as template</div><div class="chip">Use template</div><div class="chip">Clear week</div></div>
+    </div>
+    <div class="side" id="side5" style="height:460px"></div>
+  </div>
+</section>
+
+</div>
+<script>
+const days = [
+  {d:'Mon',n:7},{d:'Tue',n:8},{d:'Wed',n:9,today:true},{d:'Thu',n:10},
+  {d:'Fri',n:11},{d:'Sat',n:12},{d:'Sun',n:13}
+];
+const times = ['18:00 - 21:00','19:00 - 22:00','20:00 - 23:00'];
+// who is free: [day][slot] -> array of 3 booleans; mine = index 1
+const data = [
+  [[0,1,0],[0,1,0],[0,1,0]],
+  [[0,1,0],[0,1,0],[0,1,0]],
+  [[0,1,1],[0,1,1],[0,1,1]],
+  [[1,1,1],[1,1,1],[1,1,1]],
+  [[1,1,0],[1,1,0],[1,1,1]],
+  [[0,1,0],[0,1,0],[0,1,0]],
+  [[0,1,0],[1,1,0],[1,1,1]],
+];
+const dots = (arr) => `<span class="dots">${arr.map(v=>`<i class="${v?'f':''}"></i>`).join('')}</span>`;
+
+function buildDays(el, compact) {
+  el.innerHTML = days.map((day,di)=>`
+    <div class="col">
+      <div class="dh ${day.today?'today':''}"><span class="d">${day.d}</span><span class="n">${day.n}</span></div>
+      ${times.map((t,ti)=>{
+        const c = data[di][ti];
+        return `<div class="slot ${c[1]?'on':''}"><span>${t}</span>${dots(c)}</div>`;
+      }).join('')}
+    </div>`).join('');
+}
+function buildMatrix(el) {
+  let html = '<div class="corner"></div>' + days.map(day=>`
+    <div class="hd ${day.today?'today':''}"><span class="d">${day.d}</span><span class="n">${day.n}</span></div>`).join('');
+  times.forEach((t,ti)=>{
+    html += `<div class="rowlab">${t}</div>`;
+    days.forEach((day,di)=>{
+      const c = data[di][ti];
+      html += `<div class="cell ${c[1]?'on':''}">${dots(c)}</div>`;
+    });
+  });
+  el.innerHTML = html;
+}
+const people = [['DE','Daniel','Mid · you'],['AM','Amalie','Top · answered'],['KR','Kristian','Jungle · answered']];
+function buildSide(el){
+  el.innerHTML = '<h3>Members</h3>' + people.map(p=>`
+    <div class="member"><div class="av">${p[0]}</div><div><div class="n">${p[1]}</div><div class="r">${p[2]}</div></div></div>`).join('');
+}
+buildDays(document.getElementById('now-days'));
+buildDays(document.getElementById('a-days'));
+buildDays(document.getElementById('c-days'));
+buildMatrix(document.getElementById('b-mx'));
+buildMatrix(document.getElementById('d-mx'));
+['side1','side2','side3','side4','side5'].forEach(id=>buildSide(document.getElementById(id)));
+</script>
+</body>
+</html>

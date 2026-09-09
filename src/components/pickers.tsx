@@ -69,6 +69,10 @@ export interface DropdownOption<T extends string | number> {
   label: string
   /** Small colour dot in front of the label. */
   dot?: string
+  /** Anything that belongs in front of the label — an avatar, an icon. */
+  icon?: ReactNode
+  /** Second line under the label, for what the choice means. */
+  hint?: string
   disabled?: boolean
 }
 
@@ -85,10 +89,12 @@ interface DropdownProps<T extends string | number> {
   menuWidth?: number
   /** Search box on top of the list. On by itself only for very long lists (timezones). */
   search?: boolean
+  /** Roomier rows with a line between them. For short lists where each choice needs reading. */
+  separated?: boolean
 }
 
 /** App-styled select. Trigger + floating list, same look as the user menu. */
-export function Dropdown<T extends string | number>({ value, options, onChange, placeholder = 'Pick …', disabled, className = '', look = 'field', menuWidth, search, ...rest }: DropdownProps<T>) {
+export function Dropdown<T extends string | number>({ value, options, onChange, placeholder = 'Pick …', disabled, className = '', look = 'field', menuWidth, search, separated, ...rest }: DropdownProps<T>) {
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
   const btn = useRef<HTMLButtonElement>(null)
@@ -118,6 +124,7 @@ export function Dropdown<T extends string | number>({ value, options, onChange, 
       >
         <span className={`flex min-w-0 items-center gap-2 truncate ${current ? '' : 'text-faint'}`}>
           {current?.dot && <span className="h-[9px] w-[9px] shrink-0 rounded-full" style={{ background: current.dot }} />}
+          {current?.icon}
           <span className="truncate">{current?.label ?? placeholder}</span>
         </span>
         {chevron}
@@ -142,7 +149,7 @@ export function Dropdown<T extends string | number>({ value, options, onChange, 
             {shown.map((o) => {
               const on = o.value === value
               return (
-                <li key={String(o.value)}>
+                <li key={String(o.value)} className={separated ? 'border-t border-line-soft first:border-0' : ''}>
                   <button
                     type="button"
                     role="option"
@@ -152,12 +159,16 @@ export function Dropdown<T extends string | number>({ value, options, onChange, 
                       onChange(o.value)
                       setOpen(false)
                     }}
-                    className={`flex h-9 w-full items-center gap-2 rounded-[10px] px-3 text-left text-[13px] font-semibold disabled:opacity-40 ${
+                    className={`flex w-full items-center gap-2 rounded-[10px] px-3 text-left text-[13px] font-semibold disabled:opacity-40 ${separated ? 'gap-2.5 py-2' : 'h-9'} ${
                       on ? 'bg-ink text-on-ink' : 'text-ink hover:bg-surface-2'
                     }`}
                   >
                     {o.dot && <span className="h-[9px] w-[9px] shrink-0 rounded-full" style={{ background: o.dot }} />}
-                    <span className="min-w-0 flex-1 truncate">{o.label}</span>
+                    {o.icon}
+                    <span className="flex min-w-0 flex-1 flex-col leading-tight">
+                      <span className="truncate">{o.label}</span>
+                      {o.hint && <span className={`truncate text-[11px] font-semibold ${on ? 'text-on-ink/60' : 'text-muted'}`}>{o.hint}</span>}
+                    </span>
                     {on && (
                       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round">
                         <path d="M5 12l5 5L20 7" />

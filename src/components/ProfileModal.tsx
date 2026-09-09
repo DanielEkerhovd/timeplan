@@ -1,41 +1,56 @@
-import { useMemo, useState } from 'react'
-import { setDisplayName, setTimezone } from '../lib/settings'
-import { allZones, localZone, viewerZone } from '../lib/timezone'
+import { useEffect, useState } from 'react'
+import { refreshDiscordName, setDisplayName } from '../lib/settings'
 import { friendlyError, type Profile } from '../lib/types'
-import { Dropdown } from './pickers'
 import { Avatar, Button, CloseButton, ErrorText, Input, Label, Modal, useToast } from './ui'
 
 interface Props {
-  userId: string
   profile: Profile | null
   avatarUrl?: string | null
   onClose: () => void
   onSaved: () => Promise<void>
 }
 
-/** Your profile: the name everyone sees, in every team. Picture comes from Discord. */
-export default function ProfileModal({ userId, profile, avatarUrl, onClose, onSaved }: Props) {
+/**
+ * Your profile: the name everyone sees, in every team. Picture comes from Discord.
+ * Sonen din står i menyen ved navnet ditt, sammen med tema — den lagrer med en gang,
+ * og hører ikke hjemme bak en Lagre-knapp her.
+ */
+export default function ProfileModal({ profile, avatarUrl, onClose, onSaved }: Props) {
   const [name, setName] = useState(profile?.display_name ?? '')
-  const [zone, setZone] = useState(viewerZone(profile?.timezone))
+  // Navnet Discord kjenner deg som nå. Det vi har lagret kan være fra forrige
+  // innlogging, så vi spør på nytt når dialogen åpnes.
+  const [discord, setDiscord] = useState(profile?.discord_name ?? null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const toast = useToast()
-  const device = localZone()
-  // Sonen som er lagret skal alltid stå i lista, også om nettleseren ikke kjenner den.
-  const zones = useMemo(() => {
-    const list = allZones()
-    if (zone && !list.includes(zone)) list.unshift(zone)
-    return list.map((z) => ({ value: z, label: z.replace(/_/g, ' ') }))
-  }, [zone])
+  // Discord-navnet, men bare når det faktisk er et annet navn enn det du heter nå.
+  const stored = discord ?? profile?.discord_name ?? null
+  const other = stored && stored !== profile?.display_name ? stored : null
+
+  useEffect(() => {
+    let cancelled = false
+    refreshDiscordName()
+      .then((n) => {
+        if (!cancelled && n) setDiscord(n)
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   async function save(value: string | null) {
     setBusy(true)
     setError(null)
     try {
+      // Hent navnet på nytt først, så «bruk Discord-navnet» gir deg det du
+      // heter nå og ikke det du het sist du logget inn. Feiler det — for eksempel
+      // fordi basen ikke har fått 0015 ennå — er det ikke verdt å stoppe for:
+      // da får du navnet vi har lagret fra før, som er det gamle svaret.
+      if (value === null) await refreshDiscordName().catch(() => null)
       await setDisplayName(value)
-      if (zone !== profile?.timezone) await setTimezone(userId, zone)
       await onSaved()
-      toast(value ? 'Name updated' : 'Back to your Discord name')
+      toast(value ? 'Name updated' : `Back to ${discord ?? 'your Discord name'}`)
       onClose()
     } catch (err) {
       setError(friendlyError(err))
@@ -66,40 +81,38 @@ export default function ProfileModal({ userId, profile, avatarUrl, onClose, onSa
         <div className="flex flex-col gap-1.5">
           <Label>Name</Label>
           <Input value={name} onChange={(e) => setName(e.target.value)} maxLength={40} autoFocus placeholder="Your name" />
+          {/* Å gå tilbake til Discord-navnet hører til feltet, ikke til knappraden
+              nederst: det er en ting du gjør med navnet, ikke med dialogen. */}
           <span className="text-xs text-muted">
-            {profile?.custom_name
-              ? `Your own name. Discord calls you ${profile.discord_name ?? 'something else'}.`
-              : 'This is your Discord name. Change it here if you want something else.'}
-          </span>
-        </div>
-
-        <div className="flex flex-col gap-1.5">
-          <Label>Your timezone</Label>
-          <Dropdown value={zone} options={zones} onChange={setZone} search className="w-full" menuWidth={320} aria-label="Your timezone" />
-          <span className="text-xs text-muted">
-            Times in the app are always the team's. This is only used to tell you what they are where you are.
-            {zone !== device && ' '}
-            {zone !== device && (
-              <button type="button" className="font-bold text-green-ink underline" onClick={() => setZone(device)}>
-                Use this device ({device})
-              </button>
+            {!profile?.custom_name ? (
+              'This is your Discord name. Change it here if you want something else.'
+            ) : !other ? (
+              // Eget navn, men det er det samme som Discord sier. Da er det
+              // ingenting å gå tilbake til, og lenka ville ikke gjort noe.
+              'Your own name.'
+            ) : (
+              <>
+                Your own name. Discord calls you {other}.{' '}
+                <button
+                  type="button"
+                  onClick={() => void save(null)}
+                  disabled={busy}
+                  className="font-bold text-green-ink underline disabled:opacity-50"
+                >
+                  Use that instead
+                </button>
+              </>
             )}
           </span>
         </div>
 
         <ErrorText>{error}</ErrorText>
 
-        <div className="flex items-center gap-2 pt-1">
-          {profile?.custom_name && (
-            <Button type="button" variant="ghost" onClick={() => void save(null)} disabled={busy}>
-              Use Discord name
-            </Button>
-          )}
-          <div className="flex-1" />
+        <div className="flex items-center justify-end gap-2 pt-1">
           <Button type="button" variant="secondary" onClick={onClose} disabled={busy}>
             Cancel
           </Button>
-          <Button type="submit" disabled={busy || name.trim().length === 0 || (name.trim() === profile?.display_name && zone === profile?.timezone)}>
+          <Button type="submit" disabled={busy || name.trim().length === 0 || name.trim() === profile?.display_name}>
             Save
           </Button>
         </div>

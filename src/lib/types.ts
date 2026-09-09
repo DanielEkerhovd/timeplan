@@ -1,17 +1,21 @@
 // Speiler tabellene i supabase/migrations/. Når skjemaet vokser:
 // `supabase gen types typescript --local > src/lib/database.types.ts` og bytt til de genererte typene.
 
-export type MemberRole = "owner" | "coach" | "player";
+/**
+ * Tilgang, ikke tittel. Hva folk kalles (Coach, Sub, Duelist) ligger i lagets
+ * rolleliste, så det samme nivået fungerer for et LoL-lag og en brettspillgruppe.
+ */
+export type MemberRole = "owner" | "admin" | "member";
 
 export const roleLabel: Record<MemberRole, string> = {
   owner: "Owner",
-  coach: "Coach",
-  player: "Player",
+  admin: "Admin",
+  member: "Member",
 };
 
-/** Eier og trener kan redigere planen. */
+/** Eier og admin kan redigere planen. */
 export const canEdit = (role: MemberRole) =>
-  role === "owner" || role === "coach";
+  role === "owner" || role === "admin";
 export type DayType = "weekday" | "weekend";
 export type ResponseStatus = "coming" | "not_coming";
 
@@ -34,36 +38,25 @@ export interface Team {
   timezone: string;
   share_slug: string;
   share_enabled: boolean;
+  /** ISO-vekedager (1 = mandag) laget normalt har fri. Del av malen. */
+  off_weekdays: number[];
   created_at: string;
 }
 
-export type Position =
-  "top" | "jungle" | "mid" | "bot" | "support" | "sub" | "coach";
-export const positions: Position[] = [
-  "top",
-  "jungle",
-  "mid",
-  "bot",
-  "support",
-  "sub",
-  "coach",
-];
-export const positionLabel: Record<Position, string> = {
-  top: "Top",
-  jungle: "Jungle",
-  mid: "Mid",
-  bot: "ADC",
-  support: "Support",
-  sub: "Sub",
-  coach: "Coach",
-};
+/** Et navn i lagets egen liste: Top, Duelist, Coach, Sub — hva laget nå bruker. */
+export interface TeamRole {
+  id: string;
+  team_id: string;
+  name: string;
+  sort: number;
+}
 
 export interface Member {
   team_id: string;
   user_id: string;
   role: MemberRole;
-  /** Lane / seat shown in lists. Cosmetic; access comes from role. */
-  position: Position | null;
+  /** Peker inn i lagets rolleliste. Rent kosmetisk; tilgang kommer fra role. */
+  role_id: string | null;
   joined_at: string;
 }
 
@@ -144,7 +137,7 @@ export interface Invite {
 export const dbErrors = {
   not_authenticated: "You need to sign in first.",
   not_owner: "Only the owner can do this.",
-  not_editor: "Only the owner and coaches can do this.",
+  not_editor: "Only the owner and admins can do this.",
   cannot_remove_owner: "The owner cannot be removed. Transfer ownership first.",
   owner_cannot_leave:
     "Transfer ownership to someone else before leaving the team.",
@@ -163,6 +156,7 @@ export const dbErrors = {
   date_too_far_ahead: "You can only plan about three months ahead.",
   name_mismatch: "The name does not match.",
   use_leave_team: 'Use "Leave team" to remove yourself.',
+  unknown_timezone: "That is not a time zone we know.",
 } as const;
 
 /** Gjør en Supabase/Postgres-feil om til en setning folk forstår. */
@@ -171,6 +165,10 @@ export function friendlyError(err: unknown): string {
   for (const [code, text] of Object.entries(dbErrors)) {
     if (msg.includes(code)) return text;
   }
+  // team_slots har unique (team_id, day_type, start_hour, end_hour): to like bolker
+  // er ikke en feil du har gjort, det er bare ingenting å legge til.
+  if (msg.includes("team_slots_team_id_day_type_start_hour_end_hour_key"))
+    return "That block is already there.";
   if (msg.includes("events_type_or_title"))
     return "Give the activity a title and a colour, or pick a type.";
   if (msg.includes("row-level security"))

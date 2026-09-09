@@ -1,9 +1,11 @@
 import { useState, type FormEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../lib/auth'
+import { rolePresets, type RolePreset } from '../lib/presets'
 import { createTeam, joinTeam, setActiveTeamId, takePendingInvite } from '../lib/teams'
 import { friendlyError } from '../lib/types'
-import { Button, Card, ErrorText, Eyebrow, Input } from '../components/ui'
+import { Dropdown } from '../components/pickers'
+import { Button, Card, ErrorText, Eyebrow, Input, Label } from '../components/ui'
 
 /** Vises når brukeren er innlogget, men ikke med på noe lag (eller vil lage/bli med i et nytt). */
 interface Props {
@@ -21,6 +23,8 @@ export default function NoTeam({ hasTeams = false, onTeamsChanged }: Props) {
   // /join/<kode>, ligger koden igjen her. Da er den ferdig utfylt og du trykker bare Join.
   const [code, setCode] = useState(() => takePendingInvite() ?? '')
   const [busy, setBusy] = useState<'create' | 'join' | null>(null)
+  // Null = laget bruker ikke roller. Ellers en av de ferdige listene, som kan endres etterpå.
+  const [preset, setPreset] = useState<RolePreset | null>(null)
   const [createError, setCreateError] = useState<string | null>(null)
   const [joinError, setJoinError] = useState<string | null>(null)
 
@@ -34,7 +38,7 @@ export default function NoTeam({ hasTeams = false, onTeamsChanged }: Props) {
     }
     setBusy('create')
     try {
-      const id = await createTeam(name)
+      const id = await createTeam(name, preset?.roles ?? [])
       setActiveTeamId(id)
       await onTeamsChanged()
       navigate(`/team/${id}`, { replace: true })
@@ -110,6 +114,46 @@ export default function NoTeam({ hasTeams = false, onTeamsChanged }: Props) {
             placeholder="Team name"
             maxLength={40}
           />
+
+          <div className="flex flex-col gap-2">
+            <Label>Roles</Label>
+            <div className="flex items-stretch gap-2.5">
+              <button
+                type="button"
+                onClick={() => setPreset(null)}
+                aria-pressed={preset === null}
+                className={`h-12 shrink-0 rounded-xl border-[1.5px] px-5 text-[15px] font-extrabold transition ${
+                  preset === null ? 'border-green bg-green-soft text-green-ink' : 'border-line bg-surface hover:border-faint'
+                }`}
+              >
+                No roles
+              </button>
+              <span className="flex items-center text-xs font-bold text-faint">or</span>
+              <Dropdown
+                value={preset?.id ?? ''}
+                options={rolePresets.map((p) => ({
+                  value: p.id,
+                  label: p.roles.length > 0 ? `${p.name} · ${p.roles.length} roles` : `${p.name} · start empty`,
+                }))}
+                onChange={(id) => setPreset(rolePresets.find((p) => p.id === id) ?? null)}
+                placeholder="Pick a game …"
+                aria-label="Roles from a game"
+                className={`h-12 min-w-0 flex-1 ${preset ? 'border-green bg-green-soft' : ''}`}
+                menuWidth={300}
+              />
+            </div>
+            {preset && preset.roles.length > 0 && (
+              <div className="flex flex-wrap gap-1.5">
+                {preset.roles.map((r) => (
+                  <span key={r} className="rounded-full bg-surface-2 px-2.5 py-1 text-[11px] font-bold">
+                    {r}
+                  </span>
+                ))}
+              </div>
+            )}
+            <span className="text-[12px] text-faint">You can change the list in Settings at any time.</span>
+          </div>
+
           <ErrorText>{createError}</ErrorText>
           <Button type="submit" variant="secondary" disabled={busy !== null}>
             {busy === 'create' ? 'Creating …' : 'Create team'}

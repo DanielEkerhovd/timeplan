@@ -7,7 +7,7 @@ import { AuthContext } from '../src/lib/auth'
 import type { EventWithResponses } from '../src/lib/events'
 import type { HoursByDayUser } from '../src/lib/slots'
 import type { MyTeam } from '../src/lib/teams'
-import type { ActivityType, MemberWithProfile, TeamSlot } from '../src/lib/types'
+import type { ActivityType, MemberWithProfile, TeamRole, TeamSlot } from '../src/lib/types'
 import type { WeekData } from '../src/lib/useWeekData'
 import { daysOfWeek, weekStart } from '../src/lib/week'
 import { ZoneProvider } from '../src/lib/zone'
@@ -15,6 +15,7 @@ import AppShell from '../src/components/AppShell'
 import EventForm from '../src/components/EventForm'
 import { ToastProvider } from '../src/components/ui'
 import PlayersPage, { InviteCardView } from '../src/pages/PlayersPage'
+import AboutPage from '../src/pages/AboutPage'
 import SettingsPage from '../src/pages/SettingsPage'
 import WeekPage from '../src/pages/WeekPage'
 import SharePage from '../src/pages/SharePage'
@@ -24,12 +25,16 @@ const screen = q.get('s') ?? 'me'
 if (q.get('dark')) document.documentElement.classList.add('dark')
 const role = (q.get('role') ?? 'owner') as MyTeam['role']
 
-const team: MyTeam = { id: 't1', name: 'Playwell Quackers', timezone: 'Europe/Oslo', share_slug: 'abc', share_enabled: true, created_at: '', role }
+const team: MyTeam = { id: 't1', name: 'Playwell Quackers', timezone: 'Europe/Oslo', share_slug: 'abc', share_enabled: true, created_at: '', role, off_weekdays: q.get('off') ? [3, 6] : [] }
 const teamsList: MyTeam[] = q.get('teams') ? [team, { ...team, id: 't2', name: 'Quackers Academy' }] : [team]
 const names = ['Daniel', 'Sander', 'Mathias', 'Jonas', 'Emil']
+const roles: TeamRole[] = ['Top', 'Jungle', 'Mid', 'ADC', 'Support', 'Sub', 'Coach'].map((name, i) => ({
+  id: `r${i}`, team_id: 't1', name, sort: i + 1,
+}))
 const membersAll: MemberWithProfile[] = names.map((n, i) => ({
-  team_id: 't1', user_id: `u${i}`, role: i === 0 ? 'owner' : i === 1 ? 'coach' : 'player', position: (['mid', 'coach', 'top', 'jungle', null] as const)[i], joined_at: '',
-  profile: { user_id: `u${i}`, display_name: n, avatar_url: null, discord_name: n, custom_name: i === 0 },
+  team_id: 't1', user_id: `u${i}`, role: i === 0 ? 'owner' : i === 1 ? 'admin' : 'member',
+  role_id: (['r2', 'r6', 'r0', 'r1', null] as const)[i], joined_at: '',
+  profile: { user_id: `u${i}`, display_name: n, avatar_url: null, discord_name: n, custom_name: i === 0, timezone: null },
 }))
 const members = q.get('one') ? membersAll.slice(0, 1) : membersAll
 const slots: TeamSlot[] = [
@@ -39,6 +44,7 @@ const slots: TeamSlot[] = [
   { id: 's4', team_id: 't1', day_type: 'weekend', start_hour: 13, end_hour: 16, sort: 1 },
   { id: 's5', team_id: 't1', day_type: 'weekend', start_hour: 16, end_hour: 19, sort: 2 },
   { id: 's6', team_id: 't1', day_type: 'weekend', start_hour: 19, end_hour: 22, sort: 3 },
+  { id: 's8', team_id: 't1', day_type: 'weekday', start_hour: 12, end_hour: 13, sort: 4 },
 ]
 const types: ActivityType[] = [
   { id: 'ty1', team_id: 't1', name: 'Scrim', color: 'yellow', ask_opponent: true, default_hours: 3, sort: 1, archived: false },
@@ -72,7 +78,10 @@ function useFakeWeek(): WeekData {
   const noop = async () => {}
   return {
     monday, days, isCurrentWeek: true, prevWeek: () => {}, nextWeek: () => {}, thisWeek: () => {},
-    slots, types, activeTypes: types, members, hours: h, setHours, hoursRef: { current: h }, events: ev, setEvents,
+    slots, types, activeTypes: types, members, roles, hours: h, setHours, hoursRef: { current: h }, events: ev, setEvents,
+    overrides: new Map<string, boolean>(q.get('off') ? [[days[2].key, true]] : []),
+    offWeekdays: (q.get('off') ? [3, 6] : []) as number[],
+    isOff: (d: { key: string }) => (q.get('off') ? d.key === days[2].key : false),
     loaded: true, error: null, setError: () => {}, reload: noop, reloadTeam: noop,
   } as unknown as WeekData
 }
@@ -125,19 +134,20 @@ function Screen() {
       </MemoryRouter>
     )
   }
-  const path = screen === 'players' ? '/players' : screen === 'settings' ? '/settings' : '/'
+  const path = screen === 'players' ? '/players' : screen === 'settings' ? '/settings' : screen === 'about' ? '/about' : '/'
   return (
     <ZoneProvider teamZone={team.timezone} yourZone={q.get('tz')} at={monday}>
-    <MemoryRouter initialEntries={[`/team/t1${path}${screen === 'team' ? '?view=team' : ''}`]}>
+    <MemoryRouter initialEntries={[`/team/t1${path}${screen === 'team' ? '?view=team' : q.get('tab') ? `?tab=${q.get('tab')}` : ''}`]}>
       <Routes>
         <Route
           path="/team/:teamId/*"
           element={
             <ToastProvider>
               <Routes>
-                <Route path="/" element={<AppShell team={team} teams={teamsList} mobileTitle="Week 37"><WeekPage team={team} week={week} /></AppShell>} />
+                <Route path="/" element={<AppShell team={team} teams={teamsList} mobileTitle="Week 37" profile={members[0].profile}><WeekPage team={team} week={week} /></AppShell>} />
                 <Route path="/players" element={<AppShell team={team} teams={teamsList} mobileTitle="Players"><PlayersPage team={team} week={week} onTeamsChanged={async () => {}} /></AppShell>} />
                 <Route path="/settings" element={<AppShell team={team} teams={teamsList} mobileTitle="Settings"><SettingsPage team={team} week={week} onTeamsChanged={async () => {}} /></AppShell>} />
+                <Route path="/about" element={<AppShell team={team} teams={teamsList} mobileTitle="About"><AboutPage /></AppShell>} />
               </Routes>
               {open && (
                 <EventForm teamId="t1" types={types} events={events} existing={null} draft={{ date: days[3].key, start_hour: 19, end_hour: 22 }} onClose={() => setOpen(false)} onSaved={() => setOpen(false)} />
