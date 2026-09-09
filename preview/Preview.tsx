@@ -17,6 +17,7 @@ import { ToastProvider } from '../src/components/ui'
 import PlayersPage, { InviteCardView } from '../src/pages/PlayersPage'
 import AboutPage from '../src/pages/AboutPage'
 import SettingsPage from '../src/pages/SettingsPage'
+import Login from '../src/pages/Login'
 import WeekPage from '../src/pages/WeekPage'
 import SharePage from '../src/pages/SharePage'
 
@@ -125,6 +126,18 @@ function Screen() {
   const week = useFakeWeek()
   const [open, setOpen] = useState(screen === 'form' || screen === 'form-custom')
   if (screen === 'invite') return <InvitePreview />
+  // Innloggingssida bruker useAuth, så den får en tom økt å se på her.
+  if (screen === 'login') {
+    return (
+      <AuthContext.Provider value={{ session: null, user: null, loading: false, signInWithDiscord: async () => {}, signOut: async () => {} } as never}>
+        <MemoryRouter initialEntries={['/login']}>
+          <Routes>
+            <Route path="/login" element={<Login />} />
+          </Routes>
+        </MemoryRouter>
+      </AuthContext.Provider>
+    )
+  }
   if (screen === 'share') {
     return (
       <MemoryRouter initialEntries={['/share/ABC123XYZ9?week=2026-W37']}>
