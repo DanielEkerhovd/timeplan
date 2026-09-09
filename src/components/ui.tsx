@@ -21,7 +21,10 @@ export function Card({
   className?: string;
 }) {
   return (
-    <div className={`rounded-[20px] bg-surface p-5 shadow-card ${className}`}>
+    // min-w-0: et kort er nesten alltid et flex- eller grid-barn, og uten dette
+    // blir kortets bredde bestemt av det bredeste ordet inni — en lang lenke gjør
+    // da hele siden bredere enn skjermen.
+    <div className={`min-w-0 rounded-[20px] bg-surface p-5 shadow-card ${className}`}>
       {children}
     </div>
   );

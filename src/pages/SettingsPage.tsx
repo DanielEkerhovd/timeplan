@@ -115,7 +115,7 @@ export default function SettingsPage({ team, week, onTeamsChanged }: Props) {
   if (!week.slots) return <Spinner />;
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-5 lg:-mr-8 lg:overflow-y-auto lg:pr-8">
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-5 lg:-mr-8 lg:overflow-y-auto lg:pr-8">
       <div className="flex flex-col gap-3">
         <div className="flex flex-col gap-0.5">
           <Eyebrow>Settings</Eyebrow>
@@ -123,14 +123,16 @@ export default function SettingsPage({ team, week, onTeamsChanged }: Props) {
             {team.name}
           </h1>
         </div>
-        <div className="flex w-fit max-w-full gap-1 overflow-x-auto rounded-[12px] bg-surface p-[3px] shadow-card">
+        <div className="flex w-fit max-w-full gap-0.5 overflow-x-auto rounded-[12px] bg-surface p-[3px] shadow-card sm:gap-1">
           {tabs.map((t) => (
             <button
               key={t.key}
               type="button"
               onClick={() => goTab(t.key)}
               aria-current={tab === t.key ? "page" : undefined}
-              className={`h-9 shrink-0 rounded-[9px] px-3.5 text-[13px] font-extrabold transition ${
+              // Fem faner på 390 piksler: litt strammere tekst og luft, så de får
+              // plass uten å måtte dras sidelengs. Fra sm og opp som før.
+              className={`h-9 shrink-0 rounded-[9px] px-2 text-[12px] font-extrabold transition sm:px-3.5 sm:text-[13px] ${
                 tab === t.key
                   ? "bg-ink text-on-ink"
                   : "text-muted hover:text-ink"
@@ -340,7 +342,7 @@ function WeekPlanTab({
       {/* Ved siden av hverandre, helga litt smalere: den har færre bolker. */}
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)]">
         <SlotTimeline
-          title="Weekday blocks"
+          title="Weekday"
           hint="Mon–Fri"
           dayType="weekday"
           teamId={teamId}
@@ -902,16 +904,24 @@ function WeekPreview({
 }) {
   return (
     <Card className="flex flex-col gap-3.5">
-      <div className="flex items-baseline justify-between gap-3">
+      <div className="flex flex-col gap-1 sm:flex-row sm:items-baseline sm:justify-between sm:gap-3">
         <h2 className="text-[15px] font-extrabold">What everyone will see</h2>
         <span className="text-xs text-muted">
           {timezone.replace(/_/g, " ")} · each member sees it in their own zone
         </span>
       </div>
+      {/* Mobil: sju kolonner på 350 piksler gir «18:00 -» på én linje og «21:00»
+          på neste. Alle dagene i en gruppe har uansett samme bolker, så der
+          viser vi dagene som merkelapper og bolkene én gang. */}
+      <div className="flex flex-col gap-3 sm:hidden">
+        <PreviewGroup days={[1, 2, 3, 4, 5]} list={weekday} off={off} />
+        <PreviewGroup days={[6, 7]} list={weekend} off={off} />
+      </div>
+
       {/* Vekedager og helg er to forskjellige planer. De står ved siden av
           hverandre, men med en strek imellom — og inne i hver gruppe er alle
           kolonnene like høye. */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:gap-4">
+      <div className="hidden gap-3 sm:flex sm:flex-row sm:items-start sm:gap-4">
         <PreviewDays days={[1, 2, 3, 4, 5]} list={weekday} off={off} />
         <div className="h-px shrink-0 self-stretch bg-line sm:h-auto sm:w-px" />
         <PreviewDays days={[6, 7]} list={weekend} off={off} />
@@ -1069,6 +1079,56 @@ function TeamZone({
   );
 }
 
+/** Mobilutgaven: dagene som merkelapper, og bolkene under, én gang. */
+function PreviewGroup({
+  days,
+  list,
+  off,
+}: {
+  days: number[];
+  list: TeamSlot[];
+  off: Set<number>;
+}) {
+  return (
+    <div className="flex flex-col gap-2 rounded-[16px] bg-bg p-3">
+      <div className="flex flex-wrap gap-1.5">
+        {days.map((d) => {
+          const isOff = off.has(d);
+          return (
+            <span
+              key={d}
+              className={`rounded-full px-2.5 py-1 text-[12px] font-extrabold ${
+                isOff
+                  ? "bg-surface-2 text-faint line-through"
+                  : "bg-surface text-ink shadow-card"
+              }`}
+            >
+              {dayShort[d - 1]}
+            </span>
+          );
+        })}
+      </div>
+      {list.length === 0 ? (
+        <span className="px-1 py-2 text-[12px] text-faint">
+          No blocks — nobody can answer for these days.
+        </span>
+      ) : (
+        list.map((s) => (
+          <div
+            key={s.id}
+            className="flex items-center justify-between rounded-xl border-[1.5px] border-line bg-surface px-3 py-2"
+          >
+            <span className="text-[13px] font-bold tabular-nums">
+              {slotLabel(s.start_hour, s.end_hour)}
+            </span>
+            <DotRow can={[false, false, false, false, false]} dim />
+          </div>
+        ))
+      )}
+    </div>
+  );
+}
+
 /** Én gruppe dager med samme plan. Alle kolonnene her er like høye. */
 function PreviewDays({
   days,
@@ -1149,7 +1209,7 @@ function RolesPreview({
 
   return (
     <Card className="flex flex-col gap-3.5">
-      <div className="flex items-baseline justify-between gap-3">
+      <div className="flex flex-col gap-1 sm:flex-row sm:items-baseline sm:justify-between sm:gap-3">
         <h2 className="text-[15px] font-extrabold">What everyone will see</h2>
         <span className="text-xs text-muted">the list in the week</span>
       </div>
@@ -1230,7 +1290,7 @@ function TypePreview({ types }: { types: ActivityType[] }) {
   const active = types.filter((t) => !t.archived);
   return (
     <Card className="flex flex-col gap-3.5">
-      <div className="flex items-baseline justify-between gap-3">
+      <div className="flex flex-col gap-1 sm:flex-row sm:items-baseline sm:justify-between sm:gap-3">
         <h2 className="text-[15px] font-extrabold">
           What a booking looks like
         </h2>
@@ -1271,7 +1331,9 @@ function TypePreview({ types }: { types: ActivityType[] }) {
                 </div>
                 <div className="flex min-w-0 flex-1 flex-col gap-0.5">
                   <span
-                    className="truncate text-[14px] font-extrabold"
+                    // Smal skjerm: la teksten bryte. «truncate» er nowrap, og da
+                    // blir hele tittelen kortets minstebredde.
+                    className="overflow-hidden text-[14px] font-extrabold sm:truncate"
                     style={{ color: p.ink }}
                   >
                     {t.name}
@@ -1452,7 +1514,9 @@ function TypeRow({ type, run }: { type: ActivityType; run: Run }) {
     else setName(type.name);
   };
   return (
-    <div className="group -mx-2 grid grid-cols-[22px_minmax(0,1fr)_auto_auto_32px] items-center gap-2.5 rounded-xl border-t border-line-soft px-2 py-2 transition first:border-0 hover:border-transparent hover:bg-bg">
+    // På mobil brekker raden i to: farge og navn øverst, innstillingene under.
+    // Alt på én linje gjør navnefeltet så smalt at det ikke går an å skrive i.
+    <div className="group -mx-2 flex flex-wrap items-center gap-2 rounded-xl border-t border-line-soft px-2 py-2 transition first:border-0 hover:border-transparent hover:bg-bg sm:grid sm:grid-cols-[22px_minmax(0,1fr)_auto_auto_32px] sm:gap-2.5">
       <ColorDot
         color={type.color}
         onPick={(c) =>
@@ -1468,7 +1532,7 @@ function TypeRow({ type, run }: { type: ActivityType; run: Run }) {
         }
         maxLength={30}
         aria-label="Type name"
-        className="h-9 w-full border-transparent bg-transparent px-2 text-sm font-extrabold transition hover:border-line hover:bg-surface focus:border-line focus:bg-surface"
+        className="h-9 w-full min-w-[130px] flex-1 basis-[calc(100%-30px)] border-transparent bg-transparent px-2 text-sm font-extrabold transition hover:border-line hover:bg-surface focus:border-line focus:bg-surface sm:w-auto sm:basis-auto"
       />
       <button
         type="button"
@@ -1502,7 +1566,7 @@ function TypeRow({ type, run }: { type: ActivityType; run: Run }) {
         menuWidth={100}
       />
       {confirm ? (
-        <div className="col-start-3 col-end-6 flex items-center justify-end gap-1.5">
+        <div className="flex w-full items-center justify-end gap-1.5 sm:col-start-3 sm:col-end-6 sm:w-auto">
           <Pill onClick={() => setConfirm(false)}>Keep</Pill>
           <Pill
             active
@@ -1935,7 +1999,7 @@ function SharingTab({
       {/* Meldinga står med bunnen i flukt med delingsboksen (justify-end i
           previewen), ikke løs oppe i hjørnet. */}
       <Card className="grid gap-7 p-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,470px)] lg:p-7">
-        <div className="flex flex-col gap-5">
+        <div className="flex min-w-0 flex-col gap-5">
           {/* Bryteren: stor, og den sier hva den slår på. Er den av, er det
               ingenting annet å gjøre her, så da er knappen det eneste du ser. */}
           <div
@@ -2010,7 +2074,9 @@ function SharingTab({
                     />
                   </div>
                   {step === 0 ? (
-                    <span className="text-[12px] font-bold text-faint">
+                    // Datoene står allerede i pilla. På mobil blir denne bare en
+                    // løs linje under, så der lar vi den være.
+                    <span className="hidden text-[12px] font-bold text-faint sm:inline">
                       this week
                     </span>
                   ) : (
@@ -2025,15 +2091,16 @@ function SharingTab({
                 </div>
 
                 <div className="flex flex-wrap items-center gap-2">
+                  {/* På mobil er lenka lang og knappen bred: da får de hver sin linje. */}
                   <Input
                     readOnly
                     value={link}
                     aria-label="Link for this week"
-                    className="h-11 min-w-0 flex-1 text-[13px]"
+                    className="h-11 w-full min-w-0 flex-1 basis-full text-[13px] sm:w-auto sm:basis-auto"
                     onFocus={(e) => e.currentTarget.select()}
                   />
                   <Button
-                    className="h-11 px-5"
+                    className="h-11 w-full px-5 sm:w-auto"
                     onClick={() =>
                       void navigator.clipboard
                         .writeText(link)
@@ -2396,10 +2463,10 @@ function TeamPanel({
                 onChange={(e) => setName(e.target.value)}
                 maxLength={40}
                 aria-label="Team name"
-                className="h-11 min-w-0 flex-1 text-[15px] font-bold"
+                className="h-11 w-full min-w-0 flex-1 basis-full text-[15px] font-bold sm:w-auto sm:basis-auto"
               />
               <Button
-                className="h-11 shrink-0"
+                className="h-11 w-full shrink-0 sm:w-auto"
                 variant="secondary"
                 disabled={name.trim().length < 2 || name.trim() === team.name}
                 onClick={() =>
@@ -2510,11 +2577,11 @@ function TeamPanel({
                   }
                   disabled={others.length === 0}
                   menuWidth={280}
-                  className="h-11 min-w-0 flex-1 text-sm"
+                  className="h-11 w-full min-w-0 flex-1 basis-full text-sm sm:w-auto sm:basis-auto"
                 />
                 <Button
                   variant="secondary"
-                  className="h-11 shrink-0"
+                  className="h-11 w-full shrink-0 sm:w-auto"
                   disabled={!newOwner}
                   onClick={() =>
                     void run(async () => {
@@ -2570,11 +2637,13 @@ function TeamPanel({
                 bookings. There is no undo.
               </span>
               <div className="flex flex-wrap items-center gap-2">
+                {/* Navnefeltet tar hele linja på mobil: klemt inn ved siden av to
+                    knapper ser du ikke hva du skriver. */}
                 <Input
                   value={confirmName}
                   onChange={(e) => setConfirmName(e.target.value)}
                   placeholder={`Type "${team.name}" to confirm`}
-                  className="h-10 min-w-0 flex-1 text-sm"
+                  className="h-10 w-full min-w-0 flex-1 basis-full text-sm sm:w-auto sm:basis-auto"
                 />
                 <Button
                   size="sm"
@@ -2647,14 +2716,14 @@ function DiscordPreview({
   const number = Number(week.slice(-2));
 
   return (
-    <div className="flex h-full flex-col justify-end gap-2">
+    <div className="flex h-full min-w-0 flex-col justify-end gap-2">
       <span className="text-[11px] font-bold uppercase tracking-[0.08em] text-faint">
         In a channel
       </span>
       <div
         className={`rounded-[16px] bg-[#313338] p-3.5 transition ${on ? "" : "opacity-60 saturate-0"}`}
       >
-        <div className="flex gap-2.5">
+        <div className="flex min-w-0 gap-2.5">
           <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#5865F2] text-[13px] font-extrabold text-white">
             {teamName.slice(0, 1).toUpperCase()}
           </span>

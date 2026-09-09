@@ -168,8 +168,10 @@ export default function EventForm({
           <CloseButton onClick={onClose} />
         </div>
 
-        <div className="grid grid-cols-[1.5fr_1fr_1fr] gap-2">
-          <div className="flex flex-col gap-1.5">
+        {/* Mobil: datoen tar hele bredden, fra og til deler linja under. Tre
+            felt ved siden av hverandre gjør at «20:00» ikke får plass. */}
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-[1.5fr_1fr_1fr]">
+          <div className="col-span-2 flex flex-col gap-1.5 sm:col-span-1">
             <Label>Date</Label>
             <DatePicker
               value={date}
@@ -325,7 +327,7 @@ export default function EventForm({
                 )
                 .join(", ")}
             </div>
-            <div>Members can join both. Book anyway?</div>
+            <div>Players can join both. Book anyway?</div>
           </div>
         )}
 

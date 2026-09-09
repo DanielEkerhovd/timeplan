@@ -1,5 +1,10 @@
 import { createContext, useContext, useMemo, type ReactNode } from "react";
-import { hoursAhead, viewerZone, zoneSlotLabel } from "./timezone";
+import {
+  hoursAhead,
+  viewerZone,
+  zoneSlotLabel,
+  zoneSlotShort,
+} from "./timezone";
 
 /**
  * Hvilken tid klokkeslettene skal vises i.
@@ -18,6 +23,8 @@ interface Zone {
   yourZone: string;
   /** '13:00 - 16:00', med dag foran hvis blokka havner på et annet døgn hos deg. */
   label: (start: number, end: number, isoDay?: number) => string;
+  /** Kort form, '18–21'. Brukes der plassen er trang (mobilkortene). */
+  short: (start: number, end: number, isoDay?: number) => string;
 }
 
 const same: Zone = {
@@ -25,6 +32,7 @@ const same: Zone = {
   teamZone: "",
   yourZone: "",
   label: (start, end, isoDay) => zoneSlotLabel(start, end, 0, isoDay),
+  short: (start, end, isoDay) => zoneSlotShort(start, end, 0, isoDay),
 };
 
 const ZoneContext = createContext<Zone>(same);
@@ -49,6 +57,7 @@ export function ZoneProvider({
       teamZone,
       yourZone: mine,
       label: (start, end, isoDay) => zoneSlotLabel(start, end, diff, isoDay),
+      short: (start, end, isoDay) => zoneSlotShort(start, end, diff, isoDay),
     };
   }, [teamZone, yourZone, at]);
 

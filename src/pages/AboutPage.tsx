@@ -20,11 +20,12 @@ export default function AboutPage() {
   }
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col lg:-mr-8 lg:overflow-y-auto lg:pr-8">
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col lg:-mr-8 lg:overflow-y-auto lg:pr-8">
       <div className="flex w-full max-w-[1240px] flex-col gap-5">
         {/* Toppen: merket stort én gang, med det appen faktisk gjør ved siden av. */}
         <section className="flex flex-col gap-6 rounded-[20px] bg-surface p-6 shadow-card sm:p-8 lg:flex-row lg:items-center lg:gap-10">
-          <div className="flex items-center gap-4">
+          {/* Wrap: se Login — navnet faller under merket på de smaleste skjermene. */}
+          <div className="flex flex-wrap items-center gap-4">
             <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-[20px] bg-ink text-bg">
               <svg
                 width="34"
@@ -39,7 +40,7 @@ export default function AboutPage() {
                 <path d="M44 22a15 15 0 1 0 3 10h-11" />
               </svg>
             </div>
-            <div className="flex flex-col leading-tight">
+            <div className="flex min-w-0 flex-col leading-tight">
               <Eyebrow>About</Eyebrow>
               <h1 className="text-[30px] font-extrabold tracking-tight">
                 Gatherapp.gg

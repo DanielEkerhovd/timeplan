@@ -87,7 +87,7 @@ export default function PlayersPage({ team, week, onTeamsChanged }: Props) {
   if (!members || !user) return <Spinner />;
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-5 lg:-mr-8 lg:overflow-y-auto lg:pr-8">
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-5 lg:-mr-8 lg:overflow-y-auto lg:pr-8">
       <div className="hidden flex-col gap-1 lg:flex">
         <Eyebrow>Members</Eyebrow>
         <h1 className="text-[26px] font-extrabold tracking-tight">
@@ -100,7 +100,7 @@ export default function PlayersPage({ team, week, onTeamsChanged }: Props) {
       <div className="grid gap-5 lg:grid-cols-2 lg:items-stretch">
         <div className="flex flex-col gap-5">
           <TeamStats members={members} />
-          <Card className="flex flex-1 flex-col gap-3">
+          <Card className="flex min-w-0 flex-1 flex-col gap-3">
             <div className="flex items-center justify-between">
               <h2 className="text-[15px] font-extrabold">Members</h2>
             </div>
@@ -233,7 +233,9 @@ function MemberRow({
         </span>
       </div>
       {confirm === null && (
-        <div className="flex items-center gap-1.5">
+        // På mobil får kontrollene sin egen linje under navnet: rolle, tilgang og
+        // fjern-knapp får ikke plass ved siden av et navn på 390 piksler.
+        <div className="flex w-full flex-wrap items-center justify-end gap-1 sm:w-auto sm:flex-nowrap sm:gap-1.5">
           {/* Column 1: the role from the team's own list. Same slot on every row. */}
           {showRoles && (
             <Dropdown
@@ -247,7 +249,7 @@ function MemberRow({
               aria-label="Role"
               look="pill"
               placeholder="Role …"
-              className={`w-[126px] ${roleEditable ? "" : "pointer-events-none invisible"}`}
+              className={`w-[100px] sm:w-[126px] ${roleEditable ? "" : "pointer-events-none invisible"}`}
             />
           )}
 
@@ -265,7 +267,7 @@ function MemberRow({
                 aria-checked={m.role === r}
                 disabled={busy || m.role === r}
                 onClick={() => onSetAccess(r)}
-                className={`h-7 rounded-full px-3 text-xs font-bold transition ${
+                className={`h-7 rounded-full px-2.5 text-xs font-bold transition sm:px-3 ${
                   m.role === r ? "bg-ink text-on-ink" : "text-muted hover:text-ink"
                 }`}
               >
@@ -432,7 +434,7 @@ export function InviteCardView({ invites, days, uses, busy, onDays, onUses, onCr
   const [first, ...rest] = active;
 
   return (
-    <Card className="flex flex-col gap-3.5">
+    <Card className="flex min-w-0 flex-col gap-3.5">
       <div className="flex flex-col gap-0.5">
         <h2 className="text-[15px] font-extrabold">Invite members</h2>
         <p className="text-[13px] leading-relaxed text-muted">
@@ -449,13 +451,15 @@ export function InviteCardView({ invites, days, uses, busy, onDays, onUses, onCr
         </div>
       ) : (
         <div className="flex flex-col gap-2.5 rounded-2xl bg-bg p-3.5">
-          <div className="flex items-center gap-2">
-            <div className="flex h-11 min-w-0 flex-1 items-center rounded-xl bg-surface px-3.5 shadow-[inset_0_0_0_1.5px_var(--color-line)]">
+          {/* Mobil: lenka tar hele linja, knappen ligger under. Ved siden av
+              hverandre blir lenka en stump du ikke kan lese. */}
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex h-11 w-full min-w-0 flex-1 basis-full items-center rounded-xl bg-surface px-3.5 shadow-[inset_0_0_0_1.5px_var(--color-line)] sm:w-auto sm:basis-auto">
               <span className="truncate text-[13px] font-semibold text-muted">
                 {inviteLink(first.code)}
               </span>
             </div>
-            <Button className="h-11 shrink-0 px-4 sm:px-5" onClick={() => onCopyLink(first.code)}>
+            <Button className="h-11 w-full shrink-0 px-4 sm:w-auto sm:px-5" onClick={() => onCopyLink(first.code)}>
               Copy link
             </Button>
           </div>
@@ -550,7 +554,7 @@ function TeamStats({ members }: { members: MemberWithProfile[] }) {
     </div>
   );
   return (
-    <Card className="flex flex-col gap-3.5">
+    <Card className="flex min-w-0 flex-col gap-3.5">
       <div className="flex items-center justify-between gap-4">
         <div className="flex items-baseline gap-1.5">
           <span className="text-[26px] font-extrabold leading-none tracking-tight">

@@ -427,9 +427,11 @@ export default function PlayerWeek({ team, userId, members, week }: Props) {
                   </span>
                 ) : (
                   <div
-                    className="grid flex-1 gap-2"
+                    className="grid flex-1 gap-1.5"
                     style={{
-                      gridTemplateColumns: `repeat(${Math.min(daySlots.length, 3)}, minmax(0, 1fr))`,
+                      // Korte etiketter tar mindre plass, så fire bolker får plass
+                      // på én linje i stedet for å brekke til en halvtom rad.
+                      gridTemplateColumns: `repeat(${Math.min(daySlots.length, 4)}, minmax(0, 1fr))`,
                     }}
                   >
                     {daySlots.map((slot) =>
@@ -486,13 +488,18 @@ export default function PlayerWeek({ team, userId, members, week }: Props) {
           aria-pressed={on}
           disabled={lock !== null}
           data-saving={isPending || undefined}
-          className={`flex h-18 flex-col items-center justify-center gap-1 rounded-xl border-[1.5px] text-[13px] font-bold leading-none tracking-tight transition disabled:opacity-60 ${
+          className={`flex flex-col items-center justify-center gap-1 rounded-xl border-[1.5px] font-bold leading-none tracking-tight transition disabled:opacity-60 ${
             on
               ? "border-green bg-green-soft text-green-ink"
               : "border-line bg-surface text-ink hover:border-faint"
-          } ${compact ? "whitespace-nowrap text-[11px]" : ""} ${lock ? "cursor-default opacity-60" : ""}`}
+          } ${compact ? "h-14 whitespace-nowrap px-1 text-[12px]" : "h-18 text-[13px]"} ${lock ? "cursor-default opacity-60" : ""}`}
         >
-          <span>{zone.label(slot.start_hour, slot.end_hour, day.isoDay)}</span>
+          {/* På mobil er '18:00 - 21:00' bredere enn knappen. Da står '18–21'. */}
+          <span>
+            {compact
+              ? zone.short(slot.start_hour, slot.end_hour, day.isoDay)
+              : zone.label(slot.start_hour, slot.end_hour, day.isoDay)}
+          </span>
           <DotRow can={can} dim={!on} />
         </button>
       </WhoHover>

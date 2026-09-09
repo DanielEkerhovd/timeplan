@@ -131,6 +131,32 @@ export function zoneHourLabel(hour: number, diff: number): string {
 }
 
 /**
+ * Samme etikett, men kort: '13–17'. Til mobilkortene, der '13:00 - 17:00' er
+ * bredere enn knappen og teksten havner oppå kanten. Halve timer beholder
+ * minuttene, så 13:30 blir '13:30'.
+ */
+export function zoneSlotShort(start: number, end: number, diff: number, isoDay?: number): string {
+  const cut = (h: number) => zoneHourLabel(h, diff).replace(/:00$/, '');
+  const text = `${cut(start)}–${cut(end)}`;
+  if (diff === 0) return text;
+
+  const shiftStart = zoneDayShift(start, diff);
+  const shiftEnd = zoneDayShift(end - 1, diff);
+
+  let out = text;
+  if (shiftEnd !== shiftStart) out += ' +1';
+  if (shiftStart !== 0) {
+    const tag = isoDay
+      ? DAY_SHORT[(((isoDay - 1 + shiftStart) % 7) + 7) % 7]
+      : shiftStart > 0
+        ? 'next day'
+        : 'day before';
+    out = `${tag} ${out}`;
+  }
+  return out;
+}
+
+/**
  * '13:00 - 17:00' i din tid. Havner blokka på et annet døgn enn lagets, står dagen foran
  * ('Tue 03:00 - 07:00'), og krysser den midnatt hos deg, får slutten et '+1'.
  * isoDay er lagets dag, 1 = mandag.

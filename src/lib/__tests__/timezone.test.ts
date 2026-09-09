@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { hoursAhead, yourTime, zoneHour, zoneNote, zoneOffsetMinutes, zoneSlotLabel } from '../timezone'
+import { hoursAhead, yourTime, zoneHour, zoneNote, zoneOffsetMinutes, zoneSlotLabel, zoneSlotShort } from '../timezone'
 
 const winter = new Date('2026-01-12T12:00:00Z')
 const summer = new Date('2026-07-13T12:00:00Z')
@@ -58,6 +58,21 @@ describe('zoneNote', () => {
     expect(zoneNote('Europe/London', winter, 'Europe/Oslo')).toBe(
       'Times are in Europe/London, 1 hour behind you — 20:00 here is 21:00 for you.',
     )
+  })
+})
+
+describe('zoneSlotShort', () => {
+  it('dropper minuttene når de er null', () => {
+    expect(zoneSlotShort(19, 22, 0, 1)).toBe('19–22')
+    expect(zoneSlotShort(9, 12, 0, 1)).toBe('09–12')
+  })
+  it('beholder minuttene når sonen skyver en halv time', () => {
+    // 19:00 hos laget er 14:30 i India (5,5 timer bak).
+    expect(zoneSlotShort(19, 22, 5.5, 1)).toBe('13:30–16:30')
+  })
+  it('tar med dagen og +1 som den lange etiketten', () => {
+    expect(zoneSlotShort(20, 23, -8, 1)).toBe('Tue 04–07')
+    expect(zoneSlotShort(18, 22, -5, 1)).toBe('23–03 +1')
   })
 })
 

@@ -29,11 +29,13 @@ export default function Login() {
     <main className="flex min-h-dvh flex-col">
       <div className="mx-auto flex w-full max-w-[1120px] flex-1 flex-col items-center gap-12 px-6 py-14 lg:flex-row lg:items-center lg:gap-16 lg:py-16">
         <div className="flex w-full max-w-[520px] flex-col gap-7">
-          <div className="flex items-center gap-4">
+          {/* Wrap: på de smaleste telefonene faller navnet under merket i stedet
+              for å skyve siden bredere enn skjermen. */}
+          <div className="flex flex-wrap items-center gap-4">
             <span className="flex h-16 w-16 shrink-0 items-center justify-center rounded-[20px] bg-ink text-bg shadow-card">
               <Mark />
             </span>
-            <div className="flex flex-col leading-tight">
+            <div className="flex min-w-0 flex-col leading-tight">
               <span className="text-[30px] font-extrabold tracking-tight">Gatherapp.gg</span>
               <span className="text-[14px] font-semibold text-muted">Planning tool for teams and groups</span>
             </div>
