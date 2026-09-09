@@ -37,6 +37,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // Stien må stå i Supabase sin Redirect URL-liste, ellers havner du på Site URL.
         redirectTo: `${window.location.origin}${next ?? '/'}`,
         scopes: 'identify',
+        // Uten denne spør Discord om godkjenning hver eneste gang, også når du
+        // har sagt ja for lenge siden. 'none' hopper over skjermen når du
+        // allerede har godkjent akkurat disse tilgangene; har du ikke det, viser
+        // Discord den som før. Så førstegangsbrukere merker ingen forskjell.
+        queryParams: { prompt: 'none' },
       },
     })
     if (error) throw error
