@@ -10,7 +10,7 @@ export const config = { runtime: 'edge' }
 import { botMember, canManageRole, discord, DiscordError, explain, has, P } from '../_lib/discord'
 import type { Role } from '../_lib/discord'
 import { guard, HttpError, json } from '../_lib/env'
-import { db, log, requireOwner } from '../_lib/supabase'
+import { db, log, requireOwner, throttle } from '../_lib/supabase'
 import type { DiscordLink } from '../_lib/supabase'
 
 const GATHER_GREEN = 0x3e9a63
@@ -34,12 +34,41 @@ export default function handler(req: Request): Promise<Response> {
     }
     if (req.method !== 'POST') throw new HttpError(405, 'method not allowed')
 
-    const body = (await req.json().catch(() => ({}))) as { action?: string; name?: string }
-    if (body.action === 'create') return json(await createManaged(teamId, link, body.name))
+    const body = (await req.json().catch(() => ({}))) as { action?: string; name?: string; mode?: string; role_id?: string | null }
+    if (body.action === 'pick') return json(await pick(teamId, link, body.mode, body.role_id))
+    if (body.action === 'create') {
+      await throttle(teamId, 5)
+      return json(await createManaged(teamId, link, body.name))
+    }
     if (body.action === 'rename') return json(await renameManaged(teamId, link, body.name ?? ''))
     if (body.action === 'sync') return json(await sync(teamId, link))
     throw new HttpError(400, 'unknown action')
   })
+}
+
+/**
+ * Who the week post pings: everyone with a Discord account, or a role. A role
+ * the owner picks must exist in the linked server and be one the server made,
+ * not an integration's and not @everyone. It is never "ours": managed_role is
+ * cleared, so sync/rename/disconnect leave it alone.
+ */
+async function pick(teamId: string, link: DiscordLink, mode?: string, roleId?: string | null) {
+  if (mode === 'members') {
+    await db.update('discord_links', { team_id: `eq.${teamId}` }, { ping_mode: 'members', ping_role_id: null, managed_role: false })
+    return { ok: true }
+  }
+  if (mode !== 'role') throw new HttpError(400, 'unknown ping mode')
+  const id = String(roleId ?? '')
+  if (!/^[0-9]{5,25}$/.test(id)) throw new HttpError(400, 'bad role id')
+  if (id === link.guild_id) throw new HttpError(409, 'That would ping the whole server.')
+  const roles = await discord<Role[]>('GET', `/guilds/${link.guild_id}/roles`)
+  const role = roles.find((r) => r.id === id)
+  if (!role) throw new HttpError(409, 'That role is not on the connected server.')
+  if (role.managed) throw new HttpError(409, 'That role belongs to an integration and cannot be picked.')
+  // Picking the role the bot made keeps it managed; anything else is the server's own.
+  const managed = Boolean(link.managed_role && link.ping_role_id === id)
+  await db.update('discord_links', { team_id: `eq.${teamId}` }, { ping_mode: 'role', ping_role_id: id, managed_role: managed })
+  return { ok: true, role: { id: role.id, name: role.name } }
 }
 
 async function createManaged(teamId: string, link: DiscordLink, wanted?: string) {

@@ -27,8 +27,11 @@ function url(path: string, query?: Query): string {
 
 async function read<T>(res: Response, what: string): Promise<T> {
   if (!res.ok) {
+    // The body names tables, columns and constraints. That goes to the log, not
+    // to the caller; they get the status and a plain sentence.
     const body = await res.text().catch(() => '')
-    throw new HttpError(res.status >= 500 ? 502 : res.status, `${what}: ${res.status} ${body.slice(0, 200)}`)
+    console.error(`[db] ${what}: ${res.status} ${body.slice(0, 500)}`)
+    throw new HttpError(res.status >= 500 ? 502 : res.status, res.status === 409 ? 'That is already in use.' : 'The database did not accept that.')
   }
   if (res.status === 204) return undefined as T
   return (await res.json()) as T
@@ -150,4 +153,15 @@ export async function log(teamId: string, kind: 'week_post' | 'update' | 'remind
   } catch (err) {
     console.error('discord_log', err)
   }
+}
+
+/**
+ * A brake on the buttons in Settings. Every team shares one bot token, so one
+ * owner hammering "post now" could get Discord to rate-limit everyone. More
+ * than `max` manual actions in the last minute, and the next one waits.
+ */
+export async function throttle(teamId: string, max = 12): Promise<void> {
+  const since = new Date(Date.now() - 60_000).toISOString()
+  const rows = await db.select<{ id: number }>('discord_log', { select: 'id', team_id: `eq.${teamId}`, at: `gte.${since}`, limit: String(max + 1) })
+  if (rows.length > max) throw new HttpError(429, 'Slow down: give the bot a minute before the next test.')
 }

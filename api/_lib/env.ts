@@ -49,8 +49,9 @@ export async function guard(fn: () => Promise<Response>): Promise<Response> {
     return await fn()
   } catch (err) {
     if (err instanceof HttpError) return json({ error: err.message }, err.status)
-    const message = err instanceof Error ? err.message : 'unknown error'
+    // Unexpected: the details (which env var is missing, what Discord said) go
+    // to the log. The caller learns only that it was on our side.
     console.error(err)
-    return json({ error: message }, 500)
+    return json({ error: 'Something went wrong on our side. Try again in a moment.' }, 500)
   }
 }

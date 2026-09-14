@@ -1047,7 +1047,7 @@ function PingCard({ team, state, run }: { team: MyTeam; state: DiscordState; run
     </Card>
   );
 }
-
+ ''
 const DOW_OPTIONS: DropdownOption<number>[] = DOW_LABELS.map((label, i) => ({ value: i + 1, label }));
 const TIME_OPTIONS: DropdownOption<string>[] = Array.from({ length: 48 }, (_, i) => {
   const h = String(Math.floor(i / 2)).padStart(2, "0");

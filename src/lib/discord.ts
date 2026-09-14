@@ -90,24 +90,6 @@ export async function fetchDiscordState(teamId: string): Promise<DiscordState> {
 
 // --- Straight to the tables (RLS: owner) ---------------------------------------
 
-export async function setChannel(teamId: string, kind: ChannelKind, channelId: string | null) {
-  if (channelId) {
-    const { error } = await supabase.from("discord_channels").upsert({ team_id: teamId, kind, channel_id: channelId }, { onConflict: "team_id,kind" });
-    if (error) throw error;
-  } else {
-    const { error } = await supabase.from("discord_channels").delete().eq("team_id", teamId).eq("kind", kind);
-    if (error) throw error;
-  }
-}
-
-export async function setPing(teamId: string, mode: "members" | "role", roleId: string | null) {
-  const { error } = await supabase
-    .from("discord_links")
-    .update({ ping_mode: mode, ping_role_id: mode === "role" ? roleId : null })
-    .eq("team_id", teamId);
-  if (error) throw error;
-}
-
 export async function updateSchedule(teamId: string, patch: Partial<Omit<DiscordSchedule, "team_id">>) {
   const { error } = await supabase.from("discord_schedules").update(patch).eq("team_id", teamId);
   if (error) throw error;
@@ -139,6 +121,25 @@ export async function startConnect(teamId: string) {
 
 export function fetchChannels(teamId: string) {
   return api<{ guild: { id: string; name: string | null }; channels: PickerChannel[] }>(`/api/discord/channels?team=${teamId}`);
+}
+
+/**
+ * Point a message type at a channel, or clear it (not the week plan). The
+ * server checks the channel is really in the connected server before saving.
+ */
+export async function setChannel(teamId: string, kind: ChannelKind, channelId: string | null) {
+  await api<{ ok: true }>(`/api/discord/channels?team=${teamId}`, {
+    method: "POST",
+    body: JSON.stringify({ action: "set", kind, channel_id: channelId }),
+  });
+}
+
+/** Who gets pinged. A role is checked against the server before it is saved. */
+export async function setPing(teamId: string, mode: "members" | "role", roleId: string | null) {
+  await api<{ ok: true }>(`/api/discord/roles?team=${teamId}`, {
+    method: "POST",
+    body: JSON.stringify({ action: "pick", mode, role_id: mode === "role" ? roleId : null }),
+  });
 }
 
 /** Makes a text channel on the server. Needs Manage Channels on the bot. */

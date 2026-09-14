@@ -693,28 +693,50 @@ insert into public.discord_schedules (team_id) values (:'team_a'), (:'team_b');
 insert into public.discord_log (team_id, kind, summary, ok) values (:'team_a', 'link', 'Koblet til Playwell', true);
 reset role;
 
--- Eier velger kanaler. Medlem og admin får ikke.
+-- Kanaler og ping settes av serveren (0021): den sjekker hos Discord at kanalen
+-- og rolla faktisk hører til serveren laget er koblet til. Eieren får ikke
+-- skrive dem rett i tabellen lenger; tidene sine endrer eieren selv.
 select pg_temp.become(:'eier_a');
 set local role authenticated;
-select pg_temp.expect_ok('eier kobler ukeplan-kanal',
+select pg_temp.expect_denied('eier kan ikke koble kanal rett i tabellen (0021)',
   format('insert into public.discord_channels (team_id, kind, channel_id) values (%L, ''schedule'', ''800000000000000001'')', :'team_a'));
-select pg_temp.expect_ok('eier kobler oppdateringskanal',
+select pg_temp.expect_denied('eier kan ikke sette ping rett i tabellen (0021)',
+  format('update public.discord_links set ping_mode = ''role'', ping_role_id = ''700000000000000001'' where team_id = %L', :'team_a'));
+select pg_temp.expect_ok('eier endrer posttid',
+  format('update public.discord_schedules set post_dow = 1, post_at = ''09:00'' where team_id = %L', :'team_a'));
+select pg_temp.expect_denied('posttid utenfor uka avvises',
+  format('update public.discord_schedules set post_dow = 8 where team_id = %L', :'team_a'));
+select pg_temp.expect_denied('eier kan ikke bytte server selv',
+  format('update public.discord_links set guild_id = ''900000000000000002'' where team_id = %L', :'team_a'));
+select pg_temp.expect_count('eier ser loggen til laget', format('select * from public.discord_log where team_id = %L', :'team_a'), 1);
+reset role;
+
+set local role service_role;
+select pg_temp.expect_ok('serveren kobler ukeplan-kanal',
+  format('insert into public.discord_channels (team_id, kind, channel_id) values (%L, ''schedule'', ''800000000000000001'')', :'team_a'));
+select pg_temp.expect_ok('serveren kobler oppdateringskanal',
   format('insert into public.discord_channels (team_id, kind, channel_id) values (%L, ''updates'', ''800000000000000002'')', :'team_a'));
 select pg_temp.expect_denied('ukjent meldingstype avvises',
   format('insert into public.discord_channels (team_id, kind, channel_id) values (%L, ''memes'', ''800000000000000003'')', :'team_a'));
 select pg_temp.expect_denied('samme kanal kan ikke brukes til to typer',
   format('insert into public.discord_channels (team_id, kind, channel_id) values (%L, ''reminders'', ''800000000000000001'')', :'team_a'));
-select pg_temp.expect_ok('eier velger rolle-ping',
-  format('update public.discord_links set ping_mode = ''role'', ping_role_id = ''700000000000000001'' where team_id = %L', :'team_a'));
+select pg_temp.expect_denied('lag B kan ikke få kanalen lag A alt bruker',
+  format('insert into public.discord_channels (team_id, kind, channel_id) values (%L, ''schedule'', ''800000000000000001'')', :'team_b'));
+select pg_temp.expect_ok('lag B får sin egen kanal',
+  format('insert into public.discord_channels (team_id, kind, channel_id) values (%L, ''schedule'', ''800000000000000009'')', :'team_b'));
 select pg_temp.expect_denied('rolle-ping uten rolle avvises',
   format('update public.discord_links set ping_mode = ''role'', ping_role_id = null where team_id = %L', :'team_a'));
-select pg_temp.expect_ok('eier endrer posttid',
-  format('update public.discord_schedules set post_dow = 1, post_at = ''09:00'' where team_id = %L', :'team_a'));
-select pg_temp.expect_denied('posttid utenfor uka avvises',
-  format('update public.discord_schedules set post_dow = 8 where team_id = %L', :'team_a'));
-select pg_temp.expect_denied('eier kan ikke bytte server selv (kolonnen er ikke gitt)',
-  format('update public.discord_links set guild_id = ''900000000000000002'' where team_id = %L', :'team_a'));
-select pg_temp.expect_count('eier ser loggen til laget', format('select * from public.discord_log where team_id = %L', :'team_a'), 1);
+-- Rolla boten lagde er "vår" bare så lenge det er den som står der.
+select pg_temp.expect_ok('serveren lager rolle og merker den som sin',
+  format('update public.discord_links set ping_mode = ''role'', ping_role_id = ''700000000000000001'', managed_role = true where team_id = %L', :'team_a'));
+select pg_temp.expect_count('managed_role står',
+  format('select 1 from public.discord_links where team_id = %L and managed_role', :'team_a'), 1);
+select pg_temp.expect_ok('en annen rolle-id settes inn',
+  format('update public.discord_links set ping_role_id = ''700000000000000002'' where team_id = %L', :'team_a'));
+select pg_temp.expect_count('da er rolla ikke vår lenger (0021)',
+  format('select 1 from public.discord_links where team_id = %L and not managed_role', :'team_a'), 1);
+select pg_temp.expect_ok('tilbake til alle',
+  format('update public.discord_links set ping_mode = ''members'', ping_role_id = null where team_id = %L', :'team_a'));
 reset role;
 
 select pg_temp.become(:'trener_a');
@@ -722,22 +744,14 @@ set local role authenticated;
 select pg_temp.expect_count('admin ser kanalene', format('select * from public.discord_channels where team_id = %L', :'team_a'), 2);
 select pg_temp.expect_denied('admin kan ikke koble kanal',
   format('insert into public.discord_channels (team_id, kind, channel_id) values (%L, ''reminders'', ''800000000000000003'')', :'team_a'));
-select pg_temp.expect_ok('admin sitt forsøk på å endre ping treffer ingen rader',
-  format('update public.discord_links set ping_mode = ''members'' where team_id = %L', :'team_a'));
-select pg_temp.expect_count('ping er urørt etter admin',
-  format('select 1 from public.discord_links where team_id = %L and ping_mode = ''role''', :'team_a'), 1);
 reset role;
 
--- Lag B deler server med lag A, men ser ingenting av lag A og får ikke kanalen.
+-- Lag B deler server med lag A, men ser ingenting av lag A.
 select pg_temp.become(:'fremmed_b');
 set local role authenticated;
 select pg_temp.expect_count('fremmed ser ikke lag A sin kobling', format('select * from public.discord_links where team_id = %L', :'team_a'), 0);
 select pg_temp.expect_count('fremmed ser ikke lag A sine kanaler', format('select * from public.discord_channels where team_id = %L', :'team_a'), 0);
 select pg_temp.expect_count('fremmed ser ikke lag A sin logg', format('select * from public.discord_log where team_id = %L', :'team_a'), 0);
-select pg_temp.expect_denied('lag B kan ikke ta kanalen lag A alt bruker',
-  format('insert into public.discord_channels (team_id, kind, channel_id) values (%L, ''schedule'', ''800000000000000001'')', :'team_b'));
-select pg_temp.expect_ok('lag B kobler sin egen kanal',
-  format('insert into public.discord_channels (team_id, kind, channel_id) values (%L, ''schedule'', ''800000000000000009'')', :'team_b'));
 reset role;
 
 -- bot_week: bare det som er booket, med discord_id på folk. Serveren har lov, ingen andre.

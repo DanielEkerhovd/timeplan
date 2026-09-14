@@ -3,7 +3,7 @@
 // 0019/0020) with a two-minute wait so a burst of edits becomes one card; the
 // cron drains the queue here.
 
-import { discord, DiscordError, explain } from './discord'
+import { channelInGuild, discord, DiscordError, explain } from './discord'
 import { db, log } from './supabase'
 import type { DiscordChannel, DiscordLink, DiscordSchedule } from './supabase'
 import { buildNewSessionsCard, buildUpdateCard, forPeople, forRole, silent, title } from './updateCard'
@@ -52,6 +52,11 @@ async function teamCtx(teamId: string): Promise<TeamCtx | null> {
     updatesChannel(teamId),
   ])
   if (!link || !schedule || !team || !channel) return null
+  // One check per team per run: the channel must be in the linked server.
+  if (!(await channelInGuild(channel, link.guild_id))) {
+    await log(teamId, 'update', 'The updates channel is not in the connected server. Pick it again in Settings.', false)
+    return null
+  }
   return { link, schedule, timezone: team.timezone, name: team.name, channel }
 }
 
@@ -108,8 +113,15 @@ async function deliver(ctx: TeamCtx, card: Record<string, unknown>, audience: Au
 const KIND_LABEL = { new: 'New', changed: 'Changed', cancelled: 'Cancelled' } as const
 
 async function fail(row: OutboxRow, err: unknown): Promise<string> {
-  const attempts = row.attempts + 1
   const reason = explain(err)
+  // Rate-limited by Discord: not this row's fault, and not an attempt. Wait a
+  // minute and try again, so a noisy team cannot get another team's
+  // messages dropped.
+  if (err instanceof DiscordError && err.status === 429) {
+    await db.update('discord_outbox', { id: `eq.${row.id}` }, { last_error: reason.slice(0, 500), send_after: new Date(Date.now() + 60_000).toISOString() })
+    return 'rate limited'
+  }
+  const attempts = row.attempts + 1
   await db.update('discord_outbox', { id: `eq.${row.id}` }, {
     attempts,
     last_error: reason.slice(0, 500),

@@ -139,6 +139,17 @@ Uten den kommer ukeposten bare når noen trykker «Post this week now». Vercel 
 - Tilgjengelighet (hvem som er ledig når) finnes ikke i noe boten gjør. `bot_week()` gir bare det som er booket. Det er en beslutning.
 - Sikkerhetstestene dekker de nye tabellene (bare eier skriver innstillinger, ingen klient skriver ukepost eller logg, to lag kan ikke dele kanal, `bot_week` er bare for serveren). `src/lib/__tests__/discordApi.test.ts` tester signatursjekken, install-state, lagets klokke og selve meldinga.
 
+### Sikkerhetsgjennomgang av boten (0021)
+
+En egen gjennomgang med angriper-briller (uten konto, vanlig medlem, eier av lag A mot lag B, en Discord-bruker med knapper) fant to reelle hull, begge tettet i `0021_discord_hardening.sql` og koden rundt:
+
+- **Kanal-id ble aldri sjekket mot serveren.** Eieren skrev `channel_id` rett i tabellen; regexen sa bare "ser ut som en id". En eier kunne peke laget sitt mot en kanal i en helt annen server boten står i. Nå går kanalvalg gjennom `POST /api/discord/channels {action:'set'}`, som spør Discord om kanalen og krever at den ligger i lagets server og er en tekstkanal. Klienten har ikke lenger skrivetilgang til `discord_channels`. I tillegg sjekkes kanalen én gang til rett før en ny ukepost og før endringsmeldinger sendes.
+- **Rolle-id var eier-skrivbar mens `managed_role` sto.** Da kunne "synk rolla" dele ut en vilkårlig rolle (også en annen lags, eller en med rettigheter) til hele laget, og "koble fra" slette den. Nå går rollevalg gjennom `POST /api/discord/roles {action:'pick'}`, som krever at rolla finnes i serveren og ikke er en integrasjonsrolle. En trigger nuller `managed_role` hvis rolle-id-en byttes uten at serveren setter flagget i samme setning. Klienten har ikke lenger skrivetilgang til `discord_links`.
+
+Mindre ting fra samme runde: en brems per lag på knappene i innstillingene (maks 12 handlinger i minuttet, 5 for å lage kanal/rolle), så én eier ikke kan få Discord til å strupe bot-tokenet for alle; 429 fra Discord teller ikke som et forsøk i utboksen; interaksjoner eldre enn fem minutter avvises selv med gyldig signatur; feilmeldinger fra databasen og uventede feil går til loggen, ikke til klienten.
+
+Det som ble sjekket og var i orden: eier-sjekk på hvert endepunkt med lagets id fra forespørselen; ingen filter-injeksjon i PostgREST (alle verdier er regex-sjekket, signerte eller lest fra databasen under constraint); ingen bruker-styrte URL-er mot Discord; OAuth-state med HMAC, utløp og konto-match; cron-hemmelighet i header med konstant-tids sammenlikning; ingen hemmeligheter i svar eller logg; ingen CORS, ingen cookies.
+
 ## Sikkerhetstestene
 
 `supabase/tests/security.sql` er et testskript med fire brukere (eier, trener, spiller og en fremmed fra et annet lag) som prøver alt de ikke skal få lov til, mot hver tabell og hver funksjon. Nesten 150 sjekker. Alt kjøres i én transaksjon som rulles tilbake, så databasen er uendret etterpå.

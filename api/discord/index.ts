@@ -68,6 +68,11 @@ export default async function handler(req: Request, ctx?: EdgeContext): Promise<
   if (!(await verifyDiscordSignature(env.publicKey(), signature, timestamp, raw))) {
     return new Response('invalid request signature', { status: 401 })
   }
+  // A signed request is valid forever unless the clock is checked. Five
+  // minutes covers Discord's retries; a replay from an old log does not get in.
+  if (Math.abs(Date.now() / 1000 - Number(timestamp)) > 300) {
+    return new Response('stale request', { status: 401 })
+  }
 
   let it: Interaction
   try {

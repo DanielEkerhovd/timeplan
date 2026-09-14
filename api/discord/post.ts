@@ -5,7 +5,7 @@ export const config = { runtime: 'edge' }
 
 import { discord, explain } from '../_lib/discord'
 import { env, guard, HttpError, json } from '../_lib/env'
-import { db, log, requireOwner } from '../_lib/supabase'
+import { db, log, requireOwner, throttle } from '../_lib/supabase'
 import type { DiscordChannel, DiscordLink, DiscordSchedule, WeekPost } from '../_lib/supabase'
 import { addDays, localNow, mondayOf } from '../_lib/time'
 import { buildWeekMessage, COMPONENTS_V2, ensureWeekPost, fetchBotWeek } from '../_lib/week'
@@ -20,6 +20,7 @@ export default function handler(req: Request): Promise<Response> {
     const user = await requireOwner(req, teamId)
     const link = await db.one<DiscordLink>('discord_links', { team_id: `eq.${teamId}` })
     if (!link) throw new HttpError(409, 'not connected')
+    if (body.action !== 'disconnect') await throttle(teamId)
 
     if (body.action === 'test') return json(await test(teamId))
     if (body.action === 'test_dm') return json(await testDm(teamId, user.id, link))
@@ -128,6 +129,7 @@ async function flush(teamId: string) {
   const updates = await drainOutbox(20, teamId)
   const sent = Object.values(updates).filter((v) => v === 'sent').length
   const errors = Object.values(updates).filter((v) => v.startsWith('error')).length
+  await log(teamId, 'test', `Sent what was waiting: week ${week}, ${sent} sent, ${errors} failed`, errors === 0)
   return { week, sent, errors, detail: updates }
 }
 
@@ -228,7 +230,10 @@ async function postNow(teamId: string, which: 'this' | 'next') {
   const today = localNow(team.timezone).dateKey
   const monday = mondayOf(which === 'next' ? addDays(today, 7) : today)
   try {
-    return await ensureWeekPost(teamId, monday, 'manual')
+    const r = await ensureWeekPost(teamId, monday, 'manual')
+    // "posted" logs itself; the other outcomes leave a row too, so the throttle sees every press.
+    if (r.action !== 'posted') await log(teamId, 'week_post', `Post now: ${r.action}${r.detail ? ` (${r.detail})` : ''}`, r.action !== 'skipped')
+    return r
   } catch (err) {
     throw new HttpError(409, explain(err))
   }

@@ -1,7 +1,7 @@
 // The one living week post per team: post it, keep it current, replace it
 // when the week turns. The message itself is built in message.ts.
 
-import { discord, explain, DiscordError } from './discord'
+import { channelInGuild, discord, explain, DiscordError } from './discord'
 import { env } from './env'
 import { db, log } from './supabase'
 import type { DiscordLink, WeekPost } from './supabase'
@@ -81,6 +81,13 @@ export async function ensureWeekPost(teamId: string, mondayKey: string, reason: 
       // Someone deleted it on Discord. Fall through and post again.
       await db.remove('discord_week_post', { team_id: `eq.${teamId}` })
     }
+  }
+
+  // Before a fresh post: the channel must be in the linked server. The row was
+  // checked when it was saved; this covers a link that has since moved.
+  if (!(await channelInGuild(channel.channel_id, link.guild_id))) {
+    await log(teamId, 'week_post', 'The week-plan channel is not in the connected server. Pick it again in Settings.', false)
+    return { action: 'skipped', detail: 'channel not in guild' }
   }
 
   const msg = buildWeekMessage(week, { ping: pingLine(week, link), link, appUrl: env.appUrl() })

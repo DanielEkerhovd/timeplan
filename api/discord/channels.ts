@@ -5,10 +5,10 @@
 
 export const config = { runtime: 'edge' }
 
-import { botMember, channelPermissions, discord, explain, guildPermissions, has, P, postableChannels } from '../_lib/discord'
+import { botMember, channelInGuild, channelPermissions, discord, explain, guildPermissions, has, P, postableChannels } from '../_lib/discord'
 import type { Channel, Role } from '../_lib/discord'
 import { guard, HttpError, json } from '../_lib/env'
-import { db, requireOwner } from '../_lib/supabase'
+import { db, log, requireOwner, throttle } from '../_lib/supabase'
 import type { DiscordChannel, DiscordLink } from '../_lib/supabase'
 
 export interface PickerChannel {
@@ -35,9 +35,36 @@ export default function handler(req: Request): Promise<Response> {
     if (!me) throw new HttpError(409, 'The bot is no longer in the server. Connect again.')
 
     if (req.method === 'POST') {
+      const body = (await req.json().catch(() => ({}))) as { action?: string; name?: string; kind?: string; channel_id?: string | null }
+
+      // Point a message type at a channel. The id is checked against Discord
+      // before it is saved: it must be a text channel in the linked server,
+      // not merely something that looks like a channel id.
+      if (body.action === 'set') {
+        const kind = body.kind
+        if (kind !== 'schedule' && kind !== 'updates' && kind !== 'reminders') throw new HttpError(400, 'unknown kind')
+        if (body.channel_id === null || body.channel_id === undefined || body.channel_id === '') {
+          if (kind === 'schedule') throw new HttpError(400, 'The week plan needs a channel.')
+          await db.remove('discord_channels', { team_id: `eq.${teamId}`, kind: `eq.${kind}` })
+          return json({ ok: true })
+        }
+        const id = String(body.channel_id)
+        if (!/^[0-9]{5,25}$/.test(id)) throw new HttpError(400, 'bad channel id')
+        const ch = await channelInGuild(id, link.guild_id)
+        if (!ch) throw new HttpError(409, 'That channel is not in the connected server.')
+        try {
+          await db.upsert('discord_channels', { team_id: teamId, kind, channel_id: id }, 'team_id,kind')
+        } catch (err) {
+          // unique (channel_id): another team on the server has it.
+          if (err instanceof HttpError && err.status === 409) throw new HttpError(409, 'Another team already uses that channel.')
+          throw err
+        }
+        return json({ ok: true, name: ch.name })
+      }
+
       // Make a text channel. Needs Manage Channels, which older installs did not
       // ask for; the fix is one more trip through Connect to Discord.
-      const body = (await req.json().catch(() => ({}))) as { name?: string }
+      await throttle(teamId, 5)
       const name = (body.name ?? '')
         .toLowerCase()
         .replace(/[^a-z0-9æøå_-]+/g, '-')
@@ -51,6 +78,7 @@ export default function handler(req: Request): Promise<Response> {
       }
       try {
         const made = await discord<Channel>('POST', `/guilds/${link.guild_id}/channels`, { name, type: 0 })
+        await log(teamId, 'link', `Created #${made.name}`, true)
         return json({ id: made.id, name: made.name })
       } catch (err) {
         throw new HttpError(409, explain(err))

@@ -20,8 +20,7 @@ export async function discord<T>(method: string, path: string, body?: unknown, a
     method,
     headers: {
       Authorization: `Bot ${env.botToken()}`,
-      // Only with a body: Discord rejects an empty body labelled as JSON.
-      ...(body === undefined ? {} : { 'Content-Type': 'application/json' }),
+      'Content-Type': 'application/json',
       'User-Agent': 'Gather (https://www.gatherapp.gg, 1.0)',
     },
     body: body === undefined ? undefined : JSON.stringify(body),
@@ -126,6 +125,24 @@ let botUserId: string | null = null
 export async function botId(): Promise<string> {
   if (!botUserId) botUserId = (await discord<{ id: string }>('GET', '/users/@me')).id
   return botUserId
+}
+
+/**
+ * The channel, if it is a text or announcement channel in that server. Null
+ * for anything else: another server the bot happens to be in, a voice channel,
+ * a DM, a made-up id. Every channel id that came from a person goes through
+ * here before the bot posts to it.
+ */
+export async function channelInGuild(channelId: string, guildId: string): Promise<Channel | null> {
+  try {
+    const ch = await discord<Channel>('GET', `/channels/${channelId}`)
+    if (ch.guild_id !== guildId) return null
+    if (ch.type !== 0 && ch.type !== 5) return null
+    return ch
+  } catch (err) {
+    if (err instanceof DiscordError && (err.status === 404 || err.status === 403)) return null
+    throw err
+  }
 }
 
 /** The bot's own membership in a server, or null when it is not there. */
