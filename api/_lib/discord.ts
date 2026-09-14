@@ -20,7 +20,8 @@ export async function discord<T>(method: string, path: string, body?: unknown, a
     method,
     headers: {
       Authorization: `Bot ${env.botToken()}`,
-      'Content-Type': 'application/json',
+      // Only with a body: Discord rejects an empty body labelled as JSON.
+      ...(body === undefined ? {} : { 'Content-Type': 'application/json' }),
       'User-Agent': 'Gather (https://www.gatherapp.gg, 1.0)',
     },
     body: body === undefined ? undefined : JSON.stringify(body),
@@ -182,6 +183,27 @@ export function topPosition(roles: Role[], member: GuildMember): number {
     if (r && r.position > top) top = r.position
   }
   return top
+}
+
+/**
+ * Is role `a` above role `b` in the server's list, the way Discord decides it?
+ * Higher position wins. Two roles can share a position (a new role is created at
+ * the bottom, next to whatever is already there); then the older role, the one
+ * with the smaller id, ranks higher.
+ */
+export function roleAbove(a: Role, b: Role): boolean {
+  if (a.position !== b.position) return a.position > b.position
+  return BigInt(a.id) < BigInt(b.id)
+}
+
+/** Can this member give out and take away `role`? Discord asks whether the member's highest role is above it. */
+export function canManageRole(roles: Role[], member: GuildMember, role: Role): boolean {
+  let top: Role | null = null
+  for (const id of member.roles) {
+    const r = roles.find((x) => x.id === id)
+    if (r && (!top || roleAbove(r, top))) top = r
+  }
+  return top !== null && roleAbove(top, role)
 }
 
 /** Text channels the bot can post in, sorted the way Discord shows them. */

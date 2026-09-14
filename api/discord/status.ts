@@ -3,7 +3,7 @@
 
 export const config = { runtime: 'edge' }
 
-import { botMember, channelPermissions, discord, DiscordError, has, P, topPosition } from '../_lib/discord'
+import { botMember, canManageRole, channelPermissions, discord, DiscordError, has, P } from '../_lib/discord'
 import type { Channel, Role } from '../_lib/discord'
 import { guard, HttpError, json } from '../_lib/env'
 import { db, requireOwner } from '../_lib/supabase'
@@ -70,11 +70,10 @@ export default function handler(req: Request): Promise<Response> {
       if (!role) {
         checks.push({ ok: false, label: 'The ping role is gone', fix: 'It was deleted on Discord. Pick another role, or switch to pinging members.' })
       } else if (link.managed_role) {
-        const botTop = topPosition(roles, me)
         const all = [link.guild_id, ...me.roles].reduce((acc, id) => acc | BigInt(roles.find((r) => r.id === id)?.permissions ?? '0'), 0n)
         if (!has(all, P.ADMINISTRATOR) && !has(all, P.MANAGE_ROLES)) {
           checks.push({ ok: false, label: `Cannot manage @${role.name}`, fix: 'The bot lost Manage Roles. Give it back in Server Settings → Roles.' })
-        } else if (botTop <= role.position) {
+        } else if (!canManageRole(roles, me, role)) {
           checks.push({ ok: false, label: `The Gather role is below @${role.name} in the role list`, fix: `Drag the Gather role above @${role.name} in Server Settings → Roles, or the bot cannot keep the role in sync.` })
         } else {
           checks.push({ ok: true, label: `Keeps @${role.name} in sync with the team` })

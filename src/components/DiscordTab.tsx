@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { useSearchParams } from "react-router-dom";
 import type { MyTeam } from "../lib/teams";
@@ -104,9 +104,9 @@ export default function DiscordTab({ team }: { team: MyTeam }) {
       {!state.link ? (
         <NotConnected team={team} isOwner={isOwner} onConnect={() => run(() => startConnect(team.id))} error={error} />
       ) : showWizard ? (
-        <Setup team={team} state={state} run={run} error={error} onDone={() => setWizard(false)} />
+        <Setup team={team} state={state} run={run} error={error} clearError={() => setError(null)} onDone={() => { setError(null); setWizard(false); }} />
       ) : (
-        <Connected team={team} state={state} isOwner={isOwner} run={run} error={error} onRerun={() => setWizard(true)} />
+        <Connected team={team} state={state} isOwner={isOwner} run={run} error={error} onRerun={() => { setError(null); setWizard(true); }} />
       )}
     </div>
   );
@@ -180,7 +180,7 @@ type Run = (fn: () => Promise<void>, done?: string) => Promise<boolean>;
 
 const STEPS = ["Connect", "Week plan", "Updates", "Who to ping", "Test"];
 
-function Setup({ team, state, run, error, onDone }: { team: MyTeam; state: DiscordState; run: Run; error: string | null; onDone: () => void }) {
+function Setup({ team, state, run, error, clearError, onDone }: { team: MyTeam; state: DiscordState; run: Run; error: string | null; clearError: () => void; onDone: () => void }) {
   const schedule = state.channels.find((c) => c.kind === "schedule")?.channel_id ?? null;
   const updates = state.channels.find((c) => c.kind === "updates")?.channel_id ?? null;
   // Pick up where they left off: the first question without an answer.
@@ -207,12 +207,23 @@ function Setup({ team, state, run, error, onDone }: { team: MyTeam; state: Disco
     setNewName(step === 2 ? `${slug}-schedule` : step === 3 ? `${slug}-updates` : "");
   }, [step, schedule, updates, slug]);
 
-  /** "new" means make the channel first, then use it. The new channel joins the list so it shows up on the next step. */
+  // An error belongs to the step it happened on. Going back or forward clears it.
+  useEffect(() => {
+    clearError();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step]);
+
+  // A channel made on this step is held here until the step moves on, and
+  // joins the list in the same render as the step change. Adding it straight
+  // away made it flash into the list a frame before the next step appeared.
+  const madeRef = useRef<PickerChannel | null>(null);
+
+  /** "new" means make the channel first, then use it. */
   async function pick(kind: "schedule" | "updates", value: string | null) {
     let id = value;
     if (value === "new") {
       const made = await createChannel(team.id, newName);
-      setPicker((p) => [...(p ?? []), { id: made.id, name: made.name, canPost: true, canPin: true, taken: false, mine: kind }]);
+      madeRef.current = { id: made.id, name: made.name, canPost: true, canPin: true, taken: false, mine: kind };
       id = made.id;
     }
     await setChannel(team.id, kind, id);
@@ -223,6 +234,10 @@ function Setup({ team, state, run, error, onDone }: { team: MyTeam; state: Disco
   async function next(fn: () => Promise<void>) {
     setBusy(true);
     const ok = await run(fn);
+    const made = madeRef.current;
+    madeRef.current = null;
+    // These land in one render: the new channel is in the list only once the next step shows.
+    if (made) setPicker((p) => (p?.some((c) => c.id === made.id) ? p : [...(p ?? []), made]));
     setBusy(false);
     if (ok) setStep((s) => s + 1);
   }
@@ -362,30 +377,36 @@ function ChannelList({
   return (
     <div className="flex flex-col gap-2">
       <div className="flex max-w-[560px] flex-col gap-2">
-        {rows.map((c) => {
-          const off = c.taken || !c.canPost;
-          const on = value === c.id;
-          return (
-            <button
-              key={c.id}
-              type="button"
-              disabled={off}
-              onClick={() => onChange(c.id)}
-              className={`flex h-14 items-center justify-between gap-4 rounded-[14px] border-[1.5px] px-4 text-left transition ${
-                off ? "border-line-soft bg-bg text-faint" : on ? "border-ink bg-surface" : "border-line bg-surface hover:border-faint"
-              }`}
-            >
-              <span className="flex items-center gap-3">
-                <Radio on={on} off={off} />
-                <span className="flex items-center gap-1.5 text-[15px] font-bold">
-                  <Hash />
-                  {c.name}
+        {/* The server's channels scroll inside a box of fixed height, so "create a
+            new channel" and the Continue button stay on screen however many
+            channels the server has. */}
+        <div className="flex max-h-[232px] flex-col gap-1.5 overflow-y-auto overscroll-contain rounded-[14px] bg-bg p-1.5">
+          {rows.length === 0 && <p className="px-3 py-2 text-[13px] text-muted">No channels the bot can post in yet.</p>}
+          {rows.map((c) => {
+            const off = c.taken || !c.canPost;
+            const on = value === c.id;
+            return (
+              <button
+                key={c.id}
+                type="button"
+                disabled={off}
+                onClick={() => onChange(c.id)}
+                className={`flex h-10 shrink-0 items-center justify-between gap-3 rounded-[10px] border-[1.5px] px-3 text-left transition ${
+                  off ? "border-transparent bg-transparent text-faint" : on ? "border-ink bg-surface" : "border-transparent bg-surface hover:border-line"
+                }`}
+              >
+                <span className="flex min-w-0 items-center gap-2.5">
+                  <Radio on={on} off={off} />
+                  <span className="flex min-w-0 items-center gap-1 text-[14px] font-bold">
+                    <Hash />
+                    <span className="truncate">{c.name}</span>
+                  </span>
                 </span>
-              </span>
-              {c.taken ? <Tag>Used by another team</Tag> : !c.canPost ? <Tag>Bot can&rsquo;t post here</Tag> : null}
-            </button>
-          );
-        })}
+                {c.taken ? <Tag>Used by another team</Tag> : !c.canPost ? <Tag>Bot can&rsquo;t post here</Tag> : null}
+              </button>
+            );
+          })}
+        </div>
         {/* Make one instead. The name is prefilled from the team; the bot creates it at the top of the server, and it can be dragged into a category afterwards. */}
         <div className="flex items-center gap-3 py-1">
           <span className="h-px flex-1 bg-line-soft" />
@@ -615,24 +636,15 @@ function Connected({ team, state, isOwner, run, error, onRerun }: { team: MyTeam
 
   return (
     <>
-      <div className="flex flex-col gap-1 px-1">
-        <Eyebrow>Discord</Eyebrow>
-        <h2 className="text-[22px] font-extrabold tracking-tight">The bot is on the team</h2>
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[14px] text-muted">
-          <span>
+      <div className="flex flex-wrap items-end justify-between gap-4 px-1">
+        <div className="flex flex-col gap-1">
+          <Eyebrow>Discord</Eyebrow>
+          <h2 className="text-[22px] font-extrabold tracking-tight">The bot is on the team</h2>
+          <span className="text-[14px] text-muted">
             Connected to <strong className="text-ink">{link.guild_name ?? "Discord"}</strong>
           </span>
-          {isOwner && (
-            <>
-              <span className="text-faint">·</span>
-              <HealthLine health={health} problems={problems.length} />
-              <span className="text-faint">·</span>
-              <button type="button" onClick={health.refresh} className="font-semibold text-muted underline-offset-2 hover:text-ink hover:underline">
-                Check again
-              </button>
-            </>
-          )}
         </div>
+        {isOwner && <HealthBox health={health} problems={problems.length} />}
       </div>
       <ErrorText>{error}</ErrorText>
 
@@ -702,15 +714,30 @@ function useHealth(team: MyTeam, state: DiscordState, isOwner: boolean): Health 
   return { checks, failed, loading, refresh: () => setTick((t) => t + 1) };
 }
 
-/** One line: a dot and a verdict. Green when every check passes. */
-function HealthLine({ health, problems }: { health: Health; problems: number }) {
-  const tone = health.failed || problems ? "bg-yellow" : health.checks ? "bg-green" : "bg-dot";
-  const text = health.loading && !health.checks ? "Checking…" : health.failed ? "Could not check" : problems ? `${problems} thing${problems === 1 ? "" : "s"} to fix` : "All good";
+/**
+ * The bot's health, as a small box in the header: a dot, the verdict, how many
+ * checks passed, and a button to run them again. Green when every check passes,
+ * yellow when something needs fixing. The details live in ProblemsCard.
+ */
+function HealthBox({ health, problems }: { health: Health; problems: number }) {
+  const total = health.checks?.length ?? 0;
+  const warn = Boolean(health.failed || problems);
+  const tone = warn ? "bg-yellow" : health.checks ? "bg-green" : "bg-dot";
+  const verdict = health.loading && !health.checks ? "Checking…" : health.failed ? "Could not check" : problems ? `${problems} thing${problems === 1 ? "" : "s"} to fix` : "All good";
+  const sub = health.failed ? health.failed : health.checks ? `${total - problems} of ${total} checks pass` : "Asking Discord";
   return (
-    <span className="inline-flex items-center gap-1.5 font-semibold text-ink">
-      <span className={`h-2 w-2 rounded-full ${tone}`} />
-      {text}
-    </span>
+    <div className={`flex items-center gap-4 rounded-[14px] py-2.5 pl-4 pr-2.5 ring-1 ${warn ? "bg-yellow-soft ring-yellow/60" : "bg-surface ring-line-soft"}`}>
+      <span className={`relative flex h-3 w-3 shrink-0 ${health.loading ? "animate-pulse" : ""}`}>
+        <span className={`absolute inset-0 rounded-full ${tone}`} />
+      </span>
+      <div className="flex min-w-0 flex-col leading-tight">
+        <span className="text-[14px] font-extrabold">{verdict}</span>
+        <span className={`truncate text-[12.5px] ${warn ? "text-yellow-ink" : "text-muted"}`}>{sub}</span>
+      </div>
+      <Button size="sm" variant="secondary" onClick={health.refresh} disabled={health.loading} className="ml-2">
+        {health.loading ? "Checking…" : "Check again"}
+      </Button>
+    </div>
   );
 }
 
@@ -880,11 +907,18 @@ function TryCard({ team, run }: { team: MyTeam; run: Run }) {
 
 function ChannelsCard({ team, state, run, onRerun }: { team: MyTeam; state: DiscordState; run: Run; onRerun: () => void }) {
   const [picker, setPicker] = useState<PickerChannel[] | null>(null);
+  const [pickerError, setPickerError] = useState<string | null>(null);
   useEffect(() => {
     let alive = true;
+    setPicker(null);
+    setPickerError(null);
     fetchChannels(team.id)
       .then((r) => alive && setPicker(r.channels))
-      .catch(() => alive && setPicker([]));
+      .catch((err) => {
+        if (!alive) return;
+        setPicker([]);
+        setPickerError(explain(err));
+      });
     return () => {
       alive = false;
     };
@@ -892,10 +926,14 @@ function ChannelsCard({ team, state, run, onRerun }: { team: MyTeam; state: Disc
 
   // Until Discord has answered with the channel list, the saved id is shown as
   // "Loading…" instead of the placeholder. "Pick a channel" on a channel that
-  // is picked is a lie the owner acts on.
+  // is picked is a lie the owner acts on. If the list never comes, the saved
+  // channel still shows as saved.
   const saved = (kind: ChannelKind): DropdownOption<string>[] => {
     const id = state.channels.find((c) => c.kind === kind)?.channel_id;
-    return id && !picker ? [{ value: id, label: "Loading…", disabled: true }] : [];
+    if (!id) return [];
+    if (!picker) return [{ value: id, label: "Loading…", disabled: true }];
+    if (!picker.some((c) => c.id === id)) return [{ value: id, label: pickerError ? "Saved channel" : "Saved channel (not found on the server)" }];
+    return [];
   };
   const opts = (kind: ChannelKind, inherit: string | null): DropdownOption<string>[] => [
     ...(inherit ? [{ value: "", label: inherit }] : []),
@@ -937,6 +975,7 @@ function ChannelsCard({ team, state, run, onRerun }: { team: MyTeam; state: Disc
           onChange={(id) => run(() => setChannel(team.id, "reminders", id || null), "Saved")}
         />
       </Field>
+      {pickerError && <p className="text-[13px] text-yellow-ink">Could not load the server&rsquo;s channels: {pickerError}</p>}
     </Card>
   );
 }

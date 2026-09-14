@@ -7,7 +7,7 @@
 
 export const config = { runtime: 'edge' }
 
-import { botMember, discord, DiscordError, explain, has, P, topPosition } from '../_lib/discord'
+import { botMember, canManageRole, discord, DiscordError, explain, has, P } from '../_lib/discord'
 import type { Role } from '../_lib/discord'
 import { guard, HttpError, json } from '../_lib/env'
 import { db, log, requireOwner } from '../_lib/supabase'
@@ -113,7 +113,7 @@ async function sync(teamId: string, link: DiscordLink) {
   if (!role) throw new HttpError(409, 'The role was deleted on Discord. Pick a ping mode again.')
   const all = [link.guild_id, ...me.roles].reduce((acc, id) => acc | BigInt(roles.find((r) => r.id === id)?.permissions ?? '0'), 0n)
   if (!has(all, P.ADMINISTRATOR) && !has(all, P.MANAGE_ROLES)) throw new HttpError(409, 'The bot needs Manage Roles to keep the role in sync.')
-  if (topPosition(roles, me) <= role.position) {
+  if (!canManageRole(roles, me, role)) {
     throw new HttpError(409, `Drag the Gather role above @${role.name} in Server Settings → Roles, then try again.`)
   }
 
