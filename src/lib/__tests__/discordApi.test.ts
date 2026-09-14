@@ -76,22 +76,25 @@ const week: BotWeek = {
 };
 
 describe("week message", () => {
-  it("is a Components V2 container with a row of buttons per session and no pings on edit", () => {
-    const msg = buildWeekMessage(week, { ping: null, link: null, appUrl: 'https://x.test' }) as {
+  it("is a header card, one card per session in its own colour, and no pings on edit", () => {
+    const msg = buildWeekMessage(week, { ping: null, link: null, appUrl: "https://x.test" }) as {
       flags: number;
       allowed_mentions: { parse: string[]; users?: string[] };
-      components: { type: number; components: { type: number; content?: string; components?: { custom_id: string }[] }[] }[];
+      components: { type: number; accent_color?: number; content?: string; components?: { type: number; content?: string; components?: { custom_id: string }[] }[] }[];
     };
     expect(msg.flags).toBe(1 << 15);
     expect(msg.allowed_mentions).toEqual({ parse: [] });
-    const blocks = msg.components[0].components;
-    expect(blocks[0].content).toContain("## Dogs · Week 38");
-    const text = blocks.map((b) => b.content ?? "").join("\n");
-    expect(text).toContain("**Tuesday** <t:1789495200:t> – <t:1789506000:t>");
-    expect(text).toContain("Scrim vs Foxes");
-    expect(text).toContain("<@100> Kari  ·  2 in");
-    const row = blocks.find((b) => b.type === 1);
+    const [header, card, footer] = msg.components;
+    expect(header.components?.[0].content).toContain("## Dogs · Week 38");
+    expect(header.components?.[0].content).toContain("1 session");
+    expect(card.accent_color).toBe(0xf0cf7e); // yellow, like the app
+    const text = card.components?.[0].content ?? "";
+    expect(text).toContain("### Scrim vs Foxes");
+    expect(text).toContain("**Tuesday**  <t:1789495200:t> – <t:1789506000:t>");
+    expect(text).toContain("<@100>  Kari");
+    const row = card.components?.find((b) => b.type === 1);
     expect(row?.components?.map((c) => c.custom_id)).toEqual([`join:${week.events[0].id}`, `cant:${week.events[0].id}`]);
+    expect(footer.content).toContain("Open in Gather");
   });
   it("never exceeds Discord's 40-component cap, even with a ping and a full week", () => {
     const busy: BotWeek = { ...week, events: Array.from({ length: 12 }, (_, i) => ({ ...week.events[0], id: `${i}2222222-2222-4222-8222-222222222222`.slice(0, 36), date: "2026-09-15" })) };
@@ -99,7 +102,7 @@ describe("week message", () => {
     const count = (nodes: unknown[]): number => nodes.reduce<number>((n, c) => n + 1 + count(((c as { components?: unknown[] }).components ?? [])), 0);
     expect(count(msg.components)).toBeLessThanOrEqual(40);
     const text = JSON.stringify(msg);
-    expect(text).toContain("+6 more in the app");
+    expect(text).toContain("+5 more in the app");
   });
   it("only the fresh weekly post pings, and only who the team chose", () => {
     const link = { team_id: "t", guild_id: "9", guild_name: null, ping_mode: "members" as const, ping_role_id: null, managed_role: false };

@@ -19,7 +19,7 @@ import { verifyDiscordSignature } from '../_lib/crypto'
 import { env, json } from '../_lib/env'
 import { db } from '../_lib/supabase'
 import type { DiscordChannel, DiscordLink, WeekPost } from '../_lib/supabase'
-import { addDays, localNow, mondayOf } from '../_lib/time'
+import { addDays, dayName, localNow, mondayOf } from '../_lib/time'
 import { buildWeekMessage, contentHash, fetchBotWeek } from '../_lib/week'
 
 interface Interaction {
@@ -216,6 +216,14 @@ async function button(it: Interaction): Promise<void> {
   if (!week) return
   const msg = buildWeekMessage(week, { ping: null, link, appUrl: env.appUrl() })
   await editOriginal(it, msg)
+
+  // The message is the same for everyone, so the button cannot say "Joined" to
+  // one person. This is the personal part: a note only the clicker sees.
+  const ev = week.events.find((e) => e.id === eventId)
+  if (ev) {
+    const what = `${ev.opponent ? `${ev.title} vs ${ev.opponent}` : ev.title} on ${dayName(ev.date)}`
+    await followUp(it, action === 'join' ? `You're in for ${what}.` : `Noted, you're out of ${what}.`)
+  }
 
   // If this is the living post, remember what it now says so the cron does not PATCH it again for nothing.
   if (it.message && live && live.message_id === it.message.id) {
