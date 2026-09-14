@@ -21,10 +21,14 @@ import {
   syncManagedRole,
   updateSchedule,
 } from "../lib/discord";
+import { DiscordApiError } from "../lib/discord";
 import type { ChannelKind, DiscordState, PickerChannel, PickerRole, StatusCheck } from "../lib/discord";
 import { Button, Card, Check, Eyebrow, ErrorText, Label, Pill, Spinner, Toggle, useToast } from "./ui";
 import { Dropdown } from "./pickers";
 import type { DropdownOption } from "./pickers";
+
+/** Server answers are already in plain words; database errors go through the usual translation. */
+const explain = (err: unknown) => (err instanceof DiscordApiError ? err.message : friendlyError(err));
 
 /**
  * Settings → Discord. Three shapes, one after the other:
@@ -52,7 +56,7 @@ export default function DiscordTab({ team }: { team: MyTeam }) {
     try {
       setState(await fetchDiscordState(team.id));
     } catch (err) {
-      setError(friendlyError(err));
+      setError(explain(err));
     }
   }, [team.id]);
 
@@ -81,7 +85,7 @@ export default function DiscordTab({ team }: { team: MyTeam }) {
       if (done) toast(done);
       return true;
     } catch (err) {
-      setError(friendlyError(err));
+      setError(explain(err));
       return false;
     }
   }
@@ -186,7 +190,7 @@ function Setup({ team, state, run, error, onDone }: { team: MyTeam; state: Disco
     let alive = true;
     fetchChannels(team.id)
       .then((r) => alive && setPicker(r.channels))
-      .catch((err) => alive && setPickErr(friendlyError(err)));
+      .catch((err) => alive && setPickErr(explain(err)));
     return () => {
       alive = false;
     };
@@ -232,7 +236,7 @@ function Setup({ team, state, run, error, onDone }: { team: MyTeam; state: Disco
         <div className="h-px bg-line-soft" />
 
         {step === 2 && (
-          <Question title="Where do you want the week plan?" lede="The bot posts the week here and keeps it up to date. One message, pinned, always at the bottom of the channel.">
+          <Question title="Where do you want the week plan?" lede="Weekplan posts the whole week in one message, and keeps it up to date. We recomment a separate channel for it, so it does not get lost in the chat.">
             <ChannelList channels={picker} value={choice} onChange={setChoice} exclude={[]} />
             <Nav
               busy={busy || !choice}
@@ -547,7 +551,7 @@ function StatusCard({ team, state, isOwner, run }: { team: MyTeam; state: Discor
     setChecks(null);
     fetchStatus(team.id)
       .then((r) => alive && setChecks(r.checks))
-      .catch((err) => alive && setFailed(friendlyError(err)));
+      .catch((err) => alive && setFailed(explain(err)));
     return () => {
       alive = false;
     };

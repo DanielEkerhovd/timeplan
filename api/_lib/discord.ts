@@ -118,10 +118,20 @@ export interface GuildMember {
   roles: string[]
 }
 
+let botUserId: string | null = null
+
+/** The bot's own user id. Same for the life of the token; fetched once per instance. */
+export async function botId(): Promise<string> {
+  if (!botUserId) botUserId = (await discord<{ id: string }>('GET', '/users/@me')).id
+  return botUserId
+}
+
 /** The bot's own membership in a server, or null when it is not there. */
 export async function botMember(guildId: string): Promise<GuildMember | null> {
+  const id = await botId()
   try {
-    return await discord<GuildMember>('GET', `/users/@me/guilds/${guildId}/member`)
+    const m = await discord<GuildMember>('GET', `/guilds/${guildId}/members/${id}`)
+    return { ...m, user: m.user ?? { id } }
   } catch (err) {
     if (err instanceof DiscordError && (err.status === 404 || err.status === 403)) return null
     throw err

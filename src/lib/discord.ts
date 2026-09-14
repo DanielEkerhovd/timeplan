@@ -114,16 +114,19 @@ export async function updateSchedule(teamId: string, patch: Partial<Omit<Discord
 
 // --- Through the server (it holds the bot token) --------------------------------
 
+/** An answer from /api/discord/* that was not ok. The message is already written for people. */
+export class DiscordApiError extends Error {}
+
 async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
   const { data } = await supabase.auth.getSession();
   const token = data.session?.access_token;
-  if (!token) throw new Error("You are signed out.");
+  if (!token) throw new DiscordApiError("You are signed out.");
   const res = await fetch(path, {
     ...init,
     headers: { ...(init.headers ?? {}), Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
   });
   const body = (await res.json().catch(() => ({}))) as T & { error?: string };
-  if (!res.ok) throw new Error(body.error ?? `Request failed (${res.status})`);
+  if (!res.ok) throw new DiscordApiError(body.error ?? `Request failed (${res.status})`);
   return body;
 }
 
