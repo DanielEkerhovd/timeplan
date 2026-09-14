@@ -753,6 +753,25 @@ select pg_temp.expect_count('bot_week har ingen tilgjengelighet i seg',
 select pg_temp.expect_denied('bot_week krever mandag',
   format('select public.bot_week(%L, %L)', :'team_a', :'dato'));
 
+-- bot_respond (0018): Join fra Discord i ett kall. Bare serveren, og bare for medlemmer.
+select pg_temp.become(:'eier_a');
+set local role authenticated;
+select pg_temp.expect_denied('innlogget kan ikke kalle bot_respond',
+  format('select public.bot_respond(''111111111111111111'', %L, ''coming'')', :'event_a'));
+reset role;
+set local role service_role;
+select pg_temp.expect_ok('serveren kan kalle bot_respond',
+  format('select public.bot_respond(''111111111111111111'', %L, ''coming'')', :'event_a'));
+reset role;
+select pg_temp.expect_count('ukjent discord-id får not_member, og ingenting skrives',
+  format('select 1 where public.bot_respond(''999999999999999999'', %L, ''coming'') ->> ''error'' = ''not_member''', :'event_a'), 1);
+select pg_temp.expect_count('medlem får uka tilbake',
+  format('select 1 where public.bot_respond(''111111111111111111'', %L, ''not_coming'') ? ''week''', :'event_a'), 1);
+select pg_temp.expect_count('svaret er lagret',
+  format('select 1 from public.event_responses where event_id = %L and user_id = %L and status = ''not_coming''', :'event_a', :'eier_a'), 1);
+select pg_temp.expect_count('ukjent aktivitet får gone',
+  'select 1 where public.bot_respond(''111111111111111111'', ''00000000-0000-4000-8000-000000000099'', ''coming'') ->> ''error'' = ''gone''', 1);
+
 -- ------------------------------------------------------------
 -- Deling av uka (share_week): uten innlogging, bare når deling er på
 -- ------------------------------------------------------------

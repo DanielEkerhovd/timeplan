@@ -18,9 +18,10 @@ export const config = { runtime: 'edge' }
 import { verifyDiscordSignature } from '../_lib/crypto'
 import { env, json } from '../_lib/env'
 import { db } from '../_lib/supabase'
-import type { DiscordChannel, DiscordLink, WeekPost } from '../_lib/supabase'
+import type { DiscordChannel, DiscordLink } from '../_lib/supabase'
 import { addDays, dayName, localNow, mondayOf } from '../_lib/time'
-import { buildWeekMessage, contentHash, fetchBotWeek } from '../_lib/week'
+import { buildWeekMessage, fetchBotWeek } from '../_lib/week'
+import type { BotWeek } from '../_lib/week'
 
 interface Interaction {
   type: number
@@ -183,51 +184,29 @@ async function button(it: Interaction): Promise<void> {
   if (!me || !m) return followUp(it, 'That button is not wired up.')
   const [, action, eventId] = m
 
-  // The team comes from the event row, never from the button.
-  const event = await db.one<{ id: string; team_id: string; date: string; teams: { timezone: string } }>('events', {
-    id: `eq.${eventId}`,
-    select: 'id,team_id,date,teams(timezone)',
+  // One round trip. The database checks that this Discord account is on the
+  // event's team (the team comes from the event row, never from the button),
+  // saves the answer, and hands back the week to draw.
+  const r = await db.rpc<{ error?: string; week?: BotWeek; event?: { title: string; opponent: string | null; date: string } }>('bot_respond', {
+    discord_id: me,
+    event_id: eventId,
+    status: action === 'join' ? 'coming' : 'not_coming',
   })
-  if (!event) return followUp(it, 'That session was removed.')
+  if (r.error === 'gone') return followUp(it, 'That session was removed.')
+  if (r.error === 'not_member') return followUp(it, `You are not on this team in Gather. Ask for an invite link, or sign in at ${env.appUrl()}`)
+  if (r.error === 'past') return followUp(it, 'That week is over.')
+  if (!r.week || !r.event) return followUp(it, 'Saved.')
 
-  const [rows, link, live] = await Promise.all([
-    db.select<{ user_id: string }>('members', {
-      select: 'user_id,profiles!inner(discord_id)',
-      team_id: `eq.${event.team_id}`,
-      'profiles.discord_id': `eq.${me}`,
-    }),
-    db.one<DiscordLink>('discord_links', { team_id: `eq.${event.team_id}` }),
-    it.message ? db.one<WeekPost>('discord_week_post', { team_id: `eq.${event.team_id}` }) : Promise.resolve(null),
-  ])
-  const member = rows[0]
-  if (!member) return followUp(it, `You are not on this team in Gather. Ask for an invite link, or sign in at ${env.appUrl()}`)
+  const link = await db.one<DiscordLink>('discord_links', { team_id: `eq.${r.week.team.id}` })
+  await editOriginal(it, buildWeekMessage(r.week, { ping: null, link, appUrl: env.appUrl() }))
 
-  const today = localNow(event.teams?.timezone ?? 'UTC').dateKey
-  if (event.date < mondayOf(today)) return followUp(it, 'That week is over.')
-
-  await db.upsert(
-    'event_responses',
-    { event_id: eventId, user_id: member.user_id, status: action === 'join' ? 'coming' : 'not_coming', updated_at: new Date().toISOString() },
-    'event_id,user_id',
-  )
-
-  // Redraw the message the button sits on, so the names are right for everyone.
-  const week = await fetchBotWeek(event.team_id, mondayOf(event.date))
-  if (!week) return
-  const msg = buildWeekMessage(week, { ping: null, link, appUrl: env.appUrl() })
-  await editOriginal(it, msg)
+  // Nothing is written to the stored content hash here. Two fast clicks can
+  // land their edits out of order; the cron rebuilds from the database on its
+  // next run, sees the hash differ, and puts the message right. Self-healing
+  // beats a lock.
 
   // The message is the same for everyone, so the button cannot say "Joined" to
   // one person. This is the personal part: a note only the clicker sees.
-  const ev = week.events.find((e) => e.id === eventId)
-  if (ev) {
-    const what = `${ev.opponent ? `${ev.title} vs ${ev.opponent}` : ev.title} on ${dayName(ev.date)}`
-    await followUp(it, action === 'join' ? `You're in for ${what}.` : `Noted, you're out of ${what}.`)
-  }
-
-  // If this is the living post, remember what it now says so the cron does not PATCH it again for nothing.
-  if (it.message && live && live.message_id === it.message.id) {
-    const hash = await contentHash(msg)
-    await db.update('discord_week_post', { team_id: `eq.${event.team_id}` }, { content_hash: hash, updated_at: new Date().toISOString() })
-  }
+  const what = `${r.event.opponent ? `${r.event.title} vs ${r.event.opponent}` : r.event.title} on ${dayName(r.event.date)}`
+  await followUp(it, action === 'join' ? `You're in for ${what}.` : `Noted, you're out of ${what}.`)
 }
