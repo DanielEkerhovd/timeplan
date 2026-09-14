@@ -40,6 +40,7 @@ interface TeamCtx {
   link: DiscordLink
   schedule: DiscordSchedule
   timezone: string
+  name: string
   channel: string
 }
 
@@ -47,25 +48,26 @@ async function teamCtx(teamId: string): Promise<TeamCtx | null> {
   const [link, schedule, team, channel] = await Promise.all([
     db.one<DiscordLink>('discord_links', { team_id: `eq.${teamId}` }),
     db.one<DiscordSchedule>('discord_schedules', { team_id: `eq.${teamId}` }),
-    db.one<{ timezone: string }>('teams', { id: `eq.${teamId}`, select: 'timezone' }),
+    db.one<{ timezone: string; name: string }>('teams', { id: `eq.${teamId}`, select: 'timezone,name' }),
     updatesChannel(teamId),
   ])
   if (!link || !schedule || !team || !channel) return null
-  return { link, schedule, timezone: team.timezone, channel }
+  return { link, schedule, timezone: team.timezone, name: team.name, channel }
 }
 
 /**
- * A DM to each person. Discord refusing (50007: their privacy settings) is not
- * an error to retry, it is a fact to remember: the person is marked, skipped
- * next time, and handed back so the caller can ping them in the channel instead.
+ * A DM to each person, written for that person. Discord refusing (50007:
+ * their privacy settings) is not an error to retry, it is a fact to remember:
+ * the person is marked, skipped next time, and handed back so the caller can
+ * ping them in the channel instead.
  */
-async function sendDms(people: string[], msg: Record<string, unknown>): Promise<{ sent: string[]; blocked: string[] }> {
+async function sendDms(people: string[], msgFor: (id: string) => Record<string, unknown>): Promise<{ sent: string[]; blocked: string[] }> {
   const sent: string[] = []
   const blocked: string[] = []
   for (const id of people) {
     try {
       const dm = await discord<{ id: string }>('POST', '/users/@me/channels', { recipient_id: id })
-      await discord('POST', `/channels/${dm.id}/messages`, { ...msg, allowed_mentions: { parse: [] } })
+      await discord('POST', `/channels/${dm.id}/messages`, { ...msgFor(id), allowed_mentions: { parse: [] } })
       sent.push(id)
     } catch (err) {
       if (err instanceof DiscordError && err.code === 50007) {
@@ -84,7 +86,7 @@ async function sendDms(people: string[], msg: Record<string, unknown>): Promise<
  * person, and whoever could not be reached gets pinged in the channel after
  * all. Both: the channel card and the DMs.
  */
-async function deliver(ctx: TeamCtx, card: Record<string, unknown>, audience: Audience, dmTo: string[]): Promise<string | null> {
+async function deliver(ctx: TeamCtx, card: Record<string, unknown>, audience: Audience, dmTo: string[], dmCard: (me: string) => Record<string, unknown>): Promise<string | null> {
   const mode = ctx.schedule.updates_mode
   let messageId: string | null = null
   if (mode === 'channel' || mode === 'both') {
@@ -92,7 +94,7 @@ async function deliver(ctx: TeamCtx, card: Record<string, unknown>, audience: Au
     messageId = posted.id
   }
   if (mode === 'dm' || mode === 'both') {
-    const { blocked } = await sendDms(dmTo, card)
+    const { blocked } = await sendDms(dmTo, dmCard)
     if (mode === 'dm' && (blocked.length || dmTo.length === 0)) {
       // DM-only, but some (or all) could not be reached: the channel is the fallback, pinging only them.
       const fallback = blocked.length ? forPeople(blocked) : audience
@@ -159,7 +161,8 @@ export async function drainOutbox(limit = 20, onlyTeam?: string): Promise<Record
       try {
         const audience = ctx.link.ping_mode === 'role' && ctx.link.ping_role_id ? forRole(ctx.link.ping_role_id) : forPeople(await teamPeople(teamId, false))
         const card = buildNewSessionsCard(batch, ctx.timezone, audience)
-        const messageId = await deliver(ctx, card, audience, await teamPeople(teamId, true))
+        const dmCard = (me: string) => buildNewSessionsCard(batch, ctx.timezone, silent, [], { team: ctx.name, me })
+        const messageId = await deliver(ctx, card, audience, await teamPeople(teamId, true), dmCard)
         await done(batch, messageId)
         await log(teamId, 'update', batch.length === 1 && batch[0].payload.after ? `New: ${title(batch[0].payload.after)}` : `${batch.length} new sessions`, true)
         out[`${teamId}:new`] = 'sent'
@@ -184,7 +187,8 @@ export async function drainOutbox(limit = 20, onlyTeam?: string): Promise<Record
       const card = buildUpdateCard(row, ctx.timezone, people)
       const audience = people.length ? forPeople(people) : silent
       const dmTo = people.length ? (await teamPeople(row.team_id, true)).filter((id) => people.includes(id)) : []
-      const messageId = await deliver(ctx, card, audience, dmTo)
+      const dmCard = (me: string) => buildUpdateCard(row, ctx.timezone, people, { team: ctx.name, me })
+      const messageId = await deliver(ctx, card, audience, dmTo, dmCard)
       await done([row], messageId)
       const what = row.payload.after ?? row.payload.before
       await log(row.team_id, 'update', `${KIND_LABEL[row.kind]}: ${what ? title(what) : 'session'}`, true)

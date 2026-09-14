@@ -84,7 +84,7 @@ async function preview(teamId: string, userId: string) {
 async function sampleChange(teamId: string, userId: string) {
   const me = await ownDiscordId(userId)
   const [team, schedule, channel] = await Promise.all([
-    db.one<{ timezone: string }>('teams', { id: `eq.${teamId}`, select: 'timezone' }),
+    db.one<{ timezone: string; name: string }>('teams', { id: `eq.${teamId}`, select: 'timezone,name' }),
     db.one<DiscordSchedule>('discord_schedules', { team_id: `eq.${teamId}` }),
     updatesChannel(teamId),
   ])
@@ -102,7 +102,7 @@ async function sampleChange(teamId: string, userId: string) {
       where.push('channel')
     }
     if (mode === 'dm' || mode === 'both') {
-      await dm(me, card)
+      await dm(me, markTest(buildUpdateCard(row, team.timezone, [me], { team: team.name, me })))
       where.push('DM')
     }
   } catch (err) {
@@ -271,10 +271,8 @@ async function disconnect(teamId: string, link: DiscordLink) {
     try {
       await discord('DELETE', `/users/@me/guilds/${link.guild_id}`)
       left = true
-      await log(teamId, 'link', `Left ${link.guild_name ?? 'the server'}`, true)
-    } catch (err) {
-      // Already kicked, no such server, or something we want to see in the log.
-      await log(teamId, 'link', `Could not leave ${link.guild_name ?? 'the server'}`, false, explain(err))
+    } catch {
+      /* already kicked, or no such server any more */
     }
   }
   return { ok: true, left, remaining: others.length }

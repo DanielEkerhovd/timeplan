@@ -50,7 +50,27 @@ export const forPeople = (people: string[]): Audience => ({
 
 export const forRole = (roleId: string): Audience => ({ line: `<@&${roleId}>`, users: [], roles: [roleId] })
 
+/**
+ * A card in someone's DMs is written to that one person. No mention chips
+ * (a role is "@unknown-role" there, and a list of @names in a private message
+ * reads oddly), the team's name for context since the bot serves several
+ * teams, and "you're in" instead of a roster.
+ */
+export interface DmView {
+  team: string
+  me: string
+}
+
 export const title = (s: Snapshot) => (s.opponent ? `${s.title} vs ${s.opponent}` : s.title)
+
+/** The one-line status for a DM: where the reader stands, and how many others are in. */
+function standing(people: string[], me: string, tone: 'new' | 'changed'): string {
+  const others = people.filter((id) => id !== me).length
+  const rest = others === 0 ? '' : ` · ${others} other${others === 1 ? '' : 's'} in`
+  if (people.includes(me)) return `✓ **You're in**${rest}`
+  if (tone === 'changed') return `**You're out**${others ? ` · ${others} in` : ''}`
+  return others ? `${others} in so far` : 'Nobody has answered yet'
+}
 
 function when(s: Snapshot, tz: string): string {
   const a = unix(localToInstant(s.date, s.start_hour, 0, tz))
@@ -78,13 +98,18 @@ function wrap(accent: number, blocks: Record<string, unknown>[], audience: Audie
   }
 }
 
-/** One moved, changed or cancelled session. `people` are those who currently say yes (or said yes, for a cancellation). */
-export function buildUpdateCard(row: OutboxRow, tz: string, people: string[]): Record<string, unknown> {
+/**
+ * One moved, changed or cancelled session. `people` are those who currently
+ * say yes (or said yes, for a cancellation). With `dm`, the card is the private
+ * version for that one reader.
+ */
+export function buildUpdateCard(row: OutboxRow, tz: string, people: string[], dm?: DmView): Record<string, unknown> {
   const { kind, payload } = row
   const after = payload.after
   const before = payload.before
-  const audience = forPeople(people)
-  const chips = audience.line
+  const audience = dm ? silent : forPeople(people)
+  const chips = dm ? null : audience.line
+  const team = dm ? `-# ${dm.team}\n` : ''
   let heading: string
   let line: string
   let accent = GATHER_GREEN
@@ -92,20 +117,22 @@ export function buildUpdateCard(row: OutboxRow, tz: string, people: string[]): R
 
   if (kind === 'new' && after) {
     // A lone new session, drawn through the group builder so the two never drift apart.
-    return buildNewSessionsCard([row], tz, silent)
+    return buildNewSessionsCard([row], tz, silent, [people], dm)
   } else if (kind === 'changed' && after && before) {
     const moved = !sameTime(before, after)
     heading = `## ${moved ? 'Moved' : 'Changed'} · ${title(after)}`
     line = moved ? `~~${when(before, tz)}~~ → ${when(after, tz)}` : `${when(after, tz)}${title(before) !== title(after) ? `\n-# was ${title(before)}` : ''}`
     if (chips) line += `\n${chips}`
+    if (dm) line += `\n${standing(people, dm.me, 'changed')}`
     accent = ACCENT[after.color] ?? GATHER_GREEN
-    blocks.push({ type: 10, content: `${heading}\n${line}\n${WIDTH}` }, buttons(row, 'Still in'))
+    blocks.push({ type: 10, content: `${heading}\n${team}${line}\n${WIDTH}` }, buttons(row, 'Still in'))
   } else if (kind === 'cancelled' && before) {
     heading = `## Cancelled · ${title(before)}`
     line = `~~${when(before, tz)}~~`
     if (chips) line += `\n${chips}`
+    if (dm) line += `\nYou had said yes to this one.`
     accent = ACCENT[before.color] ?? GATHER_GREEN
-    blocks.push({ type: 10, content: `${heading}\n${line}\n${WIDTH}` })
+    blocks.push({ type: 10, content: `${heading}\n${team}${line}\n${WIDTH}` })
   } else {
     blocks.push({ type: 10, content: `## Update\n${WIDTH}` })
   }
@@ -117,15 +144,18 @@ export function buildUpdateCard(row: OutboxRow, tz: string, people: string[]): R
  * added in a burst are one card, not five pings. Capped at five per card;
  * the sender splits anything longer.
  */
-export function buildNewSessionsCard(rows: OutboxRow[], tz: string, audience: Audience, people: string[][] = []): Record<string, unknown> {
+export function buildNewSessionsCard(rows: OutboxRow[], tz: string, audience: Audience, people: string[][] = [], dm?: DmView): Record<string, unknown> {
   const items = rows.filter((r) => r.payload.after).slice(0, 5)
   const first = items[0]?.payload.after
   const accent = first ? (ACCENT[first.color] ?? GATHER_GREEN) : GATHER_GREEN
   const heading = items.length === 1 && first ? `## New · ${title(first)}` : `## ${items.length} new sessions`
-  // Who has said yes so far, per session. Empty when the card first goes out; filled in as people press Join.
-  const who = (i: number) => (people[i]?.length ? `\n${people[i].map((id) => `<@${id}>`).join(' ')}` : '')
+  // Who has said yes so far, per session. Empty when the card first goes out;
+  // filled in as people press Join. In a DM it is where the reader stands.
+  const who = (i: number) => (dm ? `\n${standing(people[i] ?? [], dm.me, 'new')}` : people[i]?.length ? `\n${people[i].map((id) => `<@${id}>`).join(' ')}` : '')
+  if (dm) audience = silent
   const blocks: Record<string, unknown>[] = []
   const top = [heading]
+  if (dm) top.push(`-# ${dm.team}`)
   if (audience.line) top.push(audience.line)
   if (items.length === 1 && first) top.push(when(first, tz) + who(0))
   blocks.push({ type: 10, content: `${top.join('\n')}\n${WIDTH}` })

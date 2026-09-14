@@ -236,16 +236,24 @@ async function updateButton(it: Interaction): Promise<void> {
 
   const row = await db.one<OutboxRow>('discord_outbox', { id: `eq.${rowId}` })
   if (!row || row.event_id !== eventId) return
-  const team = await db.one<{ timezone: string }>('teams', { id: `eq.${row.team_id}`, select: 'timezone' })
+  const team = await db.one<{ timezone: string; name: string }>('teams', { id: `eq.${row.team_id}`, select: 'timezone,name' })
   const tz = team?.timezone ?? 'UTC'
+  // No guild: the button was pressed in a DM, so the redraw is the private version.
+  const dm = it.guild_id ? undefined : { team: team?.name ?? 'Your team', me }
 
   if (row.kind === 'new') {
     // The card may hold several new sessions (one ping for a burst). Redraw it
     // from every row that went out in the same message, names included.
-    const siblings = row.message_id ? await db.select<OutboxRow>('discord_outbox', { message_id: `eq.${row.message_id}`, order: 'id.asc' }) : [row]
+    // Rows in one card share a message id (channel) or, for DM-only sends, the
+    // same sent_at stamp.
+    const siblings = row.message_id
+      ? await db.select<OutboxRow>('discord_outbox', { message_id: `eq.${row.message_id}`, order: 'id.asc' })
+      : row.sent_at
+        ? await db.select<OutboxRow>('discord_outbox', { team_id: `eq.${row.team_id}`, kind: 'eq.new', sent_at: `eq.${row.sent_at}`, order: 'id.asc' })
+        : [row]
     const people = await Promise.all(siblings.map((s) => peopleFor(s.event_id)))
-    await editOriginal(it, buildNewSessionsCard(siblings, tz, silent, people))
+    await editOriginal(it, buildNewSessionsCard(siblings, tz, silent, people, dm))
     return
   }
-  await editOriginal(it, buildUpdateCard(row, tz, await peopleFor(eventId)))
+  await editOriginal(it, buildUpdateCard(row, tz, await peopleFor(eventId), dm))
 }

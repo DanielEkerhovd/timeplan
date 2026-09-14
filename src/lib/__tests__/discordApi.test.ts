@@ -156,4 +156,26 @@ describe("change cards", () => {
     expect(text(msg)).toContain("## Cancelled · Scrim vs Foxes");
     expect(text(msg)).not.toContain("custom_id");
   });
+  it("the DM version names the team, mentions nobody, and says where the reader stands", () => {
+    const dm = { team: "Quackers", me: "100" };
+    const fresh = buildNewSessionsCard([base], "Europe/Oslo", forRole("555"), [], dm) as { allowed_mentions: { users: string[]; roles: string[] } };
+    expect(fresh.allowed_mentions.roles).toEqual([]);
+    expect(text(fresh)).not.toContain("<@");
+    expect(text(fresh)).toContain("-# Quackers");
+    expect(text(fresh)).toContain("Nobody has answered yet");
+    expect(text(fresh)).toContain("uj:22222222-2222-4222-8222-222222222222:1");
+
+    const joined = buildNewSessionsCard([base], "Europe/Oslo", forRole("555"), [["100", "200", "300"]], dm);
+    expect(text(joined)).toContain("You're in");
+    expect(text(joined)).toContain("2 others in");
+
+    const moved: OutboxRow = { ...base, kind: "changed", payload: { before: snap, after: { ...snap, date: "2026-09-16" } } };
+    const out = buildUpdateCard(moved, "Europe/Oslo", ["200"], dm) as { allowed_mentions: { users: string[] } };
+    expect(out.allowed_mentions.users).toEqual([]);
+    expect(text(out)).toContain("You're out");
+    expect(text(out)).not.toContain("<@200>");
+
+    const gone: OutboxRow = { ...base, kind: "cancelled", payload: { before: snap, people: ["100"] } };
+    expect(text(buildUpdateCard(gone, "Europe/Oslo", ["100"], dm))).toContain("You had said yes");
+  });
 });
