@@ -60,6 +60,7 @@ import {
 } from "../components/ui";
 import { Dropdown } from "../components/pickers";
 import DiscordTab from "../components/DiscordTab";
+import { disconnectDiscord } from "../lib/discord";
 import {
   appBase,
   rotateShareSlug,
@@ -2432,6 +2433,11 @@ function TeamPanel({
   async function remove() {
     setError(null);
     try {
+      // Discord first: takes the pinned week down, drops the team role, and lets
+      // the bot leave if this was the last team on that server. Nothing in the
+      // database cascade can reach Discord, so it has to happen here. Best
+      // effort — a Discord hiccup must not stop the delete.
+      await disconnectDiscord(team.id).catch(() => undefined);
       await deleteTeam(team.id, confirmName);
       await onTeamsChanged();
       navigate("/");

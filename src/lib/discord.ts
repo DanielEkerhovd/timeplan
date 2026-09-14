@@ -185,7 +185,7 @@ export function postWeekNow(teamId: string, which: "this" | "next") {
 }
 
 export function disconnectDiscord(teamId: string) {
-  return api<{ ok: true }>("/api/discord/post", {
+  return api<{ ok: true; left: boolean; remaining: number }>("/api/discord/post", {
     method: "POST",
     body: JSON.stringify({ team: teamId, action: "disconnect" }),
   });

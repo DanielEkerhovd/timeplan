@@ -100,5 +100,19 @@ async function disconnect(teamId: string, link: DiscordLink) {
   await db.remove('discord_schedules', { team_id: `eq.${teamId}` })
   await db.remove('discord_links', { team_id: `eq.${teamId}` })
   await log(teamId, 'link', `Disconnected from ${link.guild_name ?? 'Discord'}`, true)
-  return { ok: true }
+
+  // Several teams can share one server, with one bot between them. The bot
+  // leaves only when the last of them is gone; until then it is still working
+  // for someone. Channels are never touched: they belong to the server.
+  const others = await db.select<{ team_id: string }>('discord_links', { select: 'team_id', guild_id: `eq.${link.guild_id}` })
+  let left = false
+  if (others.length === 0) {
+    try {
+      await discord('DELETE', `/users/@me/guilds/${link.guild_id}`)
+      left = true
+    } catch {
+      /* already kicked, or no such server any more */
+    }
+  }
+  return { ok: true, left, remaining: others.length }
 }

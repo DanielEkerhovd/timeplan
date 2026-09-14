@@ -384,6 +384,11 @@ function ChannelList({
           );
         })}
         {/* Make one instead. The name is prefilled from the team; the bot creates it at the top of the server, and it can be dragged into a category afterwards. */}
+        <div className="flex items-center gap-3 py-1">
+          <span className="h-px flex-1 bg-line-soft" />
+          <span className="text-[11px] font-bold uppercase tracking-[0.08em] text-faint">or</span>
+          <span className="h-px flex-1 bg-line-soft" />
+        </div>
         <div
           className={`flex flex-col gap-3 rounded-[14px] border-[1.5px] px-4 py-3.5 transition ${
             value === "new" ? "border-ink bg-surface" : "border-line bg-surface hover:border-faint"
@@ -849,7 +854,7 @@ function DisconnectCard({ team, state, run }: { team: MyTeam; state: DiscordStat
         <div className="flex flex-col">
           <span className="text-[14px] font-extrabold">Disconnect</span>
           <span className="text-[13px] text-muted">
-            Stops all messages{state.link?.managed_role ? " and removes the team role" : ""}. Your channels stay.
+            Stops all messages{state.link?.managed_role ? " and removes the team role" : ""}. Your channels stay. The bot leaves the server only if no other team uses it there.
           </span>
         </div>
         {!arm ? (
