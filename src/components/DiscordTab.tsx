@@ -292,7 +292,7 @@ function Setup({ team, state, run, error, clearError, onDone }: { team: MyTeam; 
 
         {step === 4 && (
           <Question title="Who should be pinged?" lede="When the week is up, and when something changes.">
-            <PingPicker team={team} link={state.link} run={run} />
+            <PingPicker team={team} link={state.link} run={run} onCreated={() => setStep(5)} />
             <Nav back={() => setStep(3)} busy={busy} onNext={() => setStep(5)} />
           </Question>
         )}
@@ -375,13 +375,15 @@ function ChannelList({
   if (!channels) return <Spinner className="min-h-[120px]" />;
   const rows = channels.filter((c) => !exclude.includes(c.id));
   return (
-    <div className="flex flex-col gap-2">
-      <div className="flex max-w-[560px] flex-col gap-2">
+    <div className="flex flex-col gap-3">
+      {/* Wide screens: the server's channels on the left, the other ways on the
+          right, "or" standing between them. Narrow: stacked, "or" as a line. */}
+      <div className="grid gap-4 md:grid-cols-[minmax(0,1.15fr)_auto_minmax(0,1fr)] md:items-stretch">
         {/* The server's channels scroll inside a box of fixed height, so "create a
             new channel" and the Continue button stay on screen however many
             channels the server has. */}
-        <div className="flex max-h-[232px] flex-col gap-1.5 overflow-y-auto overscroll-contain rounded-[14px] bg-bg p-1.5">
-          {rows.length === 0 && <p className="px-3 py-2 text-[13px] text-muted">No channels the bot can post in yet.</p>}
+        <div className="flex max-h-[360px] flex-col gap-2 overflow-y-auto overscroll-contain rounded-[16px] bg-bg p-2">
+          {rows.length === 0 && <p className="px-3 py-2 text-[14px] text-muted">No channels the bot can post in yet.</p>}
           {rows.map((c) => {
             const off = c.taken || !c.canPost;
             const on = value === c.id;
@@ -391,13 +393,13 @@ function ChannelList({
                 type="button"
                 disabled={off}
                 onClick={() => onChange(c.id)}
-                className={`flex h-10 shrink-0 items-center justify-between gap-3 rounded-[10px] border-[1.5px] px-3 text-left transition ${
+                className={`flex h-12 shrink-0 items-center justify-between gap-3 rounded-[12px] border-[1.5px] px-3.5 text-left transition ${
                   off ? "border-transparent bg-transparent text-faint" : on ? "border-ink bg-surface" : "border-transparent bg-surface hover:border-line"
                 }`}
               >
-                <span className="flex min-w-0 items-center gap-2.5">
+                <span className="flex min-w-0 items-center gap-3">
                   <Radio on={on} off={off} />
-                  <span className="flex min-w-0 items-center gap-1 text-[14px] font-bold">
+                  <span className="flex min-w-0 items-center gap-1 text-[15px] font-bold">
                     <Hash />
                     <span className="truncate">{c.name}</span>
                   </span>
@@ -407,44 +409,49 @@ function ChannelList({
             );
           })}
         </div>
-        {/* Make one instead. The name is prefilled from the team; the bot creates it at the top of the server, and it can be dragged into a category afterwards. */}
-        <div className="flex items-center gap-3 py-1">
-          <span className="h-px flex-1 bg-line-soft" />
+
+        <div className="flex items-center gap-3 md:flex-col md:py-2">
+          <span className="h-px flex-1 bg-line-soft md:h-auto md:w-px" />
           <span className="text-[11px] font-bold uppercase tracking-[0.08em] text-faint">or</span>
-          <span className="h-px flex-1 bg-line-soft" />
+          <span className="h-px flex-1 bg-line-soft md:h-auto md:w-px" />
         </div>
-        <div
-          className={`flex flex-col gap-3 rounded-[14px] border-[1.5px] px-4 py-3.5 transition ${
-            value === "new" ? "border-ink bg-surface" : "border-line bg-surface hover:border-faint"
-          }`}
-        >
-          <button type="button" onClick={() => onChange("new")} className="flex items-center gap-3 text-left">
-            <Radio on={value === "new"} off={false} />
-            <span className="text-[15px] font-bold">Create a new channel</span>
-          </button>
-          {value === "new" && (
-            <div className="flex items-center gap-2 pl-[30px]">
-              <span className="text-faint">
-                <Hash />
-              </span>
-              <Input value={newName} onChange={(e) => onNewName(e.target.value)} className="h-10 text-[14px]" placeholder="channel-name" aria-label="New channel name" />
-            </div>
-          )}
-        </div>
-        {sameLabel && (
-          <button
-            type="button"
-            onClick={() => onChange("same")}
-            className={`flex h-14 items-center gap-3 rounded-[14px] border-[1.5px] px-4 text-left transition ${
-              value === "same" ? "border-ink bg-surface" : "border-line bg-surface hover:border-faint"
+
+        <div className="flex flex-col gap-3">
+          {/* Make one instead. The name is prefilled from the team; the bot creates it at the top of the server, and it can be dragged into a category afterwards. */}
+          <div
+            className={`flex flex-col gap-3 rounded-[14px] border-[1.5px] px-4 py-4 transition ${
+              value === "new" ? "border-ink bg-surface" : "border-line bg-surface hover:border-faint"
             }`}
           >
-            <Radio on={value === "same"} off={false} />
-            <span className="text-[15px] font-bold">{sameLabel}</span>
-          </button>
-        )}
+            <button type="button" onClick={() => onChange("new")} className="flex items-center gap-3 text-left">
+              <Radio on={value === "new"} off={false} />
+              <span className="text-[15px] font-bold">Create a new channel</span>
+            </button>
+            {value === "new" && (
+              <div className="flex items-center gap-2 pl-[30px]">
+                <span className="text-faint">
+                  <Hash />
+                </span>
+                <Input value={newName} onChange={(e) => onNewName(e.target.value)} className="h-11 text-[15px]" placeholder="channel-name" aria-label="New channel name" />
+              </div>
+            )}
+            <p className="pl-[30px] text-[13px] leading-snug text-muted">The bot makes it at the top of the server. Drag it into a category afterwards if you like.</p>
+          </div>
+          {sameLabel && (
+            <button
+              type="button"
+              onClick={() => onChange("same")}
+              className={`flex min-h-[56px] items-center gap-3 rounded-[14px] border-[1.5px] px-4 py-3 text-left transition ${
+                value === "same" ? "border-ink bg-surface" : "border-line bg-surface hover:border-faint"
+              }`}
+            >
+              <Radio on={value === "same"} off={false} />
+              <span className="text-[15px] font-bold">{sameLabel}</span>
+            </button>
+          )}
+        </div>
       </div>
-      <p className="max-w-[62ch] text-[13px] text-muted">
+      <p className="text-[13px] text-muted">
         Only channels the bot can see are listed. Private channel missing? Let the bot into it on Discord first, then come back here.
       </p>
     </div>
@@ -460,10 +467,16 @@ function Radio({ on, off }: { on: boolean; off: boolean }) {
 }
 
 /** Members or a role. A role can be one the server already has, or one Gather makes and keeps in step with the team. */
-function PingPicker({ team, link, run }: { team: MyTeam; link: DiscordState["link"]; run: Run }) {
+/**
+ * Who gets pinged. `onCreated` is the setup's hook: making a role is a clear
+ * enough answer that the wizard moves on by itself, no extra Continue.
+ */
+function PingPicker({ team, link, run, onCreated }: { team: MyTeam; link: DiscordState["link"]; run: Run; onCreated?: () => void }) {
   const [roles, setRoles] = useState<PickerRole[] | null>(null);
   const [busy, setBusy] = useState(false);
   const [roleName, setRoleName] = useState(team.name);
+  const [made, setMade] = useState<{ name: string; given: number; missing: number } | null>(null);
+  const toast = useToast();
   const mode = link?.ping_mode ?? "members";
   // The role section is open when the team pings a role, or the owner just asked for it.
   const [open, setOpen] = useState(mode === "role");
@@ -507,7 +520,16 @@ function PingPicker({ team, link, run }: { team: MyTeam; link: DiscordState["lin
       {open && (
         <div className="flex flex-col gap-3">
           {link?.managed_role && link.ping_role_id ? (
-            <ManagedRole team={team} current={options.find((o) => o.value === link.ping_role_id)?.label.replace(/^@/, "") ?? null} run={run} />
+            <>
+              {made && (
+                <p className="flex items-center gap-2 text-[14px] font-bold text-green-ink">
+                  <Check size={14} />
+                  Created @{made.name} and gave it to {made.given} player{made.given === 1 ? "" : "s"}
+                  {made.missing > 0 && <span className="font-semibold text-muted">· {made.missing} not on the server yet</span>}
+                </p>
+              )}
+              <ManagedRole team={team} current={options.find((o) => o.value === link.ping_role_id)?.label.replace(/^@/, "") ?? made?.name ?? null} run={run} />
+            </>
           ) : (
             <>
               <div className="flex flex-col gap-1.5">
@@ -536,12 +558,26 @@ function PingPicker({ team, link, run }: { team: MyTeam; link: DiscordState["lin
                     disabled={busy || roleName.trim().length < 1}
                     onClick={() => {
                       setBusy(true);
+                      let result: { role: { name: string }; given: number; missing: number } | null = null;
                       void run(async () => {
-                        await createManagedRole(team.id, roleName.trim());
-                      }, "Role created").finally(() => setBusy(false));
+                        result = await createManagedRole(team.id, roleName.trim());
+                      })
+                        .then((ok) => {
+                          if (!ok || !result) return;
+                          setMade({ name: result.role.name, given: result.given, missing: result.missing });
+                          toast(`Created @${result.role.name} · given to ${result.given} player${result.given === 1 ? "" : "s"}`);
+                          onCreated?.();
+                        })
+                        .finally(() => setBusy(false));
                     }}
                   >
-                    Create role
+                    {busy ? (
+                      "Creating…"
+                    ) : onCreated ? (
+                      "Create role and continue"
+                    ) : (
+                      "Create role"
+                    )}
                   </Button>
                 </div>
               </div>
