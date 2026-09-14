@@ -85,13 +85,12 @@ describe("week message", () => {
     expect(msg.flags).toBe(1 << 15);
     expect(msg.allowed_mentions).toEqual({ parse: [] });
     const [header, card, footer] = msg.components;
-    expect(header.components?.[0].content).toContain("## Dogs · Week 38");
+    expect(header.components?.[0].content).toContain("# Dogs · Week 38");
     expect(header.components?.[0].content).toContain("1 session");
     expect(card.accent_color).toBe(0xf0cf7e); // yellow, like the app
     const text = card.components?.[0].content ?? "";
-    expect(text).toContain("### Scrim vs Foxes");
-    expect(text).toContain("**Tuesday**  <t:1789495200:t> – <t:1789506000:t>");
-    expect(text).toContain("<@100>  Kari");
+    expect(text).toContain("## Scrim vs Foxes");
+    expect(text).toContain("**Tuesday** <t:1789495200:t> – <t:1789506000:t>  ·  <@100> Kari");
     const row = card.components?.find((b) => b.type === 1);
     expect(row?.components?.map((c) => c.custom_id)).toEqual([`join:${week.events[0].id}`, `cant:${week.events[0].id}`]);
     expect(footer.content).toContain("Open in Gather");

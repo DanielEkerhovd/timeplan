@@ -84,7 +84,7 @@ export function buildWeekMessage(week: BotWeek, opts: { ping: string | null; lin
     type: 17,
     accent_color: GATHER_GREEN,
     components: [
-      { type: 10, content: `## ${week.team.name} · Week ${nr}\n-# ${weekRangeLabel(week.week_start)}  ·  ${summary}\n${WIDTH}` },
+      { type: 10, content: `# ${week.team.name} · Week ${nr}\n-# ${weekRangeLabel(week.week_start)}  ·  ${summary}\n${WIDTH}` },
     ],
   })
 
@@ -92,12 +92,13 @@ export function buildWeekMessage(week: BotWeek, opts: { ping: string | null; lin
     const start = unix(localToInstant(e.date, e.start_hour, 0, tz))
     const end = unix(localToInstant(e.date, e.end_hour, 0, tz))
     const title = e.opponent ? `${e.title} vs ${e.opponent}` : e.title
-    const who = e.people.length ? e.people.map(person).join('  ') : '-# No one yet'
+    // Two lines per card: the title, then day, time and who is in on one line.
+    const who = e.people.length ? e.people.map(person).join(' ') : 'no one yet'
     top.push({
       type: 17,
       accent_color: ACCENT[e.color] ?? GATHER_GREEN,
       components: [
-        { type: 10, content: `### ${title}\n**${dayName(e.date)}**  <t:${start}:t> – <t:${end}:t>\n${who}` },
+        { type: 10, content: `## ${title}\n**${dayName(e.date)}** <t:${start}:t> – <t:${end}:t>  ·  ${who}` },
         {
           type: 1,
           components: [
