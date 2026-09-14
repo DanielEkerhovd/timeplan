@@ -80,9 +80,9 @@ const CARDS: { key: string; label: string; card: ReactNode; steps: [string, stri
     label: 'The week',
     card: <WeekPeek />,
     steps: [
-      ['Mark your week', 'Tap the blocks you can make. Every tap saves right away.'],
-      ['See the overlap', 'The grid counts who can make each block, and points at the ones everybody can.'],
-      ['Book it', 'Put a scrim or a match on a block. The people who can make it are one tap away.'],
+      ['Mark your week', 'Pick your availability for the week.'],
+      ['See the overlap', 'The app shows when everyone can make it.'],
+      ['Book it', 'The captain picks a time and the bot posts it in Discord.'],
     ],
   },
   {
@@ -90,9 +90,9 @@ const CARDS: { key: string; label: string; card: ReactNode; steps: [string, stri
     label: 'The bot',
     card: <BotPeek />,
     steps: [
-      ['Add the bot', 'Pick a channel in Settings. Several teams on one server each get their own channels.'],
-      ['It posts the week', 'One pinned message, kept up to date as the plan changes. No new post per session.'],
-      ['Join from Discord', 'Update your availability easily.'],
+      ['Add the bot', 'Connect Gather to your Discord server.'],
+      ['Display the weekplan automatically', 'The bot posts the week in a channel of your choice.'],
+      ['Join from Discord', 'Answer events from Discord.'],
     ],
   },
   {
@@ -100,9 +100,9 @@ const CARDS: { key: string; label: string; card: ReactNode; steps: [string, stri
     label: 'The update',
     card: <UpdatePeek />,
     steps: [
-      ['It tells the right people', 'A new session pings the team. A move or a cancellation pings those who had said yes.'],
-      ['Channel or DM', 'Each team picks how: a card in the updates channel, a DM to each player, or both.'],
-      ['Nothing to remember', 'The captain changes the plan on the website. The bot does the rest.'],
+      ['Notify the right people', 'Bot keeps track of weekplan and updates users directly.'],
+      ['Channel or DM', 'Updates can be sent to a channel and/or as a DM to each player.'],
+      ['Automatic updates', 'Updates are posted automatically when the weekplan changes.'],
     ],
   },
 ]
