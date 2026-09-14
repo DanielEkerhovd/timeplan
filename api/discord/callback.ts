@@ -52,7 +52,12 @@ async function finish(url: URL, teamId: string, userId: string): Promise<Respons
       redirect_uri: `${env.appUrl()}/api/discord/callback`,
     }),
   })
-  if (!tokenRes.ok) return back(teamId, { discord: 'token' })
+  if (!tokenRes.ok) {
+    // Discord's reason goes to the log, not to the person: "invalid_client" is a
+    // wrong client secret, "invalid_grant" a redirect_uri that does not match.
+    console.error(`[discord/callback] token exchange ${tokenRes.status}: ${(await tokenRes.text().catch(() => '')).slice(0, 300)}`)
+    return back(teamId, { discord: 'token' })
+  }
   const token = (await tokenRes.json()) as { access_token: string; guild?: { id: string; name: string } }
   // The server the bot was actually added to, from Discord's own answer — not from the query string.
   const guildId = token.guild?.id ?? ''

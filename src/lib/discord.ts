@@ -134,9 +134,13 @@ export async function setChannel(teamId: string, kind: ChannelKind, channelId: s
   });
 }
 
-/** Who gets pinged. A role is checked against the server before it is saved. */
-export async function setPing(teamId: string, mode: "members" | "role", roleId: string | null) {
-  await api<{ ok: true }>(`/api/discord/roles?team=${teamId}`, {
+/**
+ * Who gets pinged. A role is checked against the server before it is saved.
+ * `removed` names the bot-made role that was deleted because the team moved
+ * away from it, if any.
+ */
+export function setPing(teamId: string, mode: "members" | "role", roleId: string | null) {
+  return api<{ ok: true; removed: string | null }>(`/api/discord/roles?team=${teamId}`, {
     method: "POST",
     body: JSON.stringify({ action: "pick", mode, role_id: mode === "role" ? roleId : null }),
   });

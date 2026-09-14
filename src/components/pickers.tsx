@@ -142,7 +142,10 @@ export function Dropdown<T extends string | number>({ value, options, onChange, 
           )}
           <ul
             role="listbox"
-            className="flex max-h-[260px] flex-col overflow-y-auto"
+            // overscroll-contain: a wheel or swipe that reaches the end of the
+            // list stops there instead of scrolling the page behind (which
+            // would also close the list).
+            className="flex max-h-[min(340px,60vh)] flex-col overflow-y-auto overscroll-contain"
             ref={(el) => el?.querySelector('[aria-selected="true"]')?.scrollIntoView({ block: 'nearest' })}
           >
             {shown.length === 0 && <li className="px-3 py-2 text-[13px] font-semibold text-faint">Nothing matches</li>}

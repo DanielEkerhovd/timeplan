@@ -477,6 +477,13 @@ function PingPicker({ team, link, run, onCreated }: { team: MyTeam; link: Discor
   const [roleName, setRoleName] = useState(team.name);
   const [made, setMade] = useState<{ name: string; given: number; missing: number } | null>(null);
   const toast = useToast();
+
+  // Moving away from the role the bot made deletes it on the server; say so.
+  async function pingTo(mode: "members" | "role", roleId: string | null) {
+    const r = await setPing(team.id, mode, roleId);
+    setMade(null);
+    if (r.removed) toast(`Removed the @${r.removed} role from the server`);
+  }
   const mode = link?.ping_mode ?? "members";
   // The role section is open when the team pings a role, or the owner just asked for it.
   const [open, setOpen] = useState(mode === "role");
@@ -507,7 +514,7 @@ function PingPicker({ team, link, run, onCreated }: { team: MyTeam; link: Discor
           active={!open}
           onClick={() => {
             setOpen(false);
-            if (mode !== "members") void run(() => setPing(team.id, "members", null));
+            if (mode !== "members") void run(() => pingTo("members", null));
           }}
         >
           Everyone on the team
@@ -539,7 +546,7 @@ function PingPicker({ team, link, run, onCreated }: { team: MyTeam; link: Discor
                   options={options}
                   disabled={roles === null}
                   placeholder={roles === null ? "Loading roles…" : roles.length === 0 ? "No roles on the server yet" : "Pick a role"}
-                  onChange={(id) => run(() => setPing(team.id, "role", id))}
+                  onChange={(id) => run(() => pingTo("role", id))}
                   search={false}
                 />
                 <p className="text-[13px] text-muted">A role you manage yourself drifts: new players in Gather do not get it unless someone remembers.</p>
@@ -621,6 +628,7 @@ function ManagedRole({ team, current, run }: { team: MyTeam; current: string | n
           Rename
         </Button>
       </div>
+      <p className="px-1 text-[12.5px] text-muted">Switching to everyone or to another role removes this role from the server.</p>
     </div>
   );
 }
@@ -1047,7 +1055,7 @@ function PingCard({ team, state, run }: { team: MyTeam; state: DiscordState; run
     </Card>
   );
 }
- ''
+
 const DOW_OPTIONS: DropdownOption<number>[] = DOW_LABELS.map((label, i) => ({ value: i + 1, label }));
 const TIME_OPTIONS: DropdownOption<string>[] = Array.from({ length: 48 }, (_, i) => {
   const h = String(Math.floor(i / 2)).padStart(2, "0");

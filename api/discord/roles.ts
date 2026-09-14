@@ -55,7 +55,8 @@ export default function handler(req: Request): Promise<Response> {
 async function pick(teamId: string, link: DiscordLink, mode?: string, roleId?: string | null) {
   if (mode === 'members') {
     await db.update('discord_links', { team_id: `eq.${teamId}` }, { ping_mode: 'members', ping_role_id: null, managed_role: false })
-    return { ok: true }
+    const removed = await dropManaged(teamId, link)
+    return { ok: true, removed }
   }
   if (mode !== 'role') throw new HttpError(400, 'unknown ping mode')
   const id = String(roleId ?? '')
@@ -68,7 +69,29 @@ async function pick(teamId: string, link: DiscordLink, mode?: string, roleId?: s
   // Picking the role the bot made keeps it managed; anything else is the server's own.
   const managed = Boolean(link.managed_role && link.ping_role_id === id)
   await db.update('discord_links', { team_id: `eq.${teamId}` }, { ping_mode: 'role', ping_role_id: id, managed_role: managed })
-  return { ok: true, role: { id: role.id, name: role.name } }
+  const removed = managed ? null : await dropManaged(teamId, link)
+  return { ok: true, role: { id: role.id, name: role.name }, removed }
+}
+
+/**
+ * The role the bot made has no purpose once the team stops pinging it, so it
+ * goes when the choice changes; otherwise every "let me try everyone instead"
+ * leaves a stray @Team on the server. Best effort: the choice is saved first,
+ * and a role that cannot be deleted is left with a line in the log.
+ */
+async function dropManaged(teamId: string, link: DiscordLink): Promise<string | null> {
+  if (!link.managed_role || !link.ping_role_id) return null
+  try {
+    const roles = await discord<Role[]>('GET', `/guilds/${link.guild_id}/roles`)
+    const role = roles.find((r) => r.id === link.ping_role_id)
+    if (!role) return null
+    await discord('DELETE', `/guilds/${link.guild_id}/roles/${role.id}`)
+    await log(teamId, 'link', `Removed the @${role.name} role from the server`, true)
+    return role.name
+  } catch (err) {
+    await log(teamId, 'link', 'Could not remove the team role from the server', false, explain(err))
+    return null
+  }
 }
 
 async function createManaged(teamId: string, link: DiscordLink, wanted?: string) {
