@@ -156,10 +156,17 @@ export function fetchRoles(teamId: string) {
   return api<{ roles: PickerRole[] }>(`/api/discord/roles?team=${teamId}`);
 }
 
-export function createManagedRole(teamId: string) {
+export function createManagedRole(teamId: string, name: string) {
   return api<{ role: { id: string; name: string }; given: number; missing: number }>(`/api/discord/roles?team=${teamId}`, {
     method: "POST",
-    body: JSON.stringify({ action: "create" }),
+    body: JSON.stringify({ action: "create", name }),
+  });
+}
+
+export function renameManagedRole(teamId: string, name: string) {
+  return api<{ role: { id: string; name: string } }>(`/api/discord/roles?team=${teamId}`, {
+    method: "POST",
+    body: JSON.stringify({ action: "rename", name }),
   });
 }
 
@@ -174,6 +181,13 @@ export function sendTestMessage(teamId: string) {
   return api<{ sent: number; failed: { kind: string; reason: string }[] }>("/api/discord/post", {
     method: "POST",
     body: JSON.stringify({ team: teamId, action: "test" }),
+  });
+}
+
+export function sendTestDm(teamId: string) {
+  return api<{ ok: true }>("/api/discord/post", {
+    method: "POST",
+    body: JSON.stringify({ team: teamId, action: "test_dm" }),
   });
 }
 

@@ -15,11 +15,12 @@ export default function handler(req: Request): Promise<Response> {
     if (req.method !== 'POST') throw new HttpError(405, 'method not allowed')
     const body = (await req.json().catch(() => ({}))) as { team?: string; action?: string; which?: string }
     const teamId = body.team ?? ''
-    await requireOwner(req, teamId)
+    const user = await requireOwner(req, teamId)
     const link = await db.one<DiscordLink>('discord_links', { team_id: `eq.${teamId}` })
     if (!link) throw new HttpError(409, 'not connected')
 
     if (body.action === 'test') return json(await test(teamId))
+    if (body.action === 'test_dm') return json(await testDm(teamId, user.id, link))
     if (body.action === 'post') return json(await postNow(teamId, body.which === 'next' ? 'next' : 'this'))
     if (body.action === 'disconnect') return json(await disconnect(teamId, link))
     throw new HttpError(400, 'unknown action')
@@ -59,6 +60,38 @@ async function test(teamId: string) {
   const summary = failed.length ? `Test message failed for ${failed.map((f) => f.kind).join(', ')}` : `Test message sent to ${sent.length} channel${sent.length === 1 ? '' : 's'}`
   await log(teamId, 'test', summary, failed.length === 0, failed.map((f) => f.reason).join(' ') || undefined)
   return { sent: sent.length, failed }
+}
+
+/**
+ * A DM to the person pressing the button. Two Discord calls: open (or find) the
+ * DM channel, then post in it. The interesting outcome is the failure: 50007
+ * means their privacy settings block DMs from this server, which is exactly
+ * what the reminders will run into for some players.
+ */
+async function testDm(teamId: string, userId: string, link: DiscordLink) {
+  const profile = await db.one<{ discord_id: string | null }>('profiles', { user_id: `eq.${userId}`, select: 'discord_id' })
+  if (!profile?.discord_id) throw new HttpError(409, 'Your Discord account is not linked to your profile yet. Sign out and in again, then retry.')
+  const team = await db.one<{ name: string }>('teams', { id: `eq.${teamId}`, select: 'name' })
+  try {
+    const dm = await discord<{ id: string }>('POST', '/users/@me/channels', { recipient_id: profile.discord_id })
+    await discord('POST', `/channels/${dm.id}/messages`, {
+      flags: COMPONENTS_V2,
+      components: [
+        {
+          type: 17,
+          accent_color: 0x3e9a63,
+          components: [{ type: 10, content: `**Test from Gather.**\n-# Reminders for ${team?.name ?? 'the team'} on ${link.guild_name ?? 'Discord'} will look like this. Nothing else was sent.` }],
+        },
+      ],
+      allowed_mentions: { parse: [] },
+    })
+    await log(teamId, 'test', 'Test DM sent', true)
+    return { ok: true }
+  } catch (err) {
+    const reason = explain(err)
+    await log(teamId, 'test', 'Test DM failed', false, reason)
+    throw new HttpError(409, reason)
+  }
 }
 
 async function postNow(teamId: string, which: 'this' | 'next') {

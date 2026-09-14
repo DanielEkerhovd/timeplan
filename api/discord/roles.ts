@@ -34,22 +34,43 @@ export default function handler(req: Request): Promise<Response> {
     }
     if (req.method !== 'POST') throw new HttpError(405, 'method not allowed')
 
-    const body = (await req.json().catch(() => ({}))) as { action?: string }
-    if (body.action === 'create') return json(await createManaged(teamId, link))
+    const body = (await req.json().catch(() => ({}))) as { action?: string; name?: string }
+    if (body.action === 'create') return json(await createManaged(teamId, link, body.name))
+    if (body.action === 'rename') return json(await renameManaged(teamId, link, body.name ?? ''))
     if (body.action === 'sync') return json(await sync(teamId, link))
     throw new HttpError(400, 'unknown action')
   })
 }
 
-async function createManaged(teamId: string, link: DiscordLink) {
+async function createManaged(teamId: string, link: DiscordLink, wanted?: string) {
   const team = await db.one<{ name: string }>('teams', { id: `eq.${teamId}`, select: 'name' })
   const me = await botMember(link.guild_id)
   if (!me) throw new HttpError(409, 'The bot is no longer in the server. Connect again.')
+  const name = (wanted?.trim() || team?.name || 'Gather team').slice(0, 100)
+
+  const roles = await discord<Role[]>('GET', `/guilds/${link.guild_id}/roles`)
+
+  // Already have one, and it still exists? Then this is a repeat click (back
+  // and forth in the setup, a double tap). Hand back the role we have instead
+  // of littering the server with copies.
+  if (link.managed_role && link.ping_role_id) {
+    const have = roles.find((r) => r.id === link.ping_role_id)
+    if (have) {
+      const result = await sync(teamId, link)
+      return { role: { id: have.id, name: have.name }, ...result }
+    }
+  }
+
+  // A role with that name already on the server is not ours to take over: it
+  // may carry permissions we know nothing about. The owner can pick it under
+  // "use a role the server already has" if that is what they mean.
+  const clash = roles.find((r) => r.id !== link.guild_id && r.name.toLowerCase() === name.toLowerCase())
+  if (clash) throw new HttpError(409, `There is already a role called @${clash.name} on the server. Pick another name, or choose that role under "Use a role the server already has".`)
 
   let role: Role
   try {
     role = await discord<Role>('POST', `/guilds/${link.guild_id}/roles`, {
-      name: team?.name ?? 'Gather team',
+      name,
       color: GATHER_GREEN,
       mentionable: true,
       hoist: false,
@@ -61,6 +82,25 @@ async function createManaged(teamId: string, link: DiscordLink) {
   await log(teamId, 'link', `Created the @${role.name} role`, true)
   const result = await sync(teamId, { ...link, ping_mode: 'role', ping_role_id: role.id, managed_role: true })
   return { role: { id: role.id, name: role.name }, ...result }
+}
+
+/** Rename the role the bot manages. Only that one: roles the server made are the server's to rename. */
+async function renameManaged(teamId: string, link: DiscordLink, wanted: string) {
+  if (!link.managed_role || !link.ping_role_id) throw new HttpError(409, 'The team has no role managed by Gather.')
+  const name = wanted.trim().slice(0, 100)
+  if (name.length < 1) throw new HttpError(400, 'Give the role a name.')
+  const roles = await discord<Role[]>('GET', `/guilds/${link.guild_id}/roles`)
+  const have = roles.find((r) => r.id === link.ping_role_id)
+  if (!have) throw new HttpError(409, 'The role was deleted on Discord. Pick a ping mode again.')
+  const clash = roles.find((r) => r.id !== have.id && r.id !== link.guild_id && r.name.toLowerCase() === name.toLowerCase())
+  if (clash) throw new HttpError(409, `There is already a role called @${clash.name} on the server. Pick another name.`)
+  try {
+    await discord('PATCH', `/guilds/${link.guild_id}/roles/${have.id}`, { name })
+  } catch (err) {
+    throw new HttpError(409, explain(err))
+  }
+  await log(teamId, 'link', `Renamed the team role to @${name}`, true)
+  return { role: { id: have.id, name } }
 }
 
 /** Give the managed role to every team member who is in the server. */

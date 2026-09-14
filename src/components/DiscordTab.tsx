@@ -14,6 +14,8 @@ import {
   fetchRoles,
   fetchStatus,
   postWeekNow,
+  renameManagedRole,
+  sendTestDm,
   sendTestMessage,
   setChannel,
   setPing,
@@ -439,6 +441,7 @@ function Radio({ on, off }: { on: boolean; off: boolean }) {
 function PingPicker({ team, link, run }: { team: MyTeam; link: DiscordState["link"]; run: Run }) {
   const [roles, setRoles] = useState<PickerRole[] | null>(null);
   const [busy, setBusy] = useState(false);
+  const [roleName, setRoleName] = useState(team.name);
   const mode = link?.ping_mode ?? "members";
   // The role section is open when the team pings a role, or the owner just asked for it.
   const [open, setOpen] = useState(mode === "role");
@@ -482,10 +485,7 @@ function PingPicker({ team, link, run }: { team: MyTeam; link: DiscordState["lin
       {open && (
         <div className="flex flex-col gap-3">
           {link?.managed_role && link.ping_role_id ? (
-            <div className="flex items-center justify-between gap-3 rounded-xl border-[1.5px] border-line bg-surface px-4 py-3">
-              <span className="text-[15px] font-semibold">{options.find((o) => o.value === link.ping_role_id)?.label ?? "@team role"}</span>
-              <Tag>Managed by Gather</Tag>
-            </div>
+            <ManagedRole team={team} current={options.find((o) => o.value === link.ping_role_id)?.label.replace(/^@/, "") ?? null} run={run} />
           ) : (
             <>
               <div className="flex flex-col gap-1.5">
@@ -500,29 +500,69 @@ function PingPicker({ team, link, run }: { team: MyTeam; link: DiscordState["lin
                 />
                 <p className="text-[13px] text-muted">A role you manage yourself drifts: new players in Gather do not get it unless someone remembers.</p>
               </div>
-              <div className="flex items-center justify-between gap-4 rounded-[14px] border-[1.5px] border-green-dim bg-green-soft/50 p-4">
+              <div className="flex flex-col gap-3 rounded-[14px] border-[1.5px] border-green-dim bg-green-soft/50 p-4">
                 <div className="flex flex-col">
                   <span className="text-[14px] font-extrabold">Let Gather make a role for the team</span>
                   <span className="text-[13px] text-muted">Join the team, get the role. The bot keeps it in step.</span>
                 </div>
-                <Button
-                  size="sm"
-                  className="h-10 shrink-0"
-                  disabled={busy}
-                  onClick={() => {
-                    setBusy(true);
-                    void run(async () => {
-                      await createManagedRole(team.id);
-                    }, "Role created").finally(() => setBusy(false));
-                  }}
-                >
-                  Create role
-                </Button>
+                <div className="flex items-center gap-2">
+                  <span className="text-[15px] font-bold text-muted">@</span>
+                  <Input value={roleName} onChange={(e) => setRoleName(e.target.value)} className="h-10 text-[14px]" placeholder="Role name" aria-label="Role name" />
+                  <Button
+                    size="sm"
+                    className="h-10 shrink-0"
+                    disabled={busy || roleName.trim().length < 1}
+                    onClick={() => {
+                      setBusy(true);
+                      void run(async () => {
+                        await createManagedRole(team.id, roleName.trim());
+                      }, "Role created").finally(() => setBusy(false));
+                    }}
+                  >
+                    Create role
+                  </Button>
+                </div>
               </div>
             </>
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+/** The role the bot made. Its name lives here, not in Server Settings, so the owner never has to guess which @Team is ours. */
+function ManagedRole({ team, current, run }: { team: MyTeam; current: string | null; run: Run }) {
+  const [name, setName] = useState(current ?? "");
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    if (current !== null) setName(current);
+  }, [current]);
+  const changed = current !== null && name.trim() !== current && name.trim().length > 0;
+  return (
+    <div className="flex flex-col gap-2 rounded-xl border-[1.5px] border-line bg-surface p-3">
+      <div className="flex items-center justify-between gap-3 px-1">
+        <Label>Team role</Label>
+        <Tag>Managed by Gather</Tag>
+      </div>
+      <div className="flex items-center gap-2">
+        <span className="pl-1 text-[15px] font-bold text-muted">@</span>
+        <Input value={name} onChange={(e) => setName(e.target.value)} className="h-10 text-[14px]" placeholder={current ?? "Loading…"} aria-label="Team role name" />
+        <Button
+          variant="secondary"
+          size="sm"
+          className="h-10 shrink-0"
+          disabled={!changed || busy}
+          onClick={() => {
+            setBusy(true);
+            void run(async () => {
+              await renameManagedRole(team.id, name.trim());
+            }, "Role renamed").finally(() => setBusy(false));
+          }}
+        >
+          Rename
+        </Button>
+      </div>
     </div>
   );
 }
@@ -657,10 +697,33 @@ function StatusCard({ team, state, isOwner, run }: { team: MyTeam; state: Discor
               Post this week now
             </Button>
             <TestButton team={team} run={run} />
+            <TestDmButton team={team} run={run} />
           </div>
         )}
       </div>
     </Card>
+  );
+}
+
+/** A DM to whoever is signed in. The failure it surfaces (DMs blocked) is the one reminders will hit for some players. */
+function TestDmButton({ team, run }: { team: MyTeam; run: Run }) {
+  const [busy, setBusy] = useState(false);
+  return (
+    <Button
+      variant="secondary"
+      size="sm"
+      className="h-10"
+      disabled={busy}
+      onClick={() => {
+        setBusy(true);
+        void run(async () => {
+          await sendTestDm(team.id);
+        }, "Check your Discord DMs").finally(() => setBusy(false));
+      }}
+    >
+      <ChatIcon />
+      {busy ? "Sending…" : "Send me a test DM"}
+    </Button>
   );
 }
 

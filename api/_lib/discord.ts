@@ -66,7 +66,7 @@ export function explain(err: unknown): string {
       case 50001:
         return 'The bot cannot see that channel. Let it in under the channel’s permissions on Discord.'
       case 50007:
-        return 'Discord does not allow DMs from this server to that person.'
+        return 'Discord blocks DMs from this server to that account. On Discord: User Settings → Content & Social → Direct Messages, allow messages from server members (or from this server specifically).'
       case 50013:
         return 'The bot is missing a permission. Check that it can send messages, and that its role is above the team role in Server Settings → Roles.'
       case 50035:
