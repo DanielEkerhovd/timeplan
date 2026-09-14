@@ -20,7 +20,7 @@ import { env, json } from '../_lib/env'
 import { db } from '../_lib/supabase'
 import type { DiscordChannel, DiscordLink, WeekPost } from '../_lib/supabase'
 import { addDays, localNow, mondayOf } from '../_lib/time'
-import { buildWeekMessage, COMPONENTS_V2, contentHash, fetchBotWeek } from '../_lib/week'
+import { buildWeekMessage, contentHash, fetchBotWeek } from '../_lib/week'
 
 interface Interaction {
   type: number
@@ -40,9 +40,22 @@ interface Interaction {
 
 const EPHEMERAL = 64
 
+/** Something only the person who clicked sees. Used for every "no" and every error. */
 const reply = (content: string) => json({ type: 4, data: { content, flags: EPHEMERAL, allowed_mentions: { parse: [] } } })
 
-export default async function handler(req: Request): Promise<Response> {
+/** Vercel's edge runtime hands us this as the second argument. `waitUntil` keeps the function alive after the response. */
+interface EdgeContext {
+  waitUntil?: (p: Promise<unknown>) => void
+}
+
+/**
+ * Discord gives us three seconds, and a cold start plus a few database calls
+ * can eat that. So every command and button is answered at once with "working
+ * on it" (a deferred response), and the real answer is written into the
+ * message afterwards through the interaction's webhook. Nothing the person
+ * sees changes; the spinner just never turns into "did not respond in time".
+ */
+export default async function handler(req: Request, ctx?: EdgeContext): Promise<Response> {
   if (req.method !== 'POST') return new Response('Method not allowed', { status: 405 })
 
   const signature = req.headers.get('x-signature-ed25519') ?? ''
@@ -62,14 +75,55 @@ export default async function handler(req: Request): Promise<Response> {
   // 1 = PING. Discord's setup check, and its periodic health check.
   if (it.type === 1) return json({ type: 1 })
 
-  try {
-    if (it.type === 2 && it.data?.name === 'week') return await weekCommand(it)
-    if (it.type === 3 && it.data?.custom_id) return await button(it)
-  } catch (err) {
-    console.error(err)
-    return reply('Something went wrong on our side. Try again in a moment.')
+  const later = async (work: Promise<void>) => {
+    const p = work.catch(async (err) => {
+      console.error(err)
+      await followUp(it, 'Something went wrong on our side. Try again in a moment.')
+    })
+    if (ctx?.waitUntil) ctx.waitUntil(p)
+    else await p
+  }
+
+  if (it.type === 2 && it.data?.name === 'week') {
+    // Public in a team channel, private anywhere else. That has to be decided
+    // before deferring, so one quick lookup comes first.
+    const teamId = it.channel_id ? await teamForChannel(it.channel_id) : null
+    await later(weekCommand(it, teamId))
+    // 5 = DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE: "thinking…" until we edit it.
+    return json({ type: 5, data: { flags: teamId ? 0 : EPHEMERAL } })
+  }
+  if (it.type === 3 && it.data?.custom_id) {
+    await later(button(it))
+    // 6 = DEFERRED_UPDATE_MESSAGE: the message stays as it is until we edit it.
+    return json({ type: 6 })
   }
   return reply('That command is not wired up yet.')
+}
+
+const webhook = (it: Interaction) => `https://discord.com/api/v10/webhooks/${env.appId()}/${it.token}`
+
+/** Replace the deferred answer (or, for a button, the message it sits on). */
+async function editOriginal(it: Interaction, body: Record<string, unknown>): Promise<void> {
+  const res = await fetch(`${webhook(it)}/messages/@original`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  if (!res.ok) throw new Error(`edit original: ${res.status} ${await res.text().catch(() => '')}`)
+}
+
+/** A private note to the person who clicked, on top of whatever the message shows. */
+async function followUp(it: Interaction, content: string): Promise<void> {
+  await fetch(webhook(it), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ content, flags: EPHEMERAL, allowed_mentions: { parse: [] } }),
+  }).catch(() => undefined)
+}
+
+/** For a deferred command, "reply" means: turn the thinking message into this text. */
+async function say(it: Interaction, content: string): Promise<void> {
+  await editOriginal(it, { content, components: [], allowed_mentions: { parse: [] } })
 }
 
 const userId = (it: Interaction) => it.member?.user.id ?? it.user?.id ?? null
@@ -95,21 +149,17 @@ async function teamsForUser(guildId: string, discordId: string): Promise<string[
   return rows.map((r) => r.team_id)
 }
 
-async function weekCommand(it: Interaction): Promise<Response> {
-  if (!it.guild_id || !it.channel_id) return reply('Use this in a server channel.')
+async function weekCommand(it: Interaction, fromChannel: string | null): Promise<void> {
+  if (!it.guild_id || !it.channel_id) return say(it, 'Use this in a server channel.')
   const me = userId(it)
-  if (!me) return reply('Could not tell who you are.')
+  if (!me) return say(it, 'Could not tell who you are.')
 
-  let teamId = await teamForChannel(it.channel_id)
-  // In a team channel the reply is for everyone there. Anywhere else it is for the
-  // person who asked: the roster does not belong in #general.
-  let flags = COMPONENTS_V2
+  let teamId = fromChannel
   if (!teamId) {
     const mine = await teamsForUser(it.guild_id, me)
     if (mine.length === 1) teamId = mine[0]
-    else if (mine.length === 0) return reply(`You are not on a team in this server. Join one at ${env.appUrl()}`)
-    else return reply('This channel is not linked to a team, and you are on more than one here. Use /week in one of the team channels.')
-    flags |= EPHEMERAL
+    else if (mine.length === 0) return say(it, `You are not on a team in this server. Join one at ${env.appUrl()}`)
+    else return say(it, 'This channel is not linked to a team, and you are on more than one here. Use /week in one of the team channels.')
   }
 
   const which = String(it.data?.options?.find((o) => o.name === 'which')?.value ?? 'this')
@@ -117,30 +167,28 @@ async function weekCommand(it: Interaction): Promise<Response> {
     db.one<{ id: string; timezone: string }>('teams', { id: `eq.${teamId}`, select: 'id,timezone' }),
     db.one<DiscordLink>('discord_links', { team_id: `eq.${teamId}` }),
   ])
-  if (!team) return reply('That team no longer exists.')
+  if (!team) return say(it, 'That team no longer exists.')
   const today = localNow(team.timezone).dateKey
   const monday = mondayOf(which === 'next' ? addDays(today, 7) : today)
 
   const week = await fetchBotWeek(teamId, monday)
-  if (!week) return reply('That team no longer exists.')
-  const msg = buildWeekMessage(week, { ping: null, link, appUrl: env.appUrl() })
+  if (!week) return say(it, 'That team no longer exists.')
   // A lookup, not the living post: a plain reply where the command was typed.
-  return json({ type: 4, data: { ...msg, flags } })
+  await editOriginal(it, buildWeekMessage(week, { ping: null, link, appUrl: env.appUrl() }))
 }
 
-async function button(it: Interaction): Promise<Response> {
+async function button(it: Interaction): Promise<void> {
   const me = userId(it)
   const m = it.data?.custom_id?.match(/^(join|cant):([0-9a-f-]{36})$/)
-  if (!me || !m) return reply('That button is not wired up.')
+  if (!me || !m) return followUp(it, 'That button is not wired up.')
   const [, action, eventId] = m
 
-  // The team comes from the event row, never from the button. Three seconds to
-  // answer, so the reads that do not depend on each other go out together.
+  // The team comes from the event row, never from the button.
   const event = await db.one<{ id: string; team_id: string; date: string; teams: { timezone: string } }>('events', {
     id: `eq.${eventId}`,
     select: 'id,team_id,date,teams(timezone)',
   })
-  if (!event) return reply('That session was removed.')
+  if (!event) return followUp(it, 'That session was removed.')
 
   const [rows, link, live] = await Promise.all([
     db.select<{ user_id: string }>('members', {
@@ -152,10 +200,10 @@ async function button(it: Interaction): Promise<Response> {
     it.message ? db.one<WeekPost>('discord_week_post', { team_id: `eq.${event.team_id}` }) : Promise.resolve(null),
   ])
   const member = rows[0]
-  if (!member) return reply(`You are not on this team in Gather. Ask for an invite link, or sign in at ${env.appUrl()}`)
+  if (!member) return followUp(it, `You are not on this team in Gather. Ask for an invite link, or sign in at ${env.appUrl()}`)
 
   const today = localNow(event.teams?.timezone ?? 'UTC').dateKey
-  if (event.date < mondayOf(today)) return reply('That week is over.')
+  if (event.date < mondayOf(today)) return followUp(it, 'That week is over.')
 
   await db.upsert(
     'event_responses',
@@ -165,17 +213,13 @@ async function button(it: Interaction): Promise<Response> {
 
   // Redraw the message the button sits on, so the names are right for everyone.
   const week = await fetchBotWeek(event.team_id, mondayOf(event.date))
-  if (!week) return reply('Saved.')
+  if (!week) return
   const msg = buildWeekMessage(week, { ping: null, link, appUrl: env.appUrl() })
+  await editOriginal(it, msg)
 
   // If this is the living post, remember what it now says so the cron does not PATCH it again for nothing.
-  if (it.message) {
-    if (live && live.message_id === it.message.id) {
-      const hash = await contentHash(msg)
-      await db.update('discord_week_post', { team_id: `eq.${event.team_id}` }, { content_hash: hash, updated_at: new Date().toISOString() })
-    }
+  if (it.message && live && live.message_id === it.message.id) {
+    const hash = await contentHash(msg)
+    await db.update('discord_week_post', { team_id: `eq.${event.team_id}` }, { content_hash: hash, updated_at: new Date().toISOString() })
   }
-
-  // 7 = UPDATE_MESSAGE: replace the message the button is on.
-  return json({ type: 7, data: { ...msg, flags: COMPONENTS_V2 } })
 }
