@@ -4,6 +4,7 @@ import { useSearchParams } from "react-router-dom";
 import type { MyTeam } from "../lib/teams";
 import { friendlyError } from "../lib/types";
 import {
+  createChannel,
   createManagedRole,
   disconnectDiscord,
   DOW_LABELS,
@@ -23,7 +24,7 @@ import {
 } from "../lib/discord";
 import { DiscordApiError } from "../lib/discord";
 import type { ChannelKind, DiscordState, PickerChannel, PickerRole, StatusCheck } from "../lib/discord";
-import { Button, Card, Check, Eyebrow, ErrorText, Label, Pill, Spinner, Toggle, useToast } from "./ui";
+import { Button, Card, Check, Eyebrow, ErrorText, Input, Label, Pill, Spinner, Toggle, useToast } from "./ui";
 import { Dropdown } from "./pickers";
 import type { DropdownOption } from "./pickers";
 
@@ -184,7 +185,9 @@ function Setup({ team, state, run, error, onDone }: { team: MyTeam; state: Disco
   const [picker, setPicker] = useState<PickerChannel[] | null>(null);
   const [pickErr, setPickErr] = useState<string | null>(null);
   const [choice, setChoice] = useState<string | null>(null);
+  const [newName, setNewName] = useState("");
   const [busy, setBusy] = useState(false);
+  const slug = team.name.toLowerCase().replace(/[^a-z0-9æøå]+/g, "-").replace(/^-+|-+$/g, "");
 
   useEffect(() => {
     let alive = true;
@@ -198,7 +201,19 @@ function Setup({ team, state, run, error, onDone }: { team: MyTeam; state: Disco
 
   useEffect(() => {
     setChoice(step === 2 ? schedule : step === 3 ? (updates ?? "same") : null);
-  }, [step, schedule, updates]);
+    setNewName(step === 2 ? `${slug}-schedule` : step === 3 ? `${slug}-updates` : "");
+  }, [step, schedule, updates, slug]);
+
+  /** "new" means make the channel first, then use it. The new channel joins the list so it shows up on the next step. */
+  async function pick(kind: "schedule" | "updates", value: string | null) {
+    let id = value;
+    if (value === "new") {
+      const made = await createChannel(team.id, newName);
+      setPicker((p) => [...(p ?? []), { id: made.id, name: made.name, canPost: true, canPin: true, taken: false, mine: kind }]);
+      id = made.id;
+    }
+    await setChannel(team.id, kind, id);
+  }
 
   // Only move on when the save went through. A failed save with a green step
   // number would be a lie the owner finds out about on Sunday evening.
@@ -236,23 +251,23 @@ function Setup({ team, state, run, error, onDone }: { team: MyTeam; state: Disco
         <div className="h-px bg-line-soft" />
 
         {step === 2 && (
-          <Question title="Where do you want the week plan?" lede="Weekplan posts the whole week in one message, and keeps it up to date. We recomment a separate channel for it, so it does not get lost in the chat.">
-            <ChannelList channels={picker} value={choice} onChange={setChoice} exclude={[]} />
+          <Question title="Where do you want the week plan?" lede="The bot posts the week here and keeps it up to date. One message, pinned, always at the bottom of the channel.">
+            <ChannelList channels={picker} value={choice} onChange={setChoice} exclude={[]} newName={newName} onNewName={setNewName} />
             <Nav
-              busy={busy || !choice}
-              onNext={() => next(() => setChannel(team.id, "schedule", choice))}
+              busy={busy || !choice || (choice === "new" && newName.trim().length < 2)}
+              onNext={() => next(() => pick("schedule", choice))}
             />
           </Question>
         )}
 
         {step === 3 && (
           <Question title="Where do you want updates?" lede="New sessions, moves, cancellations, reminders. Several messages a week, so pick a channel that can take it.">
-            <ChannelList channels={picker} value={choice} onChange={setChoice} exclude={schedule ? [schedule] : []} sameLabel="Same channel as the week plan" />
+            <ChannelList channels={picker} value={choice} onChange={setChoice} exclude={schedule ? [schedule] : []} sameLabel="Same channel as the week plan" newName={newName} onNewName={setNewName} />
             {choice === "same" && <p className="text-[13px] text-muted">Every update pushes the week plan up the channel. Works for small teams with a session or two a week.</p>}
             <Nav
               back={() => setStep(2)}
-              busy={busy || !choice}
-              onNext={() => next(() => setChannel(team.id, "updates", choice === "same" ? null : choice))}
+              busy={busy || !choice || (choice === "new" && newName.trim().length < 2)}
+              onNext={() => next(() => pick("updates", choice === "same" ? null : choice))}
             />
           </Question>
         )}
@@ -328,12 +343,16 @@ function ChannelList({
   onChange,
   exclude,
   sameLabel,
+  newName,
+  onNewName,
 }: {
   channels: PickerChannel[] | null;
   value: string | null;
   onChange: (id: string) => void;
   exclude: string[];
   sameLabel?: string;
+  newName: string;
+  onNewName: (name: string) => void;
 }) {
   if (!channels) return <Spinner className="min-h-[120px]" />;
   const rows = channels.filter((c) => !exclude.includes(c.id));
@@ -364,6 +383,25 @@ function ChannelList({
             </button>
           );
         })}
+        {/* Make one instead. The name is prefilled from the team; the bot creates it at the top of the server, and it can be dragged into a category afterwards. */}
+        <div
+          className={`flex flex-col gap-3 rounded-[14px] border-[1.5px] px-4 py-3.5 transition ${
+            value === "new" ? "border-ink bg-surface" : "border-line bg-surface hover:border-faint"
+          }`}
+        >
+          <button type="button" onClick={() => onChange("new")} className="flex items-center gap-3 text-left">
+            <Radio on={value === "new"} off={false} />
+            <span className="text-[15px] font-bold">Create a new channel</span>
+          </button>
+          {value === "new" && (
+            <div className="flex items-center gap-2 pl-[30px]">
+              <span className="text-faint">
+                <Hash />
+              </span>
+              <Input value={newName} onChange={(e) => onNewName(e.target.value)} className="h-10 text-[14px]" placeholder="channel-name" aria-label="New channel name" />
+            </div>
+          )}
+        </div>
         {sameLabel && (
           <button
             type="button"

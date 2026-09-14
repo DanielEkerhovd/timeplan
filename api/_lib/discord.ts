@@ -83,6 +83,7 @@ export function explain(err: unknown): string {
 
 export const P = {
   ADMINISTRATOR: 1n << 3n,
+  MANAGE_CHANNELS: 1n << 4n,
   MANAGE_GUILD: 1n << 5n,
   VIEW_CHANNEL: 1n << 10n,
   SEND_MESSAGES: 1n << 11n,
@@ -94,7 +95,7 @@ export const P = {
 }
 
 /** The permissions the install link asks for. Nothing more. */
-export const INSTALL_PERMISSIONS = P.VIEW_CHANNEL | P.SEND_MESSAGES | P.MANAGE_MESSAGES | P.EMBED_LINKS | P.ATTACH_FILES | P.MANAGE_ROLES | P.SEND_MESSAGES_IN_THREADS
+export const INSTALL_PERMISSIONS = P.VIEW_CHANNEL | P.SEND_MESSAGES | P.MANAGE_MESSAGES | P.EMBED_LINKS | P.ATTACH_FILES | P.MANAGE_ROLES | P.MANAGE_CHANNELS | P.SEND_MESSAGES_IN_THREADS
 
 export interface Role {
   id: string
@@ -167,6 +168,11 @@ export function channelPermissions(guildId: string, roles: Role[], member: Guild
 }
 
 export const has = (perms: bigint, bit: bigint) => (perms & bit) === bit
+
+/** Everything a member is allowed server-wide, before channel overwrites. */
+export function guildPermissions(guildId: string, roles: Role[], member: GuildMember): bigint {
+  return [guildId, ...member.roles].reduce((acc, id) => acc | BigInt(roles.find((r) => r.id === id)?.permissions ?? '0'), 0n)
+}
 
 /** The highest position among the roles a member holds. */
 export function topPosition(roles: Role[], member: GuildMember): number {

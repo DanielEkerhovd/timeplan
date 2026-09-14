@@ -19,7 +19,7 @@ import { verifyDiscordSignature } from '../_lib/crypto'
 import { env, json } from '../_lib/env'
 import { db } from '../_lib/supabase'
 import type { DiscordChannel, DiscordLink } from '../_lib/supabase'
-import { addDays, dayName, localNow, mondayOf } from '../_lib/time'
+import { addDays, localNow, mondayOf } from '../_lib/time'
 import { buildWeekMessage, fetchBotWeek } from '../_lib/week'
 import type { BotWeek } from '../_lib/week'
 
@@ -195,7 +195,7 @@ async function button(it: Interaction): Promise<void> {
   if (r.error === 'gone') return followUp(it, 'That session was removed.')
   if (r.error === 'not_member') return followUp(it, `You are not on this team in Gather. Ask for an invite link, or sign in at ${env.appUrl()}`)
   if (r.error === 'past') return followUp(it, 'That week is over.')
-  if (!r.week || !r.event) return followUp(it, 'Saved.')
+  if (!r.week) return
 
   const link = await db.one<DiscordLink>('discord_links', { team_id: `eq.${r.week.team.id}` })
   await editOriginal(it, buildWeekMessage(r.week, { ping: null, link, appUrl: env.appUrl() }))
@@ -205,8 +205,6 @@ async function button(it: Interaction): Promise<void> {
   // next run, sees the hash differ, and puts the message right. Self-healing
   // beats a lock.
 
-  // The message is the same for everyone, so the button cannot say "Joined" to
-  // one person. This is the personal part: a note only the clicker sees.
-  const what = `${r.event.opponent ? `${r.event.title} vs ${r.event.opponent}` : r.event.title} on ${dayName(r.event.date)}`
-  await followUp(it, action === 'join' ? `You're in for ${what}.` : `Noted, you're out of ${what}.`)
+  // No confirmation note: the names on the card are the confirmation. Only a
+  // "no" (not on the team, week over, session gone) gets a private message.
 }

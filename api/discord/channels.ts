@@ -5,7 +5,7 @@
 
 export const config = { runtime: 'edge' }
 
-import { botMember, channelPermissions, discord, has, P, postableChannels } from '../_lib/discord'
+import { botMember, channelPermissions, discord, explain, guildPermissions, has, P, postableChannels } from '../_lib/discord'
 import type { Channel, Role } from '../_lib/discord'
 import { guard, HttpError, json } from '../_lib/env'
 import { db, requireOwner } from '../_lib/supabase'
@@ -33,6 +33,29 @@ export default function handler(req: Request): Promise<Response> {
 
     const me = await botMember(link.guild_id)
     if (!me) throw new HttpError(409, 'The bot is no longer in the server. Connect again.')
+
+    if (req.method === 'POST') {
+      // Make a text channel. Needs Manage Channels, which older installs did not
+      // ask for; the fix is one more trip through Connect to Discord.
+      const body = (await req.json().catch(() => ({}))) as { name?: string }
+      const name = (body.name ?? '')
+        .toLowerCase()
+        .replace(/[^a-z0-9æøå_-]+/g, '-')
+        .replace(/^-+|-+$/g, '')
+        .slice(0, 100)
+      if (name.length < 2) throw new HttpError(400, 'Give the channel a name.')
+      const roles = await discord<Role[]>('GET', `/guilds/${link.guild_id}/roles`)
+      const perms = guildPermissions(link.guild_id, roles, me)
+      if (!has(perms, P.ADMINISTRATOR) && !has(perms, P.MANAGE_CHANNELS)) {
+        throw new HttpError(409, 'The bot cannot create channels yet. Press Connect to Discord once more to give it Manage Channels, then try again.')
+      }
+      try {
+        const made = await discord<Channel>('POST', `/guilds/${link.guild_id}/channels`, { name, type: 0 })
+        return json({ id: made.id, name: made.name })
+      } catch (err) {
+        throw new HttpError(409, explain(err))
+      }
+    }
 
     const [roles, channels, links] = await Promise.all([
       discord<Role[]>('GET', `/guilds/${link.guild_id}/roles`),

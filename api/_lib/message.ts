@@ -84,7 +84,7 @@ export function buildWeekMessage(week: BotWeek, opts: { ping: string | null; lin
     type: 17,
     accent_color: GATHER_GREEN,
     components: [
-      { type: 10, content: `# ${week.team.name} · Week ${nr}\n-# ${weekRangeLabel(week.week_start)}  ·  ${summary}\n${WIDTH}` },
+      { type: 10, content: `# ${week.team.name} · Week ${nr}\n${weekRangeLabel(week.week_start)}  ·  ${summary}\n${WIDTH}` },
     ],
   })
 

@@ -140,6 +140,14 @@ export function fetchChannels(teamId: string) {
   return api<{ guild: { id: string; name: string | null }; channels: PickerChannel[] }>(`/api/discord/channels?team=${teamId}`);
 }
 
+/** Makes a text channel on the server. Needs Manage Channels on the bot. */
+export function createChannel(teamId: string, name: string) {
+  return api<{ id: string; name: string }>(`/api/discord/channels?team=${teamId}`, {
+    method: "POST",
+    body: JSON.stringify({ name }),
+  });
+}
+
 export function fetchStatus(teamId: string) {
   return api<{ checks: StatusCheck[] }>(`/api/discord/status?team=${teamId}`);
 }
