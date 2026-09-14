@@ -125,23 +125,27 @@ export default function SettingsPage({ team, week, onTeamsChanged }: Props) {
             {team.name}
           </h1>
         </div>
-        <div className="flex w-fit max-w-full gap-0.5 overflow-x-auto rounded-[12px] bg-surface p-[3px] shadow-card sm:gap-1">
-          {tabs.map((t) => (
-            <button
-              key={t.key}
-              type="button"
-              onClick={() => goTab(t.key)}
-              aria-current={tab === t.key ? "page" : undefined}
-              // Fem faner på 390 piksler: litt strammere tekst og luft, så de får
-              // plass uten å måtte dras sidelengs. Fra sm og opp som før.
-              className={`h-9 shrink-0 rounded-[9px] px-2 text-[12px] font-extrabold transition sm:px-3.5 sm:text-[13px] ${
-                tab === t.key
-                  ? "bg-ink text-on-ink"
-                  : "text-muted hover:text-ink"
-              }`}
-            >
-              {t.label}
-            </button>
+        <div className="flex max-w-full flex-wrap items-center gap-2.5">
+          {tabGroups.map((group, gi) => (
+            <div key={gi} className="flex w-fit max-w-full gap-0.5 overflow-x-auto rounded-[12px] bg-surface p-[3px] shadow-card sm:gap-1">
+              {group.map((t) => (
+                <button
+                  key={t.key}
+                  type="button"
+                  onClick={() => goTab(t.key)}
+                  aria-current={tab === t.key ? "page" : undefined}
+                  // Seks faner på 390 piksler: litt strammere tekst og luft, så de får
+                  // plass uten å måtte dras sidelengs. Fra sm og opp som før.
+                  className={`h-9 shrink-0 rounded-[9px] px-2 text-[12px] font-extrabold transition sm:px-3.5 sm:text-[13px] ${
+                    tab === t.key
+                      ? "bg-ink text-on-ink"
+                      : "text-muted hover:text-ink"
+                  }`}
+                >
+                  {t.label}
+                </button>
+              ))}
+            </div>
           ))}
         </div>
       </div>
@@ -1188,14 +1192,21 @@ function PreviewDays({
 
 type TabKey = "plan" | "activities" | "roles" | "sharing" | "discord" | "team";
 
-const tabs: { key: TabKey; label: string }[] = [
-  { key: "plan", label: "Week plan" },
-  { key: "activities", label: "Activities" },
-  { key: "roles", label: "Roles" },
-  { key: "sharing", label: "Sharing" },
-  { key: "discord", label: "Discord" },
-  { key: "team", label: "Team" },
+// Two bars: the team itself, and how it reaches the outside (share links, the
+// Discord bot). Split so the second group reads as its own thing.
+const tabGroups: { key: TabKey; label: string }[][] = [
+  [
+    { key: "plan", label: "Week plan" },
+    { key: "activities", label: "Activities" },
+    { key: "roles", label: "Roles" },
+    { key: "team", label: "Team" },
+  ],
+  [
+    { key: "sharing", label: "Sharing" },
+    { key: "discord", label: "Discord" },
+  ],
 ];
+const tabs = tabGroups.flat();
 
 /** Hvem som har hvilken rolle. Ren lesning, men det er det du lurer på her. */
 /**
