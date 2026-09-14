@@ -13,8 +13,9 @@ import { AvatarStack, Button, DotRow, ErrorText } from '../components/ui'
  * skjermbilder — da følger de lys og mørk modus, og de blir aldri utdaterte.
  */
 export default function Login() {
-  const { user, loading, signInWithDiscord } = useAuth()
-  const [error, setError] = useState<string | null>(null)
+  const { user, loading, authError, signInWithDiscord } = useAuth()
+  // Starts with whatever Supabase said when the last attempt came back broken.
+  const [error, setError] = useState<string | null>(authError ? `Sign-in failed: ${authError}` : null)
 
   if (!loading && user) return <Navigate to="/" replace />
 

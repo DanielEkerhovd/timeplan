@@ -6,6 +6,8 @@ interface AuthState {
   session: Session | null
   user: User | null
   loading: boolean
+  /** What Supabase put in the URL when a sign-in came back broken (error_description), if anything. */
+  authError: string | null
   /** `next` er en sti i appen å komme tilbake til, f.eks. '/join/K7XM2Q9TB4WZ'. */
   signInWithDiscord: (next?: string) => Promise<void>
   signOut: () => Promise<void>
@@ -16,6 +18,8 @@ export const AuthContext = createContext<AuthState | null>(null)
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null)
   const [loading, setLoading] = useState(true)
+  // Read once, before the router gets a chance to strip the hash on redirect.
+  const [authError] = useState<string | null>(() => readAuthError())
 
   useEffect(() => {
     // Første last: hent sesjonen fra localStorage. Etterpå: lytt på endringer
@@ -52,7 +56,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{ session, user: session?.user ?? null, loading, signInWithDiscord, signOut }}>
+    <AuthContext.Provider value={{ session, user: session?.user ?? null, loading, authError, signInWithDiscord, signOut }}>
       {children}
     </AuthContext.Provider>
   )
@@ -62,4 +66,27 @@ export function useAuth(): AuthState {
   const ctx = useContext(AuthContext)
   if (!ctx) throw new Error('useAuth must be used inside <AuthProvider>')
   return ctx
+}
+
+/**
+ * Supabase sends OAuth failures back as `#error=…&error_description=…` (or as
+ * query params, depending on flow). Pull the human text out so the login page
+ * can say what went wrong instead of silently showing the button again.
+ */
+function readAuthError(): string | null {
+  if (typeof window === 'undefined') return null
+  for (const raw of [window.location.hash.replace(/^#/, ''), window.location.search.replace(/^\?/, '')]) {
+    const p = new URLSearchParams(raw)
+    const desc = p.get('error_description') ?? p.get('error')
+    if (desc) return safeDecode(desc.replace(/\+/g, ' '))
+  }
+  return null
+}
+
+function safeDecode(s: string): string {
+  try {
+    return decodeURIComponent(s)
+  } catch {
+    return s
+  }
 }
