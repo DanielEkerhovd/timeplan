@@ -1,0 +1,915 @@
+import { useCallback, useEffect, useState } from "react";
+import type { ReactNode } from "react";
+import { useSearchParams } from "react-router-dom";
+import type { MyTeam } from "../lib/teams";
+import { friendlyError } from "../lib/types";
+import {
+  createManagedRole,
+  disconnectDiscord,
+  DOW_LABELS,
+  effectiveChannel,
+  fetchChannels,
+  fetchDiscordState,
+  fetchRoles,
+  fetchStatus,
+  postWeekNow,
+  sendTestMessage,
+  setChannel,
+  setPing,
+  shortTime,
+  startConnect,
+  syncManagedRole,
+  updateSchedule,
+} from "../lib/discord";
+import type { ChannelKind, DiscordState, PickerChannel, PickerRole, StatusCheck } from "../lib/discord";
+import { Button, Card, Check, Eyebrow, ErrorText, Label, Pill, Spinner, Toggle, useToast } from "./ui";
+import { Dropdown } from "./pickers";
+import type { DropdownOption } from "./pickers";
+
+/**
+ * Settings → Discord. Three shapes, one after the other:
+ *
+ *   1. Not connected: one button, three lines on what the bot does.
+ *   2. Setup: four questions and a test, one per screen. Starts right after
+ *      Discord sends the owner back, and again whenever the week-plan channel
+ *      is missing. Leaving halfway keeps what was answered.
+ *   3. Connected: status first (it is the part that matters), then the same
+ *      choices as editable fields, what the bot sends, the last messages, and
+ *      Disconnect at the bottom.
+ *
+ * Only the owner can change anything here; RLS says so, and the buttons that
+ * talk to Discord check it again on the server.
+ */
+export default function DiscordTab({ team }: { team: MyTeam }) {
+  const [state, setState] = useState<DiscordState | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [wizard, setWizard] = useState(false);
+  const [params, setParams] = useSearchParams();
+  const toast = useToast();
+  const isOwner = team.role === "owner";
+
+  const reload = useCallback(async () => {
+    try {
+      setState(await fetchDiscordState(team.id));
+    } catch (err) {
+      setError(friendlyError(err));
+    }
+  }, [team.id]);
+
+  useEffect(() => {
+    void reload();
+  }, [reload]);
+
+  // Back from Discord: ?discord=linked|cancelled|no_manage_server|token. Read once, then clean the URL.
+  const outcome = params.get("discord");
+  useEffect(() => {
+    if (!outcome) return;
+    if (outcome === "linked") setWizard(true);
+    else if (outcome === "no_manage_server") setError("Not connected: you need Manage Server in that Discord server. Ask a server admin to connect it, or pick another server.");
+    else if (outcome === "wrong_account") setError("Not connected: that was a different Discord account from the one you signed in to Gather with. Sign in to Discord as yourself and try again.");
+    else if (outcome === "token") setError("Discord did not accept the sign-in. Try again.");
+    const p = new URLSearchParams(params);
+    p.delete("discord");
+    setParams(p, { replace: true });
+  }, [outcome, params, setParams]);
+
+  async function run(fn: () => Promise<void>, done?: string): Promise<boolean> {
+    try {
+      await fn();
+      setError(null);
+      await reload();
+      if (done) toast(done);
+      return true;
+    } catch (err) {
+      setError(friendlyError(err));
+      return false;
+    }
+  }
+
+  if (!state) return <Spinner />;
+
+  const hasSchedule = state.channels.some((c) => c.kind === "schedule");
+  const showWizard = state.link && isOwner && (wizard || !hasSchedule);
+
+  return (
+    <div className="flex flex-col gap-4">
+      {!state.link ? (
+        <NotConnected team={team} isOwner={isOwner} onConnect={() => run(() => startConnect(team.id))} error={error} />
+      ) : showWizard ? (
+        <Setup team={team} state={state} run={run} error={error} onDone={() => setWizard(false)} />
+      ) : (
+        <Connected team={team} state={state} isOwner={isOwner} run={run} error={error} onRerun={() => setWizard(true)} />
+      )}
+    </div>
+  );
+}
+
+// ---------- 1. Not connected ----------
+
+function NotConnected({ team, isOwner, onConnect, error }: { team: MyTeam; isOwner: boolean; onConnect: () => Promise<boolean>; error: string | null }) {
+  const [busy, setBusy] = useState(false);
+  return (
+    <>
+      <Intro title="Let the bot keep the team posted">
+        The week plan lands in a channel of your choice and stays up to date. Changes, new sessions and same-day reminders go where you tell them to.
+      </Intro>
+      <ErrorText>{error}</ErrorText>
+      <Card className="flex flex-col gap-5 p-6">
+        <div className="flex flex-col gap-3.5 rounded-[16px] border-[1.5px] border-line bg-bg p-4">
+          <div className="flex items-center justify-between gap-4">
+            <div className="flex min-w-0 items-center gap-3">
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-surface-2 text-faint">
+                <LockIcon />
+              </span>
+              <div className="flex min-w-0 flex-col">
+                <span className="text-[15px] font-extrabold">Not connected</span>
+                <span className="text-[13px] text-muted">
+                  {isOwner ? `Takes a minute. You need Manage Server on the Discord server ${team.name} uses.` : "Only the owner can connect the team."}
+                </span>
+              </div>
+            </div>
+            {isOwner && (
+              <Button
+                size="sm"
+                className="h-10 shrink-0"
+                disabled={busy}
+                onClick={() => {
+                  setBusy(true);
+                  void onConnect().then((ok) => {
+                    if (!ok) setBusy(false);
+                  });
+                }}
+              >
+                <ChatIcon />
+                Connect to Discord
+              </Button>
+            )}
+          </div>
+        </div>
+        <div className="grid gap-3.5 sm:grid-cols-3">
+          <Feature label="Week plan">One message with the whole week, pinned, edited in place when something changes. Reposted with a ping every new week.</Feature>
+          <Feature label="Updates">New, moved or cancelled sessions, with Join and Can&rsquo;t right on the message. Comes in the next round.</Feature>
+          <Feature label="Reminders">A nudge to fill in next week, and a heads-up on the day of a session. Comes in the next round.</Feature>
+        </div>
+        <p className="px-1 text-[13px] text-muted">Availability never leaves the app. The bot only ever posts what is booked.</p>
+      </Card>
+    </>
+  );
+}
+
+function Feature({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="flex flex-col gap-1.5 rounded-[16px] bg-bg p-4">
+      <Label>{label}</Label>
+      <span className="text-[14px] font-semibold leading-snug">{children}</span>
+    </div>
+  );
+}
+
+// ---------- 2. Setup ----------
+
+type Run = (fn: () => Promise<void>, done?: string) => Promise<boolean>;
+
+const STEPS = ["Connect", "Week plan", "Updates", "Who to ping", "Test"];
+
+function Setup({ team, state, run, error, onDone }: { team: MyTeam; state: DiscordState; run: Run; error: string | null; onDone: () => void }) {
+  const schedule = state.channels.find((c) => c.kind === "schedule")?.channel_id ?? null;
+  const updates = state.channels.find((c) => c.kind === "updates")?.channel_id ?? null;
+  // Pick up where they left off: the first question without an answer.
+  const [step, setStep] = useState(schedule ? 3 : 2);
+  const [picker, setPicker] = useState<PickerChannel[] | null>(null);
+  const [pickErr, setPickErr] = useState<string | null>(null);
+  const [choice, setChoice] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    let alive = true;
+    fetchChannels(team.id)
+      .then((r) => alive && setPicker(r.channels))
+      .catch((err) => alive && setPickErr(friendlyError(err)));
+    return () => {
+      alive = false;
+    };
+  }, [team.id]);
+
+  useEffect(() => {
+    setChoice(step === 2 ? schedule : step === 3 ? (updates ?? "same") : null);
+  }, [step, schedule, updates]);
+
+  // Only move on when the save went through. A failed save with a green step
+  // number would be a lie the owner finds out about on Sunday evening.
+  async function next(fn: () => Promise<void>) {
+    setBusy(true);
+    const ok = await run(fn);
+    setBusy(false);
+    if (ok) setStep((s) => s + 1);
+  }
+
+  return (
+    <>
+      <Intro title="Set up the bot">Three questions and a test. You can change all of it later.</Intro>
+      <ErrorText>{error ?? pickErr}</ErrorText>
+      <Card className="flex flex-col gap-5 p-6">
+        <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
+          {STEPS.map((label, i) => {
+            const n = i + 1;
+            const done = n < step;
+            const now = n === step;
+            return (
+              <div key={label} className="flex items-center gap-2">
+                <span
+                  className={`flex h-6 w-6 items-center justify-center rounded-full text-[12px] font-extrabold ${
+                    done ? "bg-green text-white" : now ? "bg-ink text-on-ink" : "border-[1.5px] border-line text-faint"
+                  }`}
+                >
+                  {done ? <Check size={12} /> : n}
+                </span>
+                <span className={`text-[13px] font-bold ${now ? "text-ink" : done ? "text-muted" : "text-faint"}`}>{label}</span>
+              </div>
+            );
+          })}
+        </div>
+        <div className="h-px bg-line-soft" />
+
+        {step === 2 && (
+          <Question title="Where do you want the week plan?" lede="The bot posts the week here and keeps it up to date. One message, pinned, always at the bottom of the channel.">
+            <ChannelList channels={picker} value={choice} onChange={setChoice} exclude={[]} />
+            <Nav
+              busy={busy || !choice}
+              onNext={() => next(() => setChannel(team.id, "schedule", choice))}
+            />
+          </Question>
+        )}
+
+        {step === 3 && (
+          <Question title="Where do you want updates?" lede="New sessions, moves, cancellations, reminders. Several messages a week, so pick a channel that can take it.">
+            <ChannelList channels={picker} value={choice} onChange={setChoice} exclude={schedule ? [schedule] : []} sameLabel="Same channel as the week plan" />
+            {choice === "same" && <p className="text-[13px] text-muted">Every update pushes the week plan up the channel. Works for small teams with a session or two a week.</p>}
+            <Nav
+              back={() => setStep(2)}
+              busy={busy || !choice}
+              onNext={() => next(() => setChannel(team.id, "updates", choice === "same" ? null : choice))}
+            />
+          </Question>
+        )}
+
+        {step === 4 && (
+          <Question title="Who should be pinged?" lede="When the week is up, and when something changes.">
+            <PingPicker team={team} link={state.link} run={run} />
+            <Nav back={() => setStep(3)} busy={busy} onNext={() => setStep(5)} />
+          </Question>
+        )}
+
+        {step === 5 && (
+          <Question title="Send a test message" lede="It posts a short line in the channels you picked. Nothing is scheduled until this has gone through.">
+            <TestButton team={team} run={run} onSent={() => setStep(6)} />
+            <Nav back={() => setStep(4)} hideNext />
+          </Question>
+        )}
+
+        {step === 6 && (
+          <Question title="All set" lede={`The week plan posts ${DOW_LABELS[(state.schedule?.post_dow ?? 7) - 1]} at ${shortTime(state.schedule?.post_at ?? "20:00")}, in the team's zone. Change it below whenever you like.`}>
+            <div className="flex justify-end">
+              <Button className="h-11" onClick={onDone}>
+                Done
+              </Button>
+            </div>
+          </Question>
+        )}
+      </Card>
+    </>
+  );
+}
+
+function Question({ title, lede, children }: { title: string; lede: string; children: ReactNode }) {
+  return (
+    <div className="flex flex-col gap-5">
+      <div className="flex flex-col gap-1.5">
+        <h3 className="text-[20px] font-extrabold tracking-tight">{title}</h3>
+        <p className="max-w-[62ch] text-[14px] leading-relaxed text-muted">{lede}</p>
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function Nav({ back, onNext, busy, hideNext }: { back?: () => void; onNext?: () => void; busy?: boolean; hideNext?: boolean }) {
+  return (
+    <>
+      <div className="h-px bg-line-soft" />
+      <div className="flex items-center justify-between gap-4">
+        {back ? (
+          <Button variant="ghost" size="sm" onClick={back} className="pl-1.5">
+            <Arrow dir="left" />
+            Back
+          </Button>
+        ) : (
+          <span />
+        )}
+        {!hideNext && (
+          <Button className="h-11" disabled={busy} onClick={onNext}>
+            Continue
+            <Arrow dir="right" />
+          </Button>
+        )}
+      </div>
+    </>
+  );
+}
+
+/** The channel rows in the setup: radio, #name, and why a row is grey. */
+function ChannelList({
+  channels,
+  value,
+  onChange,
+  exclude,
+  sameLabel,
+}: {
+  channels: PickerChannel[] | null;
+  value: string | null;
+  onChange: (id: string) => void;
+  exclude: string[];
+  sameLabel?: string;
+}) {
+  if (!channels) return <Spinner className="min-h-[120px]" />;
+  const rows = channels.filter((c) => !exclude.includes(c.id));
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="flex max-w-[560px] flex-col gap-2">
+        {rows.map((c) => {
+          const off = c.taken || !c.canPost;
+          const on = value === c.id;
+          return (
+            <button
+              key={c.id}
+              type="button"
+              disabled={off}
+              onClick={() => onChange(c.id)}
+              className={`flex h-14 items-center justify-between gap-4 rounded-[14px] border-[1.5px] px-4 text-left transition ${
+                off ? "border-line-soft bg-bg text-faint" : on ? "border-ink bg-surface" : "border-line bg-surface hover:border-faint"
+              }`}
+            >
+              <span className="flex items-center gap-3">
+                <Radio on={on} off={off} />
+                <span className="flex items-center gap-1.5 text-[15px] font-bold">
+                  <Hash />
+                  {c.name}
+                </span>
+              </span>
+              {c.taken ? <Tag>Used by another team</Tag> : !c.canPost ? <Tag>Bot can&rsquo;t post here</Tag> : null}
+            </button>
+          );
+        })}
+        {sameLabel && (
+          <button
+            type="button"
+            onClick={() => onChange("same")}
+            className={`flex h-14 items-center gap-3 rounded-[14px] border-[1.5px] px-4 text-left transition ${
+              value === "same" ? "border-ink bg-surface" : "border-line bg-surface hover:border-faint"
+            }`}
+          >
+            <Radio on={value === "same"} off={false} />
+            <span className="text-[15px] font-bold">{sameLabel}</span>
+          </button>
+        )}
+      </div>
+      <p className="max-w-[62ch] text-[13px] text-muted">
+        Only channels the bot can see are listed. Private channel missing? Let the bot into it on Discord first, then come back here.
+      </p>
+    </div>
+  );
+}
+
+function Radio({ on, off }: { on: boolean; off: boolean }) {
+  return (
+    <span
+      className={`box-border h-[18px] w-[18px] shrink-0 rounded-full ${on ? "border-[5px] border-ink" : off ? "border-[1.5px] border-line" : "border-[1.5px] border-dot"}`}
+    />
+  );
+}
+
+/** Members or a role. A role can be one the server already has, or one Gather makes and keeps in step with the team. */
+function PingPicker({ team, link, run }: { team: MyTeam; link: DiscordState["link"]; run: Run }) {
+  const [roles, setRoles] = useState<PickerRole[] | null>(null);
+  const [busy, setBusy] = useState(false);
+  const mode = link?.ping_mode ?? "members";
+  // The role section is open when the team pings a role, or the owner just asked for it.
+  const [open, setOpen] = useState(mode === "role");
+
+  useEffect(() => {
+    if (!open) return;
+    let alive = true;
+    fetchRoles(team.id)
+      .then((r) => alive && setRoles(r.roles))
+      .catch(() => alive && setRoles([]));
+    return () => {
+      alive = false;
+    };
+  }, [team.id, open]);
+
+  const options: DropdownOption<string>[] = (roles ?? []).map((r) => ({
+    value: r.id,
+    label: `@${r.name}`,
+    dot: r.color ? `#${r.color.toString(16).padStart(6, "0")}` : "#a8a49d",
+  }));
+
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="flex flex-wrap gap-2">
+        <Pill
+          active={mode === "members"}
+          onClick={() => {
+            setOpen(false);
+            void run(() => setPing(team.id, "members", null));
+          }}
+        >
+          Everyone on the team
+        </Pill>
+        <Pill active={mode === "role"} onClick={() => setOpen(true)}>
+          A role
+        </Pill>
+      </div>
+      {!open && <p className="text-[13px] text-muted">Pings each member with a Discord account linked. Nothing to set up on Discord.</p>}
+      {open && (
+        <div className="flex flex-col gap-3">
+          {link?.managed_role && link.ping_role_id ? (
+            <div className="flex items-center justify-between gap-3 rounded-xl border-[1.5px] border-line bg-surface px-4 py-3">
+              <span className="text-[15px] font-semibold">{options.find((o) => o.value === link.ping_role_id)?.label ?? "@team role"}</span>
+              <Tag>Managed by Gather</Tag>
+            </div>
+          ) : (
+            <>
+              <div className="flex flex-col gap-1.5">
+                <Label>Use a role the server already has</Label>
+                <Dropdown
+                  value={link?.ping_role_id ?? ""}
+                  options={options}
+                  disabled={roles === null}
+                  placeholder={roles === null ? "Loading roles…" : roles.length === 0 ? "No roles on the server yet" : "Pick a role"}
+                  onChange={(id) => run(() => setPing(team.id, "role", id))}
+                  search={false}
+                />
+                <p className="text-[13px] text-muted">A role you manage yourself drifts: new players in Gather do not get it unless someone remembers.</p>
+              </div>
+              <div className="flex items-center justify-between gap-4 rounded-[14px] border-[1.5px] border-green-dim bg-green-soft/50 p-4">
+                <div className="flex flex-col">
+                  <span className="text-[14px] font-extrabold">Let Gather make a role for the team</span>
+                  <span className="text-[13px] text-muted">Join the team, get the role. The bot keeps it in step.</span>
+                </div>
+                <Button
+                  size="sm"
+                  className="h-10 shrink-0"
+                  disabled={busy}
+                  onClick={() => {
+                    setBusy(true);
+                    void run(async () => {
+                      await createManagedRole(team.id);
+                    }, "Role created").finally(() => setBusy(false));
+                  }}
+                >
+                  Create role
+                </Button>
+              </div>
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function TestButton({ team, run, onSent }: { team: MyTeam; run: Run; onSent?: () => void }) {
+  const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState<string | null>(null);
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="flex flex-wrap items-center gap-3">
+        <Button
+          variant="secondary"
+          size="sm"
+          className="h-10"
+          disabled={busy}
+          onClick={() => {
+            setBusy(true);
+            setResult(null);
+            void run(async () => {
+              const r = await sendTestMessage(team.id);
+              if (r.failed.length) throw new Error(r.failed.map((f) => f.reason).join(" "));
+              setResult(`Sent to ${r.sent} channel${r.sent === 1 ? "" : "s"}.`);
+              onSent?.();
+            }).finally(() => setBusy(false));
+          }}
+        >
+          <ChatIcon />
+          {busy ? "Sending…" : "Send a test message"}
+        </Button>
+        {result && <span className="text-[13px] font-bold text-green-ink">{result}</span>}
+      </div>
+    </div>
+  );
+}
+
+// ---------- 3. Connected ----------
+
+function Connected({ team, state, isOwner, run, error, onRerun }: { team: MyTeam; state: DiscordState; isOwner: boolean; run: Run; error: string | null; onRerun: () => void }) {
+  const link = state.link!;
+  return (
+    <>
+      <Intro title="The bot is on the team">
+        Connected to <strong className="text-ink">{link.guild_name ?? "Discord"}</strong>. {isOwner ? "Everything below is yours to change." : "Only the owner can change it."}
+      </Intro>
+      <ErrorText>{error}</ErrorText>
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)] xl:items-start">
+        <div className="flex min-w-0 flex-col gap-4">
+          <StatusCard team={team} state={state} isOwner={isOwner} run={run} />
+          {isOwner && <ChannelsCard team={team} state={state} run={run} onRerun={onRerun} />}
+          {isOwner && <PingCard team={team} state={state} run={run} />}
+        </div>
+        <div className="flex min-w-0 flex-col gap-4">
+          {isOwner && state.schedule && <SendsCard team={team} state={state} run={run} />}
+          <LogCard state={state} />
+          {isOwner && <DisconnectCard team={team} state={state} run={run} />}
+        </div>
+      </div>
+    </>
+  );
+}
+
+function StatusCard({ team, state, isOwner, run }: { team: MyTeam; state: DiscordState; isOwner: boolean; run: Run }) {
+  const [checks, setChecks] = useState<StatusCheck[] | null>(null);
+  const [failed, setFailed] = useState<string | null>(null);
+  const [tick, setTick] = useState(0);
+  const [posting, setPosting] = useState(false);
+
+  useEffect(() => {
+    if (!isOwner) return;
+    let alive = true;
+    setChecks(null);
+    fetchStatus(team.id)
+      .then((r) => alive && setChecks(r.checks))
+      .catch((err) => alive && setFailed(friendlyError(err)));
+    return () => {
+      alive = false;
+    };
+  }, [team.id, tick, state.channels, state.link, isOwner]);
+
+  const last = state.log.find((l) => l.kind === "week_post" && l.ok);
+  const allOk = checks?.every((c) => c.ok);
+
+  return (
+    <Card className="flex flex-col gap-3.5">
+      <div className="flex items-center justify-between gap-3">
+        <h3 className="text-[15px] font-extrabold">Status</h3>
+        {isOwner && (
+          <button type="button" onClick={() => setTick((t) => t + 1)} className="text-[13px] font-semibold text-muted hover:text-ink">
+            {checks ? "Check again" : "Checking…"}
+          </button>
+        )}
+      </div>
+      {isOwner ? (
+        <div className={`flex flex-col gap-3 rounded-[16px] border-[1.5px] p-4 ${allOk ? "border-green-dim bg-green-soft/50" : "border-yellow/60 bg-yellow-soft"}`}>
+          {failed && <span className="text-[14px] font-semibold text-red-ink">{failed}</span>}
+          {!checks && !failed && <span className="text-[13px] text-muted">Asking Discord…</span>}
+          {checks?.map((c) => (
+            <div key={c.label} className="flex items-start gap-2.5">
+              <span className={`mt-px flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-full ${c.ok ? "bg-green-soft text-green-ink" : "bg-yellow-soft text-yellow-ink"}`}>
+                {c.ok ? <Check size={12} /> : <Bang />}
+              </span>
+              <div className="flex flex-col">
+                <span className="text-[14px] font-semibold">{c.label}</span>
+                {c.fix && <span className="text-[13px] text-yellow-ink">{c.fix}</span>}
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <p className="text-[13px] text-muted">The owner sees the health checks here.</p>
+      )}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-col">
+          <span className="text-[14px] font-semibold">Last week plan</span>
+          <span className="text-[13px] text-muted">{last ? `${last.summary}, ${when(last.at)}` : "Not posted yet"}</span>
+        </div>
+        {isOwner && (
+          <div className="flex flex-wrap gap-2">
+            <Button
+              variant="secondary"
+              size="sm"
+              className="h-10"
+              disabled={posting}
+              onClick={() => {
+                setPosting(true);
+                void run(async () => {
+                  const r = await postWeekNow(team.id, "this");
+                  if (r.action === "skipped") throw new Error(r.detail ?? "Nothing to post");
+                }, "Week plan is up").finally(() => setPosting(false));
+              }}
+            >
+              Post this week now
+            </Button>
+            <TestButton team={team} run={run} />
+          </div>
+        )}
+      </div>
+    </Card>
+  );
+}
+
+function ChannelsCard({ team, state, run, onRerun }: { team: MyTeam; state: DiscordState; run: Run; onRerun: () => void }) {
+  const [picker, setPicker] = useState<PickerChannel[] | null>(null);
+  useEffect(() => {
+    let alive = true;
+    fetchChannels(team.id)
+      .then((r) => alive && setPicker(r.channels))
+      .catch(() => alive && setPicker([]));
+    return () => {
+      alive = false;
+    };
+  }, [team.id]);
+
+  const opts = (kind: ChannelKind, inherit: string | null): DropdownOption<string>[] => [
+    ...(inherit ? [{ value: "", label: inherit }] : []),
+    ...(picker ?? []).map((c) => ({
+      value: c.id,
+      label: `#${c.name}`,
+      disabled: c.taken || !c.canPost || (c.mine !== null && c.mine !== kind),
+      hint: c.taken ? "Used by another team" : !c.canPost ? "Bot can't post here" : c.mine && c.mine !== kind ? `Already your ${c.mine === "schedule" ? "week plan" : c.mine} channel` : undefined,
+    })),
+  ];
+  const value = (kind: ChannelKind) => state.channels.find((c) => c.kind === kind)?.channel_id ?? "";
+  const nameOf = (id: string | undefined) => (id && picker ? (picker.find((c) => c.id === id)?.name ?? "channel") : "channel");
+
+  return (
+    <Card className="flex flex-col gap-3.5">
+      <div className="flex items-center justify-between gap-3">
+        <h3 className="text-[15px] font-extrabold">Channels</h3>
+        <button type="button" onClick={onRerun} className="text-[13px] font-semibold text-muted hover:text-ink">
+          Run setup again
+        </button>
+      </div>
+      <Field label="Week plan">
+        <Dropdown value={value("schedule")} options={opts("schedule", null)} placeholder="Pick a channel" search={false} onChange={(id) => run(() => setChannel(team.id, "schedule", id), "Saved")} />
+      </Field>
+      <Field label="Updates">
+        <Dropdown
+          value={value("updates")}
+          options={opts("updates", `Same as the week plan (#${nameOf(effectiveChannel(state.channels, "schedule")?.id)})`)}
+          search={false}
+          onChange={(id) => run(() => setChannel(team.id, "updates", id || null), "Saved")}
+        />
+      </Field>
+      <Field label="Reminders">
+        <Dropdown
+          value={value("reminders")}
+          options={opts("reminders", `Same as updates (#${nameOf(effectiveChannel(state.channels, "updates")?.id)})`)}
+          search={false}
+          onChange={(id) => run(() => setChannel(team.id, "reminders", id || null), "Saved")}
+        />
+      </Field>
+    </Card>
+  );
+}
+
+function PingCard({ team, state, run }: { team: MyTeam; state: DiscordState; run: Run }) {
+  const link = state.link!;
+  const [syncing, setSyncing] = useState(false);
+  return (
+    <Card className="flex flex-col gap-3.5">
+      <h3 className="text-[15px] font-extrabold">Who gets pinged</h3>
+      <PingPicker team={team} link={link} run={run} />
+      {link.managed_role && (
+        <div className="flex items-center justify-between gap-3">
+          <p className="text-[13px] text-muted">Gather keeps the role in sync with the team. Join the team, get the role.</p>
+          <Button
+            variant="ghost"
+            size="sm"
+            disabled={syncing}
+            onClick={() => {
+              setSyncing(true);
+              void run(async () => {
+                const r = await syncManagedRole(team.id);
+                if (r.missing) throw new Error(`Gave the role to ${r.given}. ${r.missing} on the team are not in the Discord server yet.`);
+              }, "Role is in sync").finally(() => setSyncing(false));
+            }}
+          >
+            Sync now
+          </Button>
+        </div>
+      )}
+    </Card>
+  );
+}
+
+const DOW_OPTIONS: DropdownOption<number>[] = DOW_LABELS.map((label, i) => ({ value: i + 1, label }));
+const TIME_OPTIONS: DropdownOption<string>[] = Array.from({ length: 48 }, (_, i) => {
+  const h = String(Math.floor(i / 2)).padStart(2, "0");
+  const m = i % 2 ? "30" : "00";
+  return { value: `${h}:${m}`, label: `${h}:${m}` };
+});
+const HOURS_OPTIONS: DropdownOption<number>[] = [0.5, 1, 2, 3, 6, 12, 24].map((h) => ({ value: h, label: h < 1 ? "30 minutes before" : `${h} hour${h === 1 ? "" : "s"} before` }));
+const MODE_OPTIONS: DropdownOption<"channel" | "dm" | "both">[] = [
+  { value: "channel", label: "Channel" },
+  { value: "dm", label: "DM" },
+  { value: "both", label: "DM + channel" },
+];
+
+function SendsCard({ team, state, run }: { team: MyTeam; state: DiscordState; run: Run }) {
+  const s = state.schedule!;
+  const save = (patch: Parameters<typeof updateSchedule>[1]) => run(() => updateSchedule(team.id, patch), "Saved");
+  return (
+    <Card className="flex flex-col gap-3.5">
+      <h3 className="text-[15px] font-extrabold">What the bot sends</h3>
+      <SendRow title="Week plan" sub="Posted once a week, then kept up to date." on={s.post_enabled} onToggle={(v) => save({ post_enabled: v })}>
+        <Dropdown look="pill" value={s.post_dow} options={DOW_OPTIONS} search={false} onChange={(v) => save({ post_dow: v })} />
+        <Dropdown look="pill" value={shortTime(s.post_at)} options={TIME_OPTIONS} search={false} onChange={(v) => save({ post_at: v })} />
+      </SendRow>
+      <Hr />
+      <SendRow title="Nudge for next week" sub="For anyone who hasn't filled in their times yet. Next round." on={s.nudge_enabled} onToggle={(v) => save({ nudge_enabled: v })}>
+        <Dropdown look="pill" value={s.nudge_dow} options={DOW_OPTIONS} search={false} onChange={(v) => save({ nudge_dow: v })} />
+        <Dropdown look="pill" value={shortTime(s.nudge_at)} options={TIME_OPTIONS} search={false} onChange={(v) => save({ nudge_at: v })} />
+      </SendRow>
+      <Hr />
+      <SendRow title="New and changed sessions" sub="Moved, cancelled or added. Pings the people who had said yes. Next round." on={s.updates_enabled} onToggle={(v) => save({ updates_enabled: v })} />
+      <Hr />
+      <SendRow title="Same-day reminder" sub="To the people who are in. Next round." on={s.same_day_enabled} onToggle={(v) => save({ same_day_enabled: v })}>
+        <Dropdown look="pill" value={Number(s.same_day_hours)} options={HOURS_OPTIONS} search={false} onChange={(v) => save({ same_day_hours: v })} />
+        <Dropdown look="pill" value={s.same_day_mode} options={MODE_OPTIONS} search={false} onChange={(v) => save({ same_day_mode: v })} />
+      </SendRow>
+      <p className="text-[13px] text-muted">Times are in the team&rsquo;s zone, {team.timezone}.</p>
+    </Card>
+  );
+}
+
+function SendRow({ title, sub, on, onToggle, children }: { title: string; sub: string; on: boolean; onToggle: (v: boolean) => void; children?: ReactNode }) {
+  return (
+    <div className="flex flex-col gap-2.5 py-0.5">
+      <div className="flex items-center justify-between gap-4">
+        <div className="flex flex-col">
+          <span className="text-[14px] font-extrabold">{title}</span>
+          <span className="text-[13px] text-muted">{sub}</span>
+        </div>
+        <Toggle on={on} onChange={onToggle} label={title} />
+      </div>
+      {children && on && <div className="flex flex-wrap gap-1.5">{children}</div>}
+    </div>
+  );
+}
+
+function LogCard({ state }: { state: DiscordState }) {
+  const failedDm = state.log.find((l) => !l.ok && l.detail);
+  return (
+    <Card className="flex flex-col gap-3">
+      <div className="flex items-center justify-between gap-3">
+        <h3 className="text-[15px] font-extrabold">Recent messages</h3>
+        <span className="text-[13px] text-muted">Last 10</span>
+      </div>
+      {state.log.length === 0 ? (
+        <p className="text-[13px] text-muted">Nothing sent yet.</p>
+      ) : (
+        <div className="flex flex-col">
+          {state.log.map((l, i) => (
+            <div key={l.id} className={`grid grid-cols-[76px_minmax(0,1fr)_auto] items-center gap-3 py-2.5 ${i ? "border-t border-line-soft" : ""}`}>
+              <span className="text-[12px] font-extrabold text-muted">{KIND_LABEL[l.kind]}</span>
+              <span className="truncate text-[14px] font-semibold" title={l.detail ?? undefined}>
+                {l.summary}
+              </span>
+              <span className="flex items-center gap-2 text-[12px] text-muted">
+                {when(l.at)}
+                <span className={`flex items-center gap-1.5 font-extrabold ${l.ok ? "text-muted" : "text-red-ink"}`}>
+                  <span className={`h-2 w-2 rounded-full ${l.ok ? "bg-green" : "bg-red-ink"}`} />
+                  {l.ok ? "Sent" : "Failed"}
+                </span>
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+      {failedDm && <p className="text-[13px] text-red-ink">{failedDm.detail}</p>}
+    </Card>
+  );
+}
+
+const KIND_LABEL: Record<DiscordState["log"][number]["kind"], string> = {
+  week_post: "Week plan",
+  update: "Update",
+  reminder: "Reminder",
+  nudge: "Nudge",
+  test: "Test",
+  link: "Setup",
+};
+
+function DisconnectCard({ team, state, run }: { team: MyTeam; state: DiscordState; run: Run }) {
+  const [arm, setArm] = useState(false);
+  const [busy, setBusy] = useState(false);
+  return (
+    <Card className="flex flex-col gap-3">
+      <div className="flex items-center justify-between gap-4">
+        <div className="flex flex-col">
+          <span className="text-[14px] font-extrabold">Disconnect</span>
+          <span className="text-[13px] text-muted">
+            Stops all messages{state.link?.managed_role ? " and removes the team role" : ""}. Your channels stay.
+          </span>
+        </div>
+        {!arm ? (
+          <Button variant="danger" size="sm" className="h-10 shrink-0" onClick={() => setArm(true)}>
+            Disconnect
+          </Button>
+        ) : (
+          <div className="flex shrink-0 gap-2">
+            <Button variant="ghost" size="sm" onClick={() => setArm(false)}>
+              Keep it
+            </Button>
+            <Button
+              variant="danger"
+              size="sm"
+              className="h-10"
+              disabled={busy}
+              onClick={() => {
+                setBusy(true);
+                void run(async () => {
+                  await disconnectDiscord(team.id);
+                }, "Disconnected").finally(() => setBusy(false));
+              }}
+            >
+              Yes, disconnect
+            </Button>
+          </div>
+        )}
+      </div>
+    </Card>
+  );
+}
+
+// ---------- bits ----------
+
+function Intro({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <div className="flex flex-col gap-1 px-1">
+      <Eyebrow>Discord</Eyebrow>
+      <h2 className="text-[22px] font-extrabold tracking-tight">{title}</h2>
+      <p className="max-w-[62ch] text-[14px] leading-relaxed text-muted">{children}</p>
+    </div>
+  );
+}
+
+function Field({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="flex flex-col gap-1.5">
+      <Label>{label}</Label>
+      {children}
+    </div>
+  );
+}
+
+const Hr = () => <div className="h-px bg-line-soft" />;
+
+function Tag({ children }: { children: ReactNode }) {
+  return <span className="shrink-0 rounded-full bg-surface-2 px-3 py-1.5 text-[11px] font-extrabold uppercase tracking-[0.06em] text-muted">{children}</span>;
+}
+
+function when(iso: string): string {
+  const d = new Date(iso);
+  const day = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][d.getDay()];
+  return `${day} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+}
+
+function Hash() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" className="text-faint">
+      <path d="M10 3 8 21M16 3l-2 18M4 9h17M3 15h17" />
+    </svg>
+  );
+}
+
+function ChatIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M4 6.5A2.5 2.5 0 0 1 6.5 4h11A2.5 2.5 0 0 1 20 6.5v8a2.5 2.5 0 0 1-2.5 2.5H10l-5 4v-4A2.5 2.5 0 0 1 4 14.5z" />
+    </svg>
+  );
+}
+
+function LockIcon() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="4" y="10" width="16" height="11" rx="3" />
+      <path d="M8 10V7a4 4 0 0 1 8 0v3" />
+    </svg>
+  );
+}
+
+function Bang() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round">
+      <path d="M12 7v6M12 16.5v.5" />
+    </svg>
+  );
+}
+
+function Arrow({ dir }: { dir: "left" | "right" }) {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d={dir === "left" ? "M19 12H5M11 6l-6 6 6 6" : "M5 12h14M13 6l6 6-6 6"} />
+    </svg>
+  );
+}

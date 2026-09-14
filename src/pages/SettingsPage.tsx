@@ -59,6 +59,7 @@ import {
   useToast,
 } from "../components/ui";
 import { Dropdown } from "../components/pickers";
+import DiscordTab from "../components/DiscordTab";
 import {
   appBase,
   rotateShareSlug,
@@ -204,6 +205,8 @@ export default function SettingsPage({ team, week, onTeamsChanged }: Props) {
           onTeamsChanged={onTeamsChanged}
         />
       )}
+
+      {tab === "discord" && <DiscordTab team={team} />}
 
       {tab === "team" && (
         <TeamPanel
@@ -1182,13 +1185,14 @@ function PreviewDays({
   );
 }
 
-type TabKey = "plan" | "activities" | "roles" | "sharing" | "team";
+type TabKey = "plan" | "activities" | "roles" | "sharing" | "discord" | "team";
 
 const tabs: { key: TabKey; label: string }[] = [
   { key: "plan", label: "Week plan" },
   { key: "activities", label: "Activities" },
   { key: "roles", label: "Roles" },
   { key: "sharing", label: "Sharing" },
+  { key: "discord", label: "Discord" },
   { key: "team", label: "Team" },
 ];
 

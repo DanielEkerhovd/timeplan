@@ -62,7 +62,9 @@ $$;
 \set spiller_a '00000000-0000-4000-8000-00000000000b'
 \set fremmed_b '00000000-0000-4000-8000-00000000000c'
 \set trener_a  '00000000-0000-4000-8000-00000000000d'
-\set dato      '2026-09-10'
+-- Torsdag i inneværende uke: alltid skrivbar (0006 låser fra mandag denne uka),
+-- alltid en hverdag, og i samme uke som «mandag» lenger nede. En fast dato ble gammel.
+select (public.week_monday(current_date) + 3)::text as dato \gset
 
 -- ------------------------------------------------------------
 -- Oppsett som superbruker
@@ -647,6 +649,109 @@ select pg_temp.become(:'fremmed_b');
 set local role authenticated;
 select pg_temp.expect_count('oppbrukt kode gir null', format('select * from (select public.join_team(%L) as t) j where t is not null', :'code_a'), 0);
 reset role;
+
+-- ------------------------------------------------------------
+-- Discord-bot (0017): kobling, kanaler, tider. Bare serveren kobler.
+-- ------------------------------------------------------------
+
+-- Discord-id-en følger med fra innloggingen, og blir ikke borte om metadataen mangler den én gang.
+update auth.users set raw_user_meta_data = '{"full_name": "Eier A", "provider_id": "111111111111111111"}' where id = :'eier_a';
+update auth.users set raw_user_meta_data = '{"full_name": "Spiller A", "sub": "222222222222222222"}' where id = :'spiller_a';
+select pg_temp.expect_count('discord_id leses fra provider_id',
+  format('select 1 from public.profiles where user_id = %L and discord_id = ''111111111111111111''', :'eier_a'), 1);
+select pg_temp.expect_count('discord_id leses fra sub når provider_id mangler',
+  format('select 1 from public.profiles where user_id = %L and discord_id = ''222222222222222222''', :'spiller_a'), 1);
+update auth.users set raw_user_meta_data = '{"full_name": "Eier A"}' where id = :'eier_a';
+select pg_temp.expect_count('discord_id blir stående når metadataen mangler den',
+  format('select 1 from public.profiles where user_id = %L and discord_id = ''111111111111111111''', :'eier_a'), 1);
+select pg_temp.expect_denied('to profiler kan ikke ha samme discord_id',
+  format('update public.profiles set discord_id = ''111111111111111111'' where user_id = %L', :'trener_a'));
+select pg_temp.expect_count('søppel i provider_id blir ikke en discord_id',
+  'select 1 where public.discord_id_from(''{"provider_id": "not-a-snowflake"}''::jsonb) is null', 1);
+
+-- Ingen innlogget kan koble et lag selv. Det er serverens jobb (den må sjekke Manage Server hos Discord).
+select pg_temp.become(:'eier_a');
+set local role authenticated;
+select pg_temp.expect_denied('eier kan ikke koble laget til Discord selv',
+  format('insert into public.discord_links (team_id, guild_id) values (%L, ''900000000000000001'')', :'team_a'));
+select pg_temp.expect_denied('eier kan ikke koble en kanal før laget er koblet',
+  format('insert into public.discord_channels (team_id, kind, channel_id) values (%L, ''schedule'', ''800000000000000001'')', :'team_a'));
+select pg_temp.expect_denied('eier kan ikke skrive i loggen',
+  format('insert into public.discord_log (team_id, kind, summary, ok) values (%L, ''test'', ''x'', true)', :'team_a'));
+select pg_temp.expect_denied('eier kan ikke skrive ukeposten',
+  format('insert into public.discord_week_post (team_id, week_start, channel_id, message_id, content_hash) values (%L, %L, ''1'', ''1'', ''x'')', :'team_a', :'mandag'));
+select pg_temp.expect_denied('eier kan ikke kalle bot_week',
+  format('select public.bot_week(%L, %L)', :'team_a', :'mandag'));
+reset role;
+
+-- Serveren kobler lag A og lag B til samme server (to lag, én installasjon).
+set local role service_role;
+insert into public.discord_links (team_id, guild_id, guild_name, linked_by) values
+  (:'team_a', '900000000000000001', 'Playwell', :'eier_a'),
+  (:'team_b', '900000000000000001', 'Playwell', :'fremmed_b');
+insert into public.discord_schedules (team_id) values (:'team_a'), (:'team_b');
+insert into public.discord_log (team_id, kind, summary, ok) values (:'team_a', 'link', 'Koblet til Playwell', true);
+reset role;
+
+-- Eier velger kanaler. Medlem og admin får ikke.
+select pg_temp.become(:'eier_a');
+set local role authenticated;
+select pg_temp.expect_ok('eier kobler ukeplan-kanal',
+  format('insert into public.discord_channels (team_id, kind, channel_id) values (%L, ''schedule'', ''800000000000000001'')', :'team_a'));
+select pg_temp.expect_ok('eier kobler oppdateringskanal',
+  format('insert into public.discord_channels (team_id, kind, channel_id) values (%L, ''updates'', ''800000000000000002'')', :'team_a'));
+select pg_temp.expect_denied('ukjent meldingstype avvises',
+  format('insert into public.discord_channels (team_id, kind, channel_id) values (%L, ''memes'', ''800000000000000003'')', :'team_a'));
+select pg_temp.expect_denied('samme kanal kan ikke brukes til to typer',
+  format('insert into public.discord_channels (team_id, kind, channel_id) values (%L, ''reminders'', ''800000000000000001'')', :'team_a'));
+select pg_temp.expect_ok('eier velger rolle-ping',
+  format('update public.discord_links set ping_mode = ''role'', ping_role_id = ''700000000000000001'' where team_id = %L', :'team_a'));
+select pg_temp.expect_denied('rolle-ping uten rolle avvises',
+  format('update public.discord_links set ping_mode = ''role'', ping_role_id = null where team_id = %L', :'team_a'));
+select pg_temp.expect_ok('eier endrer posttid',
+  format('update public.discord_schedules set post_dow = 1, post_at = ''09:00'' where team_id = %L', :'team_a'));
+select pg_temp.expect_denied('posttid utenfor uka avvises',
+  format('update public.discord_schedules set post_dow = 8 where team_id = %L', :'team_a'));
+select pg_temp.expect_denied('eier kan ikke bytte server selv (kolonnen er ikke gitt)',
+  format('update public.discord_links set guild_id = ''900000000000000002'' where team_id = %L', :'team_a'));
+select pg_temp.expect_count('eier ser loggen til laget', format('select * from public.discord_log where team_id = %L', :'team_a'), 1);
+reset role;
+
+select pg_temp.become(:'trener_a');
+set local role authenticated;
+select pg_temp.expect_count('admin ser kanalene', format('select * from public.discord_channels where team_id = %L', :'team_a'), 2);
+select pg_temp.expect_denied('admin kan ikke koble kanal',
+  format('insert into public.discord_channels (team_id, kind, channel_id) values (%L, ''reminders'', ''800000000000000003'')', :'team_a'));
+select pg_temp.expect_ok('admin sitt forsøk på å endre ping treffer ingen rader',
+  format('update public.discord_links set ping_mode = ''members'' where team_id = %L', :'team_a'));
+select pg_temp.expect_count('ping er urørt etter admin',
+  format('select 1 from public.discord_links where team_id = %L and ping_mode = ''role''', :'team_a'), 1);
+reset role;
+
+-- Lag B deler server med lag A, men ser ingenting av lag A og får ikke kanalen.
+select pg_temp.become(:'fremmed_b');
+set local role authenticated;
+select pg_temp.expect_count('fremmed ser ikke lag A sin kobling', format('select * from public.discord_links where team_id = %L', :'team_a'), 0);
+select pg_temp.expect_count('fremmed ser ikke lag A sine kanaler', format('select * from public.discord_channels where team_id = %L', :'team_a'), 0);
+select pg_temp.expect_count('fremmed ser ikke lag A sin logg', format('select * from public.discord_log where team_id = %L', :'team_a'), 0);
+select pg_temp.expect_denied('lag B kan ikke ta kanalen lag A alt bruker',
+  format('insert into public.discord_channels (team_id, kind, channel_id) values (%L, ''schedule'', ''800000000000000001'')', :'team_b'));
+select pg_temp.expect_ok('lag B kobler sin egen kanal',
+  format('insert into public.discord_channels (team_id, kind, channel_id) values (%L, ''schedule'', ''800000000000000009'')', :'team_b'));
+reset role;
+
+-- bot_week: bare det som er booket, med discord_id på folk. Serveren har lov, ingen andre.
+set local role service_role;
+select pg_temp.expect_ok('serveren kan kalle bot_week', format('select public.bot_week(%L, %L)', :'team_a', :'mandag'));
+reset role;
+select pg_temp.expect_count('bot_week gir aktivitetene i uka (samme tall som events-tabellen)',
+  format('select 1 from jsonb_array_elements(public.bot_week(%L, %L) -> ''events'') where (select count(*) from public.events where team_id = %L and date >= %L and date < date %L + 7) = (select jsonb_array_length(public.bot_week(%L, %L) -> ''events''))', :'team_a', :'mandag', :'team_a', :'mandag', :'mandag', :'team_a', :'mandag'), 4);
+select pg_temp.expect_count('bot_week har med hvem som har sagt ja',
+  format('select 1 from jsonb_array_elements(public.bot_week(%L, %L) -> ''events'') e where jsonb_array_length(e -> ''people'') > 0', :'team_a', :'mandag'), 1);
+select pg_temp.expect_count('bot_week har ingen tilgjengelighet i seg',
+  format('select 1 where public.bot_week(%L, %L) ? ''free'' or public.bot_week(%L, %L) ? ''availability''', :'team_a', :'mandag', :'team_a', :'mandag'), 0);
+select pg_temp.expect_denied('bot_week krever mandag',
+  format('select public.bot_week(%L, %L)', :'team_a', :'dato'));
 
 -- ------------------------------------------------------------
 -- Deling av uka (share_week): uten innlogging, bare når deling er på

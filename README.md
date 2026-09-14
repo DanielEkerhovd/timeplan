@@ -4,7 +4,7 @@ Ukeplan for lag. Medlemmene krysser av kveldene de kan, eier og admin ser hvor a
 
 React + Vite + TypeScript + Tailwind i front. Supabase (Postgres, Auth med Discord, Realtime, Edge Functions) bak.
 
-Status: steg 1 (grunnmur og sikkerhet), steg 2 (ukevisningen), steg 3 (ledervisningen), steg 4 (deling på Discord) og steg 5 (innstillinger og lagstyring) er ferdig. Igjen: tidssonehint og drift.
+Status: steg 1 (grunnmur og sikkerhet), steg 2 (ukevisningen), steg 3 (ledervisningen), steg 4 (deling på Discord), steg 5 (innstillinger og lagstyring) og steg 7 runde 1 (Discord-bot: kobling, ukepost, /week) er ferdig. Igjen: tidssonehint, drift, og runde 2 av boten (purring, endringsvarsler, påminnelser).
 
 ## Roller
 
@@ -41,7 +41,7 @@ supabase link --project-ref <prosjekt-ref>
 supabase db push
 ```
 
-Alternativt: åpne filene i `supabase/migrations/` i SQL Editor i Supabase og kjør dem i rekkefølge (`0001_init.sql`, `0002_activity_types.sql`, `0003_positions.sql`, `0004_custom_names.sql`, `0005_share.sql`, `0006_lock_past.sql`, `0007_share_url.sql`).
+Alternativt: åpne filene i `supabase/migrations/` i SQL Editor i Supabase og kjør dem i rekkefølge (`0001_init.sql` … `0017_discord.sql`).
 
 Har du allerede kjørt 0001? Da kjører du bare `0002_activity_types.sql` (eller `supabase db push`). Den legger til aktivitetstyper, sletter den gamle `type`-kolonnen på `events` og gir alle eksisterende lag typene Scrim, Match og VOD review.
 
@@ -88,6 +88,54 @@ Skjermene følger mockupene. På PC er appen fullskjerm med sidemeny (Week / Mem
 Aktivitetstyper ligger i `activity_types`. En aktivitet peker enten på en type (`type_id`) eller har egen `title` + `color`; `events_type_or_title` i databasen sørger for at det alltid er akkurat én av dem. Fargen lagres som nøkkel (`yellow`, `blue` …); hex-verdiene ligger i `src/lib/colors.ts`.
 
 Dataene for uka deles mellom sidene gjennom `src/lib/useWeekData.ts` (realtime på `availability`, `events`, `event_responses`, `activity_types`, `team_slots` og `members`).
+
+## Discord-bot (steg 7)
+
+Boten er ikke en prosess som står og lytter. Den er noen HTTP-endepunkt under `api/discord/` på Vercel, pluss tabellene i `0017_discord.sql`. Discord ringer oss når noen skriver `/week` eller trykker Join; pg_cron ringer oss hvert femte minutt for det som skal skje til fast tid. Resten av tida kjører ingenting. Hele tankegangen står i `DISCORD_BOT.md`.
+
+Runde 1 (levert): koble lag til server, velge kanaler, ping (medlemmer eller rolle, gjerne en rolle boten lager og holder i takt), den levende ukeposten i `#schedule` (postes til fast tid med ping, redigeres stille når uka endrer seg, byttes ut når uka er ny), `/week` og Join/Can't-knappene, status og testmelding i Settings → Discord.
+
+Runde 2 (ikke bygget): purring på tomme uker, varsler ved ny/flyttet/avlyst aktivitet, påminnelse samme dag, DM med fallback til kanal. Bryterne for dem finnes alt i Settings, men sender ingenting ennå.
+
+### Oppsett
+
+**1. Discord-appen** (samme app som Supabase bruker til innlogging, [discord.com/developers/applications](https://discord.com/developers/applications)):
+
+- **Bot** → Add Bot (om den ikke finnes) → Reset Token. Det er `DISCORD_BOT_TOKEN`. Ingen privileged intents trengs.
+- **General Information** → Public Key er `DISCORD_PUBLIC_KEY`. Application ID er `DISCORD_APP_ID`.
+- **General Information** → Interactions Endpoint URL: `https://www.gatherapp.gg/api/discord`. Discord tester adressa med en signert PING og noen med vilje ugyldige forespørsler idet du lagrer, så endepunktet må være deployet med `DISCORD_PUBLIC_KEY` satt først.
+- **OAuth2** → Redirects: legg til `https://www.gatherapp.gg/api/discord/callback` ved siden av Supabase-adressa som alt står der.
+
+**2. Miljøvariabler** i Vercel (se `.env.example`, blokken nederst). Ingen av dem har `VITE_`-prefiks; de skal aldri nå klienten. `SUPABASE_SERVICE_ROLE_KEY` går utenom RLS og er grunnen til at endepunktene sjekker eierskap selv før de rører noe.
+
+**3. Migrasjonen** `0017_discord.sql` (`supabase db push`). Den kopierer Discord-id-en til alle som alt er logget inn ned på profilen, så Join-knappen kjenner dem igjen.
+
+**4. Slash-kommandoen**: `node scripts/discord-commands.mjs` (leser `.env.local`). Globalt tar det opptil en time før `/week` vises; `--guild <server-id>` gir den med en gang i én server mens du tester.
+
+**5. Klokka.** Slå på `pg_cron` og `pg_net` under Database → Extensions, og kjør i SQL Editor (bytt ut hemmeligheten):
+
+```sql
+select cron.schedule('discord-bot', '*/5 * * * *', $$
+  select net.http_post(
+    url := 'https://www.gatherapp.gg/api/discord/cron',
+    headers := '{"x-cron-secret": "<DISCORD_CRON_SECRET>"}'::jsonb,
+    body := '{}'::jsonb
+  );
+$$);
+```
+
+Uten den kommer ukeposten bare når noen trykker «Post this week now». Vercel Cron går også (`Authorization: Bearer` med samme hemmelighet), men på Hobby-planen får den bare kjøre én gang i døgnet.
+
+**6. I appen**: Settings → Discord → Connect to Discord. Den som kobler må ha **Manage Server** i Discord-serveren; det er sjekken som hindrer et fremmed lag i å koble seg til serveren din. Så velger du kanaler, ping og sender en testmelding. Ukeposten går søndag 20:00 i lagets sone til uka som begynner dagen etter; endre det under «What the bot sends».
+
+### Slik henger det sammen
+
+- `api/discord/index.ts` er Interactions Endpoint. Signaturen sjekkes på råbytene før JSON parses. `/week` svarer med uka der kommandoen ble skrevet; kanalen avgjør laget (en kanal tilhører nøyaktig ett lag). Join/Can't skriver til `event_responses` via service role, så **medlemskapet sjekkes i endepunktet**, mot laget aktiviteten hører til, aldri mot noe som står i knappen.
+- `api/_lib/message.ts` bygger meldinga av Discords egne blokker (Components V2). Ingen bilder. Klokkeslett som `<t:…>` så alle ser sin egen tid. Navn som chips uten ping; bare den ferske ukeposten pinger, og bare dem laget har valgt.
+- `api/_lib/week.ts` eier den levende posten: ny uke = post ny, fest, slett gammel (i den rekkefølgen, så en feil gir to poster og ikke null). Samme uke = PATCH når innholdet har endret seg (hash i `discord_week_post`).
+- `api/discord/cron.ts` gjør to ting per lag: poster uka når tida er passert på lagets klokke, og holder den levende posten oppdatert. Begge er idempotente; et tapt eller doblet kall gjør ingen skade.
+- Tilgjengelighet (hvem som er ledig når) finnes ikke i noe boten gjør. `bot_week()` gir bare det som er booket. Det er en beslutning.
+- Sikkerhetstestene dekker de nye tabellene (bare eier skriver innstillinger, ingen klient skriver ukepost eller logg, to lag kan ikke dele kanal, `bot_week` er bare for serveren). `src/lib/__tests__/discordApi.test.ts` tester signatursjekken, install-state, lagets klokke og selve meldinga.
 
 ## Sikkerhetstestene
 
