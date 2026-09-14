@@ -347,7 +347,7 @@ export default function AppShell({
               <span className="text-[12px] font-extrabold tracking-tight">
                 Gatherapp.gg
               </span>
-              <span className="whitespace-nowrap text-[9.5px] leading-[1.3] tracking-tight text-muted">
+              <span className="text-[9.5px] leading-[1.3] tracking-tight text-muted">
                 Planning tool for teams and groups
               </span>
             </div>
@@ -355,7 +355,7 @@ export default function AppShell({
               to={`/team/${team.id}/about`}
               aria-label="About Gatherapp.gg"
               className={({ isActive }) =>
-                `ml-auto flex h-6 w-6 shrink-0 items-center justify-center rounded-full transition ${
+                `ml-auto flex h-6 w-6 shrink-0 self-start items-center justify-center rounded-full transition ${
                   isActive
                     ? "bg-surface-2 text-ink"
                     : "text-faint hover:bg-surface-2 hover:text-ink"

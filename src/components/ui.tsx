@@ -180,11 +180,14 @@ export function Toggle({
   on,
   onChange,
   label,
+  size = "md",
 }: {
   on: boolean;
   onChange: (v: boolean) => void;
   label?: string;
+  size?: "md" | "lg";
 }) {
+  const lg = size === "lg";
   return (
     <button
       type="button"
@@ -192,10 +195,12 @@ export function Toggle({
       aria-checked={on}
       aria-label={label}
       onClick={() => onChange(!on)}
-      className={`relative h-5 w-[34px] shrink-0 rounded-full transition ${on ? "bg-green" : "bg-dot"}`}
+      className={`relative shrink-0 rounded-full transition ${lg ? "h-7 w-[48px]" : "h-5 w-[34px]"} ${on ? "bg-green" : "bg-dot"}`}
     >
       <span
-        className={`absolute top-0.5 h-4 w-4 rounded-full bg-white transition-all ${on ? "left-[16px]" : "left-0.5"}`}
+        className={`absolute top-0.5 rounded-full bg-white transition-all ${
+          lg ? `h-6 w-6 ${on ? "left-[22px]" : "left-0.5"}` : `h-4 w-4 ${on ? "left-[16px]" : "left-0.5"}`
+        }`}
       />
     </button>
   );

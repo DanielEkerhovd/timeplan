@@ -601,84 +601,136 @@ function TestButton({ team, run, onSent }: { team: MyTeam; run: Run; onSent?: ()
 
 // ---------- 3. Connected ----------
 
+/**
+ * The connected view. Two columns with names: Settings (what you change) and
+ * Activity (what you look at). Health lives in the header as one line and only
+ * opens into a card when something needs fixing. Disconnect sits alone at the
+ * bottom, out of the way.
+ */
 function Connected({ team, state, isOwner, run, error, onRerun }: { team: MyTeam; state: DiscordState; isOwner: boolean; run: Run; error: string | null; onRerun: () => void }) {
   const link = state.link!;
+  const health = useHealth(team, state, isOwner);
+  const problems = health.checks?.filter((c) => !c.ok) ?? [];
+  const last = state.log.find((l) => l.kind === "week_post" && l.ok);
+
   return (
     <>
-      <Intro title="The bot is on the team">
-        Connected to <strong className="text-ink">{link.guild_name ?? "Discord"}</strong>. {isOwner ? "Everything below is yours to change." : "Only the owner can change it."}
-      </Intro>
-      <ErrorText>{error}</ErrorText>
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)] xl:items-start">
-        <div className="flex min-w-0 flex-col gap-4">
-          <StatusCard team={team} state={state} isOwner={isOwner} />
-          {isOwner && <TryCard team={team} run={run} />}
-          {isOwner && <ChannelsCard team={team} state={state} run={run} onRerun={onRerun} />}
-          {isOwner && <PingCard team={team} state={state} run={run} />}
-        </div>
-        <div className="flex min-w-0 flex-col gap-4">
-          {isOwner && state.schedule && <SendsCard team={team} state={state} run={run} />}
-          <LogCard state={state} />
-          {isOwner && <DisconnectCard team={team} state={state} run={run} />}
+      <div className="flex flex-col gap-1 px-1">
+        <Eyebrow>Discord</Eyebrow>
+        <h2 className="text-[22px] font-extrabold tracking-tight">The bot is on the team</h2>
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[14px] text-muted">
+          <span>
+            Connected to <strong className="text-ink">{link.guild_name ?? "Discord"}</strong>
+          </span>
+          {isOwner && (
+            <>
+              <span className="text-faint">·</span>
+              <HealthLine health={health} problems={problems.length} />
+              <span className="text-faint">·</span>
+              <button type="button" onClick={health.refresh} className="font-semibold text-muted underline-offset-2 hover:text-ink hover:underline">
+                Check again
+              </button>
+            </>
+          )}
         </div>
       </div>
+      <ErrorText>{error}</ErrorText>
+
+      <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] xl:items-stretch">
+        <div className="flex min-w-0 flex-col gap-3">
+          <div className="px-1">
+            <Eyebrow>Settings</Eyebrow>
+          </div>
+          {isOwner ? (
+            <>
+              <ChannelsCard team={team} state={state} run={run} onRerun={onRerun} />
+              <PingCard team={team} state={state} run={run} />
+              {state.schedule && <SendsCard team={team} state={state} run={run} />}
+            </>
+          ) : (
+            <Card>
+              <p className="text-[14px] text-muted">Only the owner can change the bot&rsquo;s settings.</p>
+            </Card>
+          )}
+        </div>
+        <div className="flex min-w-0 flex-col gap-3">
+          <div className="px-1">
+            <Eyebrow>Activity</Eyebrow>
+          </div>
+          {isOwner && (problems.length > 0 || health.failed) && <ProblemsCard health={health} problems={problems} />}
+          {isOwner && <TryCard team={team} run={run} />}
+          <LogCard state={state} last={last} />
+        </div>
+      </div>
+
+      {isOwner && <DisconnectCard team={team} state={state} run={run} />}
     </>
   );
 }
 
-function StatusCard({ team, state, isOwner }: { team: MyTeam; state: DiscordState; isOwner: boolean }) {
+interface Health {
+  checks: StatusCheck[] | null;
+  failed: string | null;
+  loading: boolean;
+  refresh: () => void;
+}
+
+/** The health checks, asked of Discord when the tab opens and whenever the settings change. */
+function useHealth(team: MyTeam, state: DiscordState, isOwner: boolean): Health {
   const [checks, setChecks] = useState<StatusCheck[] | null>(null);
   const [failed, setFailed] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
   const [tick, setTick] = useState(0);
 
   useEffect(() => {
     if (!isOwner) return;
     let alive = true;
-    setChecks(null);
+    setLoading(true);
+    setFailed(null);
     fetchStatus(team.id)
-      .then((r) => alive && setChecks(r.checks))
-      .catch((err) => alive && setFailed(explain(err)));
+      .then((r) => {
+        if (!alive) return;
+        setChecks(r.checks);
+      })
+      .catch((err) => alive && setFailed(explain(err)))
+      .finally(() => alive && setLoading(false));
     return () => {
       alive = false;
     };
   }, [team.id, tick, state.channels, state.link, isOwner]);
 
-  const last = state.log.find((l) => l.kind === "week_post" && l.ok);
-  const allOk = checks?.every((c) => c.ok);
+  return { checks, failed, loading, refresh: () => setTick((t) => t + 1) };
+}
 
+/** One line: a dot and a verdict. Green when every check passes. */
+function HealthLine({ health, problems }: { health: Health; problems: number }) {
+  const tone = health.failed || problems ? "bg-yellow" : health.checks ? "bg-green" : "bg-dot";
+  const text = health.loading && !health.checks ? "Checking…" : health.failed ? "Could not check" : problems ? `${problems} thing${problems === 1 ? "" : "s"} to fix` : "All good";
   return (
-    <Card className="flex flex-col gap-3.5">
-      <div className="flex items-center justify-between gap-3">
-        <h3 className="text-[15px] font-extrabold">Status</h3>
-        {isOwner && (
-          <button type="button" onClick={() => setTick((t) => t + 1)} className="text-[13px] font-semibold text-muted hover:text-ink">
-            {checks ? "Check again" : "Checking…"}
-          </button>
-        )}
-      </div>
-      {isOwner ? (
-        <div className={`flex flex-col gap-3 rounded-[16px] border-[1.5px] p-4 ${allOk ? "border-green-dim bg-green-soft/50" : "border-yellow/60 bg-yellow-soft"}`}>
-          {failed && <span className="text-[14px] font-semibold text-red-ink">{failed}</span>}
-          {!checks && !failed && <span className="text-[13px] text-muted">Asking Discord…</span>}
-          {checks?.map((c) => (
-            <div key={c.label} className="flex items-start gap-2.5">
-              <span className={`mt-px flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-full ${c.ok ? "bg-green-soft text-green-ink" : "bg-yellow-soft text-yellow-ink"}`}>
-                {c.ok ? <Check size={12} /> : <Bang />}
-              </span>
-              <div className="flex flex-col">
-                <span className="text-[14px] font-semibold">{c.label}</span>
-                {c.fix && <span className="text-[13px] text-yellow-ink">{c.fix}</span>}
-              </div>
-            </div>
-          ))}
+    <span className="inline-flex items-center gap-1.5 font-semibold text-ink">
+      <span className={`h-2 w-2 rounded-full ${tone}`} />
+      {text}
+    </span>
+  );
+}
+
+/** Only on screen when a check fails: what is wrong, and what to do about it. */
+function ProblemsCard({ health, problems }: { health: Health; problems: StatusCheck[] }) {
+  return (
+    <Card className="flex flex-col gap-3 border-[1.5px] border-yellow/60 bg-yellow-soft">
+      <h3 className="text-[15px] font-extrabold text-yellow-ink">Needs attention</h3>
+      {health.failed && <span className="text-[14px] font-semibold text-red-ink">{health.failed}</span>}
+      {problems.map((c) => (
+        <div key={c.label} className="flex items-start gap-2.5">
+          <span className="mt-px flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-full bg-yellow text-white">
+            <Bang />
+          </span>
+          <div className="flex flex-col">
+            <span className="text-[14px] font-bold">{c.label}</span>
+            {c.fix && <span className="text-[13px] text-yellow-ink">{c.fix}</span>}
+          </div>
         </div>
-      ) : (
-        <p className="text-[13px] text-muted">The owner sees the health checks here.</p>
-      )}
-      <div className="flex flex-col">
-        <span className="text-[14px] font-semibold">Last week plan</span>
-        <span className="text-[13px] text-muted">{last ? `${last.summary}, ${when(last.at)}` : "Not posted yet"}</span>
-      </div>
+      ))}
     </Card>
   );
 }
@@ -798,9 +850,9 @@ function TryCard({ team, run }: { team: MyTeam; run: Run }) {
         <h3 className="text-[15px] font-extrabold">Try it out</h3>
         <span className="text-[12px] text-muted">Only you, or marked as a test</span>
       </div>
-      <div className="flex flex-col">
-        {rows.map((g, gi) => (
-          <div key={g.group} className={`flex flex-col ${gi ? "mt-2 border-t border-line-soft pt-2" : ""}`}>
+      <div className="flex flex-col gap-2">
+        {rows.map((g) => (
+          <div key={g.group} className="flex flex-col rounded-[14px] bg-bg px-3.5 py-2">
             <div className="py-1">
               <Label>{g.group}</Label>
             </div>
@@ -808,10 +860,10 @@ function TryCard({ team, run }: { team: MyTeam; run: Run }) {
               const r = result[it.key];
               const running = busy === it.key;
               return (
-                <div key={it.key} className="flex items-center justify-between gap-4 py-1.5">
+                <div key={it.key} className="flex items-center justify-between gap-4 py-2">
                   <div className="flex min-w-0 flex-col">
                     <span className="text-[14px] font-bold">{it.label}</span>
-                    <span className={`truncate text-[12px] ${r ? (r.ok ? "font-bold text-green-ink" : "font-bold text-red-ink") : "text-muted"}`}>{running ? "Working…" : (r?.text ?? it.hint)}</span>
+                    <span className={`truncate text-[13px] ${r ? (r.ok ? "font-bold text-green-ink" : "font-bold text-red-ink") : "text-muted"}`}>{running ? "Working…" : (r?.text ?? it.hint)}</span>
                   </div>
                   <Pill disabled={busy !== null} onClick={() => go(it.key, it.fn)} className="shrink-0">
                     Run
@@ -838,8 +890,16 @@ function ChannelsCard({ team, state, run, onRerun }: { team: MyTeam; state: Disc
     };
   }, [team.id]);
 
+  // Until Discord has answered with the channel list, the saved id is shown as
+  // "Loading…" instead of the placeholder. "Pick a channel" on a channel that
+  // is picked is a lie the owner acts on.
+  const saved = (kind: ChannelKind): DropdownOption<string>[] => {
+    const id = state.channels.find((c) => c.kind === kind)?.channel_id;
+    return id && !picker ? [{ value: id, label: "Loading…", disabled: true }] : [];
+  };
   const opts = (kind: ChannelKind, inherit: string | null): DropdownOption<string>[] => [
     ...(inherit ? [{ value: "", label: inherit }] : []),
+    ...saved(kind),
     ...(picker ?? []).map((c) => ({
       value: c.id,
       label: `#${c.name}`,
@@ -887,7 +947,9 @@ function PingCard({ team, state, run }: { team: MyTeam; state: DiscordState; run
   return (
     <Card className="flex flex-col gap-3.5">
       <h3 className="text-[15px] font-extrabold">Who gets pinged</h3>
-      <PingPicker team={team} link={link} run={run} />
+      <div className="rounded-[14px] bg-bg p-3.5">
+        <PingPicker team={team} link={link} run={run} />
+      </div>
       {link.managed_role && (
         <div className="flex items-center justify-between gap-3">
           <p className="text-[13px] text-muted">Gather keeps the role in sync with the team. Join the team, get the role.</p>
@@ -928,18 +990,18 @@ function SendsCard({ team, state, run }: { team: MyTeam; state: DiscordState; ru
   const s = state.schedule!;
   const save = (patch: Parameters<typeof updateSchedule>[1]) => run(() => updateSchedule(team.id, patch), "Saved");
   return (
-    <Card className="flex flex-col gap-3.5">
+    // Last card in the Settings column: it grows to the column's full height so the
+    // two columns end together, and the rows share the extra room evenly.
+    <Card className="flex flex-1 flex-col gap-2.5">
       <h3 className="text-[15px] font-extrabold">What the bot sends</h3>
       <SendRow title="Week plan" sub="Posted once a week, then kept up to date." on={s.post_enabled} onToggle={(v) => save({ post_enabled: v })}>
         <Dropdown look="pill" value={s.post_dow} options={DOW_OPTIONS} search={false} onChange={(v) => save({ post_dow: v })} />
         <Dropdown look="pill" value={shortTime(s.post_at)} options={TIME_OPTIONS} search={false} onChange={(v) => save({ post_at: v })} />
       </SendRow>
-      <Hr />
       <SendRow title="Nudge for next week" sub="For anyone who hasn't filled in their times yet. Next round." on={s.nudge_enabled} onToggle={(v) => save({ nudge_enabled: v })}>
         <Dropdown look="pill" value={s.nudge_dow} options={DOW_OPTIONS} search={false} onChange={(v) => save({ nudge_dow: v })} />
         <Dropdown look="pill" value={shortTime(s.nudge_at)} options={TIME_OPTIONS} search={false} onChange={(v) => save({ nudge_at: v })} />
       </SendRow>
-      <Hr />
       <SendRow
         title="New and changed sessions"
         sub="Only for the week that is posted. New sessions ping the team; moves and cancellations ping the people who had said yes."
@@ -948,38 +1010,42 @@ function SendsCard({ team, state, run }: { team: MyTeam; state: DiscordState; ru
       >
         <Dropdown look="pill" value={s.updates_mode ?? "channel"} options={MODE_OPTIONS} search={false} onChange={(v) => save({ updates_mode: v })} />
       </SendRow>
-      <Hr />
       <SendRow title="Same-day reminder" sub="To the people who are in. Next round." on={s.same_day_enabled} onToggle={(v) => save({ same_day_enabled: v })}>
         <Dropdown look="pill" value={Number(s.same_day_hours)} options={HOURS_OPTIONS} search={false} onChange={(v) => save({ same_day_hours: v })} />
         <Dropdown look="pill" value={s.same_day_mode} options={MODE_OPTIONS} search={false} onChange={(v) => save({ same_day_mode: v })} />
       </SendRow>
-      <p className="text-[13px] text-muted">Times are in the team&rsquo;s zone, {team.timezone}.</p>
+      <p className="mt-auto text-[13px] text-muted">Times are in the team&rsquo;s zone, {team.timezone}.</p>
     </Card>
   );
 }
 
+/** One thing the bot sends, as an inset row: the darker page tone inside the card gives it an edge. */
 function SendRow({ title, sub, on, onToggle, children }: { title: string; sub: string; on: boolean; onToggle: (v: boolean) => void; children?: ReactNode }) {
   return (
-    <div className="flex flex-col gap-2.5 py-0.5">
-      <div className="flex items-center justify-between gap-4">
-        <div className="flex flex-col">
-          <span className="text-[14px] font-extrabold">{title}</span>
-          <span className="text-[13px] text-muted">{sub}</span>
+    <div className={`flex flex-1 items-center gap-4 rounded-[14px] p-3.5 transition ${on ? "bg-bg" : "bg-bg/60"}`}>
+      <div className="flex min-w-0 flex-1 flex-col gap-3">
+        <div className="flex flex-col gap-0.5">
+          <span className={`text-[14px] font-extrabold ${on ? "" : "text-muted"}`}>{title}</span>
+          <span className="text-[13px] leading-snug text-muted">{sub}</span>
         </div>
-        <Toggle on={on} onChange={onToggle} label={title} />
+        {children && on && <div className="flex flex-wrap gap-1.5">{children}</div>}
       </div>
-      {children && on && <div className="flex flex-wrap gap-1.5">{children}</div>}
+      <Toggle on={on} onChange={onToggle} label={title} size="lg" />
     </div>
   );
 }
 
-function LogCard({ state }: { state: DiscordState }) {
+function LogCard({ state, last }: { state: DiscordState; last: DiscordState["log"][number] | undefined }) {
   const failedDm = state.log.find((l) => !l.ok && l.detail);
   return (
     <Card className="flex flex-col gap-3">
       <div className="flex items-center justify-between gap-3">
         <h3 className="text-[15px] font-extrabold">Recent messages</h3>
         <span className="text-[13px] text-muted">Last 10</span>
+      </div>
+      <div className="flex items-center justify-between gap-3 rounded-[14px] bg-bg px-3.5 py-3">
+        <span className="text-[13px] font-bold">Week plan on Discord</span>
+        <span className="text-[13px] text-muted">{last ? `${last.summary}, ${when(last.at)}` : "Not posted yet"}</span>
       </div>
       {state.log.length === 0 ? (
         <p className="text-[13px] text-muted">Nothing sent yet.</p>
@@ -1020,7 +1086,7 @@ function DisconnectCard({ team, state, run }: { team: MyTeam; state: DiscordStat
   const [arm, setArm] = useState(false);
   const [busy, setBusy] = useState(false);
   return (
-    <Card className="flex flex-col gap-3">
+    <Card className="flex flex-col gap-3 border-[1.5px] border-red-line bg-transparent shadow-none">
       <div className="flex items-center justify-between gap-4">
         <div className="flex flex-col">
           <span className="text-[14px] font-extrabold">Disconnect</span>
@@ -1078,8 +1144,6 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
     </div>
   );
 }
-
-const Hr = () => <div className="h-px bg-line-soft" />;
 
 function Tag({ children }: { children: ReactNode }) {
   return <span className="shrink-0 rounded-full bg-surface-2 px-3 py-1.5 text-[11px] font-extrabold uppercase tracking-[0.06em] text-muted">{children}</span>;
