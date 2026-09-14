@@ -835,7 +835,7 @@ function TryCard({ team, run }: { team: MyTeam; run: Run }) {
         {
           key: "post",
           label: "Post or refresh now",
-          hint: "In the week-plan channel, for everyone.",
+          hint: "Post the week plan in the channel you picked, or refresh it if it's already there",
           fn: async () => {
             const r = await postWeekNow(team.id, "this");
             if (r.action === "skipped") throw new DiscordApiError(r.detail ?? "Nothing to post");
@@ -845,7 +845,7 @@ function TryCard({ team, run }: { team: MyTeam; run: Run }) {
         {
           key: "preview",
           label: "Send me a preview",
-          hint: "The week plan as a DM to you only.",
+          hint: "The weekplan as a DM to you only",
           fn: async () => {
             await tryAction(team.id, "preview");
             return "Sent to your DMs.";
@@ -858,8 +858,8 @@ function TryCard({ team, run }: { team: MyTeam; run: Run }) {
       items: [
         {
           key: "sample",
-          label: "Send a sample change",
-          hint: "A made-up “Moved” card, delivered the way changes are set to go.",
+          label: "Send a dummy change",
+          hint: "Sends a dummy change update to the selected notification channel",
           fn: async () => {
             const r = await tryAction(team.id, "sample_change");
             return `Sent (${(r.where ?? []).join(" + ")}).`;
@@ -867,8 +867,8 @@ function TryCard({ team, run }: { team: MyTeam; run: Run }) {
         },
         {
           key: "flush",
-          label: "Send what’s waiting now",
-          hint: "Runs the clock for this team instead of waiting up to five minutes.",
+          label: "Publish changes now",
+          hint: "Publish current changes to the weekplan, skipping the five-minute waiting period",
           fn: async () => {
             const r = await tryAction(team.id, "flush");
             const bits = [`week plan: ${r.week}`, `${r.sent ?? 0} change${r.sent === 1 ? "" : "s"} sent`];
@@ -884,7 +884,7 @@ function TryCard({ team, run }: { team: MyTeam; run: Run }) {
         {
           key: "ping",
           label: "Ping me",
-          hint: "A card in the updates channel that mentions only you.",
+          hint: "Test pinging functionality. Ping's only you",
           fn: async () => {
             await tryAction(team.id, "ping_me");
             return "Sent. You should have a notification.";
@@ -893,7 +893,7 @@ function TryCard({ team, run }: { team: MyTeam; run: Run }) {
         {
           key: "dm",
           label: "Send me a test DM",
-          hint: "Shows what players see, and whether Discord lets DMs through.",
+          hint: "Shows what players see, and whether Discord lets DMs through",
           fn: async () => {
             await sendTestDm(team.id);
             return "Sent to your DMs.";
@@ -902,7 +902,7 @@ function TryCard({ team, run }: { team: MyTeam; run: Run }) {
         {
           key: "channels",
           label: "Post a test card in each channel",
-          hint: "Confirms the bot can write where you pointed it.",
+          hint: "Confirms the bot can write in channels connected to Gather",
           fn: async () => {
             const r = await sendTestMessage(team.id);
             if (r.failed.length) throw new DiscordApiError(r.failed.map((f) => f.reason).join(" "));
@@ -918,8 +918,8 @@ function TryCard({ team, run }: { team: MyTeam; run: Run }) {
   return (
     <Card className="flex flex-col gap-3">
       <div className="flex items-baseline justify-between gap-3">
-        <h3 className="text-[15px] font-extrabold">Try it out</h3>
-        <span className="text-[12px] text-muted">Only you, or marked as a test</span>
+        <h3 className="text-[15px] font-extrabold">Test notifications</h3>
+        <span className="text-[12px] text-muted">Unsure how the bot behaves? Test it out here</span>
       </div>
       <div className="flex flex-col gap-2">
         {rows.map((g) => (
