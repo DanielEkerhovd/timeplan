@@ -1076,24 +1076,24 @@ function SendsCard({ team, state, run }: { team: MyTeam; state: DiscordState; ru
     // Last card in the Settings column: it grows to the column's full height so the
     // two columns end together, and the rows share the extra room evenly.
     <Card className="flex flex-1 flex-col gap-2.5">
-      <h3 className="text-[15px] font-extrabold">What the bot sends</h3>
-      <SendRow title="Week plan" sub="Posted once a week, then kept up to date." on={s.post_enabled} onToggle={(v) => save({ post_enabled: v })}>
+      <h3 className="text-[15px] font-extrabold">Notification settings</h3>
+      <SendRow title="Week plan" sub="Automatically post weekplan once a week" on={s.post_enabled} onToggle={(v) => save({ post_enabled: v })}>
         <Dropdown look="pill" value={s.post_dow} options={DOW_OPTIONS} search={false} onChange={(v) => save({ post_dow: v })} />
         <Dropdown look="pill" value={shortTime(s.post_at)} options={TIME_OPTIONS} search={false} onChange={(v) => save({ post_at: v })} />
       </SendRow>
-      <SendRow title="Nudge for next week" sub="For anyone who hasn't filled in their times yet. Next round." on={s.nudge_enabled} onToggle={(v) => save({ nudge_enabled: v })}>
+      <SendRow title="Nudge for next week" sub="For anyone who hasn't filled in their times for next week yet" on={s.nudge_enabled} onToggle={(v) => save({ nudge_enabled: v })}>
         <Dropdown look="pill" value={s.nudge_dow} options={DOW_OPTIONS} search={false} onChange={(v) => save({ nudge_dow: v })} />
         <Dropdown look="pill" value={shortTime(s.nudge_at)} options={TIME_OPTIONS} search={false} onChange={(v) => save({ nudge_at: v })} />
       </SendRow>
       <SendRow
         title="New and changed sessions"
-        sub="Only for the week that is posted. New sessions ping the team; moves and cancellations ping the people who had said yes."
+        sub="Keep the team up to date on new sessions and changes to existing ones."
         on={s.updates_enabled}
         onToggle={(v) => save({ updates_enabled: v })}
       >
         <Dropdown look="pill" value={s.updates_mode ?? "channel"} options={MODE_OPTIONS} search={false} onChange={(v) => save({ updates_mode: v })} />
       </SendRow>
-      <SendRow title="Same-day reminder" sub="To the people who are in. Next round." on={s.same_day_enabled} onToggle={(v) => save({ same_day_enabled: v })}>
+      <SendRow title="Same-day reminder" sub="Reminds users about sessions they are signed up for" on={s.same_day_enabled} onToggle={(v) => save({ same_day_enabled: v })}>
         <Dropdown look="pill" value={Number(s.same_day_hours)} options={HOURS_OPTIONS} search={false} onChange={(v) => save({ same_day_hours: v })} />
         <Dropdown look="pill" value={s.same_day_mode} options={MODE_OPTIONS} search={false} onChange={(v) => save({ same_day_mode: v })} />
       </SendRow>
