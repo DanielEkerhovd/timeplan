@@ -114,3 +114,46 @@ describe("week message", () => {
     expect(pingLine(week, { ...link, ping_mode: "role", ping_role_id: "555" })).toBe("<@&555> the week is up.");
   });
 });
+
+import { buildNewSessionsCard, buildUpdateCard, forPeople, forRole } from "../../../api/_lib/updateCard";
+import type { OutboxRow } from "../../../api/_lib/updateCard";
+
+describe("change cards", () => {
+  const snap = { id: "e", date: "2026-09-15", start_hour: 20, end_hour: 23, title: "Scrim", opponent: "Foxes", color: "yellow" };
+  const base: OutboxRow = { id: 1, team_id: "t", kind: "new", event_id: "22222222-2222-4222-8222-222222222222", payload: { after: snap }, send_after: "", attempts: 0, sent_at: null, message_id: null };
+  const text = (msg: unknown) => JSON.stringify(msg);
+
+  it("a new session pings the team once and offers Join, with the queue row id in the button", () => {
+    const msg = buildNewSessionsCard([base], "Europe/Oslo", forPeople(["100", "200"])) as { allowed_mentions: { users: string[] } };
+    expect(msg.allowed_mentions.users).toEqual(["100", "200"]);
+    expect(text(msg)).toContain("## New · Scrim vs Foxes");
+    expect(text(msg)).toContain("<@100> <@200>");
+    expect(text(msg)).toContain("uj:22222222-2222-4222-8222-222222222222:1");
+  });
+  it("several new sessions become one card with one ping and a Join per session", () => {
+    const rows: OutboxRow[] = [base, { ...base, id: 2, event_id: "33333333-3333-4333-8333-333333333333", payload: { after: { ...snap, title: "VOD", opponent: null, date: "2026-09-17" } } }];
+    const msg = buildNewSessionsCard(rows, "Europe/Oslo", forRole("555"), [["100"], []]) as { allowed_mentions: { roles: string[] } };
+    expect(msg.allowed_mentions.roles).toEqual(["555"]);
+    expect(text(msg)).toContain("## 2 new sessions");
+    expect(text(msg)).toContain("<@&555>");
+    expect(text(msg)).toContain("uj:22222222-2222-4222-8222-222222222222:1");
+    expect(text(msg)).toContain("uj:33333333-3333-4333-8333-333333333333:2");
+    expect(text(msg)).toContain("<@100>");
+  });
+  it("a move shows old → new and pings only those who had said yes", () => {
+    const row: OutboxRow = { ...base, kind: "changed", payload: { before: snap, after: { ...snap, date: "2026-09-16" } } };
+    const msg = buildUpdateCard(row, "Europe/Oslo", ["100", "200"]) as { allowed_mentions: { users: string[] } };
+    expect(msg.allowed_mentions.users).toEqual(["100", "200"]);
+    expect(text(msg)).toContain("## Moved · Scrim vs Foxes");
+    expect(text(msg)).toContain("~~**Tuesday**");
+    expect(text(msg)).toContain("→ **Wednesday**");
+    expect(text(msg)).toContain("Still in");
+  });
+  it("a cancellation has no buttons and pings the people from the snapshot", () => {
+    const row: OutboxRow = { ...base, kind: "cancelled", payload: { before: snap, people: ["100"] } };
+    const msg = buildUpdateCard(row, "Europe/Oslo", row.payload.people ?? []) as { allowed_mentions: { users: string[] } };
+    expect(msg.allowed_mentions.users).toEqual(["100"]);
+    expect(text(msg)).toContain("## Cancelled · Scrim vs Foxes");
+    expect(text(msg)).not.toContain("custom_id");
+  });
+});

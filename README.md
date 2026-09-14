@@ -41,7 +41,7 @@ supabase link --project-ref <prosjekt-ref>
 supabase db push
 ```
 
-Alternativt: åpne filene i `supabase/migrations/` i SQL Editor i Supabase og kjør dem i rekkefølge (`0001_init.sql` … `0017_discord.sql`).
+Alternativt: åpne filene i `supabase/migrations/` i SQL Editor i Supabase og kjør dem i rekkefølge (`0001_init.sql` … `0020_updates_live_week.sql`).
 
 Har du allerede kjørt 0001? Da kjører du bare `0002_activity_types.sql` (eller `supabase db push`). Den legger til aktivitetstyper, sletter den gamle `type`-kolonnen på `events` og gir alle eksisterende lag typene Scrim, Match og VOD review.
 
@@ -95,7 +95,9 @@ Boten er ikke en prosess som står og lytter. Den er noen HTTP-endepunkt under `
 
 Runde 1 (levert): koble lag til server, velge kanaler, ping (medlemmer eller rolle, gjerne en rolle boten lager og holder i takt), den levende ukeposten i `#schedule` (postes til fast tid med ping, redigeres stille når uka endrer seg, byttes ut når uka er ny), `/week` og Join/Can't-knappene, status og testmelding i Settings → Discord.
 
-Runde 2 (ikke bygget): purring på tomme uker, varsler ved ny/flyttet/avlyst aktivitet, påminnelse samme dag, DM med fallback til kanal. Bryterne for dem finnes alt i Settings, men sender ingenting ennå.
+Runde 2, del 1 og 2 (levert): varsler ved ny, flyttet, endret eller avlyst aktivitet. En trigger på `events` legger en rad i `discord_outbox` (0019) med to minutters ventetid, så fem raske redigeringer blir én melding; cron sender det som er modent. Bare for uka som alt er postet (0020): endringer i neste uke venter på neste ukepost. Ny aktivitet pinger laget (rolla eller medlemmene), flere på én gang blir ett kort; flytting og avlysning pinger dem som hadde sagt ja. Laget velger kanal, DM eller begge (`updates_mode`); nekter Discord DM til noen (50007) huskes det på profilen (`dm_blocked_at`) og de pinges i kanalen i stedet. «Still in» / «Can't» på kortet skriver samme svar som knappene på ukeposten. Slås av per lag under «What the bot sends».
+
+Runde 2, resten (ikke bygget): purring på tomme uker, påminnelse samme dag, DM med fallback til kanal. Bryterne finnes i Settings, men sender ingenting ennå.
 
 ### Oppsett
 

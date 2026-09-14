@@ -841,7 +841,14 @@ function SendsCard({ team, state, run }: { team: MyTeam; state: DiscordState; ru
         <Dropdown look="pill" value={shortTime(s.nudge_at)} options={TIME_OPTIONS} search={false} onChange={(v) => save({ nudge_at: v })} />
       </SendRow>
       <Hr />
-      <SendRow title="New and changed sessions" sub="Moved, cancelled or added. Pings the people who had said yes. Next round." on={s.updates_enabled} onToggle={(v) => save({ updates_enabled: v })} />
+      <SendRow
+        title="New and changed sessions"
+        sub="Only for the week that is posted. New sessions ping the team; moves and cancellations ping the people who had said yes."
+        on={s.updates_enabled}
+        onToggle={(v) => save({ updates_enabled: v })}
+      >
+        <Dropdown look="pill" value={s.updates_mode ?? "channel"} options={MODE_OPTIONS} search={false} onChange={(v) => save({ updates_mode: v })} />
+      </SendRow>
       <Hr />
       <SendRow title="Same-day reminder" sub="To the people who are in. Next round." on={s.same_day_enabled} onToggle={(v) => save({ same_day_enabled: v })}>
         <Dropdown look="pill" value={Number(s.same_day_hours)} options={HOURS_OPTIONS} search={false} onChange={(v) => save({ same_day_hours: v })} />

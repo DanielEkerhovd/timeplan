@@ -131,6 +131,7 @@ export interface DiscordSchedule {
   nudge_dow: number
   nudge_at: string
   updates_enabled: boolean
+  updates_mode: 'channel' | 'dm' | 'both'
   same_day_enabled: boolean
   same_day_hours: number
   same_day_mode: 'channel' | 'dm' | 'both'

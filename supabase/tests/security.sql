@@ -753,6 +753,83 @@ select pg_temp.expect_count('bot_week har ingen tilgjengelighet i seg',
 select pg_temp.expect_denied('bot_week krever mandag',
   format('select public.bot_week(%L, %L)', :'team_a', :'dato'));
 
+-- Utboksen (0019, 0020): endringer blir rader, raske endringer blir én rad, klienten ser ingenting.
+-- Bare for uka som er postet: uten ukepost skjer ingenting.
+select pg_temp.become(:'eier_a');
+set local role authenticated;
+select pg_temp.expect_denied('innlogget kan ikke lese utboksen', 'select * from public.discord_outbox');
+insert into public.events (team_id, date, start_hour, end_hour, title, color) values (:'team_a', :'dato', 9, 11, 'Før posten', 'grey');
+reset role;
+select pg_temp.expect_count('ingen ukepost, ingen rad i utboksen',
+  format('select 1 from public.discord_outbox where team_id = %L', :'team_a'), 0);
+delete from public.events where team_id = :'team_a' and title = 'Før posten';
+insert into public.discord_week_post (team_id, week_start, channel_id, message_id, content_hash)
+  values (:'team_a', :'mandag', '800000000000000001', '123', 'x');
+select pg_temp.become(:'eier_a');
+set local role authenticated;
+insert into public.events (team_id, date, start_hour, end_hour, title, color) values (:'team_a', :'dato', 18, 20, 'Outbox test', 'teal');
+select id as outbox_event from public.events where team_id = :'team_a' and title = 'Outbox test' \gset
+reset role;
+select pg_temp.expect_count('ny aktivitet gir én ventende rad av typen new',
+  format('select 1 from public.discord_outbox where event_id = %L and sent_at is null and kind = ''new''', :'outbox_event'), 1);
+select pg_temp.become(:'eier_a');
+set local role authenticated;
+update public.events set start_hour = 19 where id = :'outbox_event';
+update public.events set title = 'Outbox test 2' where id = :'outbox_event';
+reset role;
+select pg_temp.expect_count('redigering før sending holder den som new, fortsatt én rad',
+  format('select 1 from public.discord_outbox where event_id = %L and sent_at is null', :'outbox_event'), 1);
+select pg_temp.expect_count('rada har de siste opplysningene',
+  format('select 1 from public.discord_outbox where event_id = %L and sent_at is null and kind = ''new'' and payload -> ''after'' ->> ''title'' = ''Outbox test 2''', :'outbox_event'), 1);
+-- Late som om den er sendt, så neste endring blir en «changed».
+update public.discord_outbox set sent_at = now() where event_id = :'outbox_event';
+select pg_temp.become(:'eier_a');
+set local role authenticated;
+update public.events set end_hour = 23 where id = :'outbox_event';
+update public.events set start_hour = 20 where id = :'outbox_event';
+reset role;
+select pg_temp.expect_count('endring etter sending gir én changed-rad med «før» fra første endring',
+  format('select 1 from public.discord_outbox where event_id = %L and sent_at is null and kind = ''changed'' and (payload -> ''before'' ->> ''start_hour'')::int = 19 and (payload -> ''after'' ->> ''end_hour'')::int = 23', :'outbox_event'), 1);
+select pg_temp.become(:'eier_a');
+set local role authenticated;
+update public.events set note = 'bare et notat' where id = :'outbox_event';
+reset role;
+select pg_temp.expect_count('et notat er ingen endring folk skal varsles om',
+  format('select 1 from public.discord_outbox where event_id = %L and sent_at is null', :'outbox_event'), 1);
+select pg_temp.become(:'eier_a');
+set local role authenticated;
+insert into public.event_responses (event_id, status) values (:'outbox_event', 'coming');
+delete from public.events where id = :'outbox_event';
+reset role;
+select pg_temp.expect_count('sletting gir én cancelled-rad med dem som hadde sagt ja',
+  format('select 1 from public.discord_outbox where event_id = %L and sent_at is null and kind = ''cancelled'' and payload -> ''people'' ? ''111111111111111111''', :'outbox_event'), 1);
+select pg_temp.become(:'eier_a');
+set local role authenticated;
+insert into public.events (team_id, date, start_hour, end_hour, title, color) values (:'team_a', :'dato', 12, 14, 'Angret', 'grey');
+delete from public.events where team_id = :'team_a' and title = 'Angret';
+reset role;
+select pg_temp.expect_count('opprettet og slettet før sending: ingen rad i det hele tatt',
+  format('select 1 from public.discord_outbox o where o.team_id = %L and o.sent_at is null and o.payload -> ''after'' ->> ''title'' = ''Angret''', :'team_a'), 0);
+delete from public.discord_outbox where team_id = :'team_a';
+delete from public.discord_week_post where team_id = :'team_a';
+select pg_temp.expect_count('discord_team_people gir dem som kan nås',
+  format('select 1 from jsonb_array_elements_text(public.discord_team_people(%L, true)) x where x = ''111111111111111111''', :'team_a'), 1);
+update public.profiles set dm_blocked_at = now() where user_id = :'eier_a';
+select pg_temp.expect_count('en Discord nekter DM til, hoppes over for DM',
+  format('select 1 from jsonb_array_elements_text(public.discord_team_people(%L, true)) x where x = ''111111111111111111''', :'team_a'), 0);
+select pg_temp.expect_count('men står fortsatt i lista for kanalping',
+  format('select 1 from jsonb_array_elements_text(public.discord_team_people(%L, false)) x where x = ''111111111111111111''', :'team_a'), 1);
+update public.profiles set dm_blocked_at = null where user_id = :'eier_a';
+select pg_temp.become(:'eier_a');
+set local role authenticated;
+select pg_temp.expect_denied('innlogget kan ikke kalle discord_team_people',
+  format('select public.discord_team_people(%L)', :'team_a'));
+select pg_temp.expect_ok('eier velger DM for endringer',
+  format('update public.discord_schedules set updates_mode = ''both'' where team_id = %L', :'team_a'));
+select pg_temp.expect_denied('ukjent modus avvises',
+  format('update public.discord_schedules set updates_mode = ''pigeon'' where team_id = %L', :'team_a'));
+reset role;
+
 -- bot_respond (0018): Join fra Discord i ett kall. Bare serveren, og bare for medlemmer.
 select pg_temp.become(:'eier_a');
 set local role authenticated;

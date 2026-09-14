@@ -35,7 +35,7 @@ export interface BotWeek {
 }
 
 /** The accent bar. Same eight keys as the app; the "ink" values from index.css, which read well on Discord's dark grey. */
-const ACCENT: Record<string, number> = {
+export const ACCENT: Record<string, number> = {
   yellow: 0xf0cf7e,
   green: 0x8fcba6,
   coral: 0xf0a58e,
@@ -45,7 +45,7 @@ const ACCENT: Record<string, number> = {
   pink: 0xefa9c4,
   grey: 0xc9c5be,
 }
-const GATHER_GREEN = 0x3e9a63
+export const GATHER_GREEN = 0x3e9a63
 
 export const COMPONENTS_V2 = 1 << 15
 
@@ -58,7 +58,7 @@ const MAX_EVENTS = 7
 // One line of blank braille cells (U+2800) is wide, invisible and one line
 // tall; an image would have cost a whole blank band. It sets the width for
 // every card in the message.
-const WIDTH = '-# ' + '\u2800'.repeat(56)
+export const WIDTH = '-# ' + '\u2800'.repeat(56)
 
 const person = (p: BotPerson) => (p.discord_id ? `<@${p.discord_id}>` : p.name)
 

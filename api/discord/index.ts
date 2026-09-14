@@ -21,6 +21,9 @@ import { db } from '../_lib/supabase'
 import type { DiscordChannel, DiscordLink } from '../_lib/supabase'
 import { addDays, localNow, mondayOf } from '../_lib/time'
 import { buildWeekMessage, fetchBotWeek } from '../_lib/week'
+import { buildNewSessionsCard, buildUpdateCard, peopleFor } from '../_lib/updates'
+import type { OutboxRow } from '../_lib/updates'
+import { silent } from '../_lib/updateCard'
 import type { BotWeek } from '../_lib/week'
 
 interface Interaction {
@@ -94,7 +97,7 @@ export default async function handler(req: Request, ctx?: EdgeContext): Promise<
     return json({ type: 5, data: { flags: teamId ? 0 : EPHEMERAL } })
   }
   if (it.type === 3 && it.data?.custom_id) {
-    await later(button(it))
+    await later(it.data.custom_id.startsWith('u') ? updateButton(it) : button(it))
     // 6 = DEFERRED_UPDATE_MESSAGE: the message stays as it is until we edit it.
     return json({ type: 6 })
   }
@@ -207,4 +210,42 @@ async function button(it: Interaction): Promise<void> {
 
   // No confirmation note: the names on the card are the confirmation. Only a
   // "no" (not on the team, week over, session gone) gets a private message.
+}
+
+/**
+ * Still in / Can't on a change card. Same write as the week-plan buttons, then
+ * the card is redrawn from its own queue row (found by message id), so the
+ * "moved from" line stays and only the names change.
+ */
+async function updateButton(it: Interaction): Promise<void> {
+  const me = userId(it)
+  // The queue row id rides in the button, so the card can be redrawn wherever
+  // it lives: the channel, or a DM (which has no message lookup on our side).
+  const m = it.data?.custom_id?.match(/^(uj|uc):([0-9a-f-]{36}):(\d{1,12})$/)
+  if (!me || !m) return followUp(it, 'That button is not wired up.')
+  const [, action, eventId, rowId] = m
+
+  const r = await db.rpc<{ error?: string; week?: unknown }>('bot_respond', {
+    discord_id: me,
+    event_id: eventId,
+    status: action === 'uj' ? 'coming' : 'not_coming',
+  })
+  if (r.error === 'gone') return followUp(it, 'That session was removed.')
+  if (r.error === 'not_member') return followUp(it, `You are not on this team in Gather. Ask for an invite link, or sign in at ${env.appUrl()}`)
+  if (r.error === 'past') return followUp(it, 'That week is over.')
+
+  const row = await db.one<OutboxRow>('discord_outbox', { id: `eq.${rowId}` })
+  if (!row || row.event_id !== eventId) return
+  const team = await db.one<{ timezone: string }>('teams', { id: `eq.${row.team_id}`, select: 'timezone' })
+  const tz = team?.timezone ?? 'UTC'
+
+  if (row.kind === 'new') {
+    // The card may hold several new sessions (one ping for a burst). Redraw it
+    // from every row that went out in the same message, names included.
+    const siblings = row.message_id ? await db.select<OutboxRow>('discord_outbox', { message_id: `eq.${row.message_id}`, order: 'id.asc' }) : [row]
+    const people = await Promise.all(siblings.map((s) => peopleFor(s.event_id)))
+    await editOriginal(it, buildNewSessionsCard(siblings, tz, silent, people))
+    return
+  }
+  await editOriginal(it, buildUpdateCard(row, tz, await peopleFor(eventId)))
 }

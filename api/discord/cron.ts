@@ -12,7 +12,11 @@
 //   2. Keep the living post current. Rebuild it from the database and PATCH
 //      only when something actually changed (a content hash says so). Silent:
 //      an edit never pings anyone, which is exactly why changes get their own
-//      channel in the next round.
+//      channel (job 3).
+//
+//   3. Change messages. The database queues added, moved and cancelled
+//      sessions (discord_outbox); anything that has waited its two minutes is
+//      posted in the updates channel, pinging the people it concerns.
 
 export const config = { runtime: 'edge' }
 
@@ -21,6 +25,7 @@ import { db } from '../_lib/supabase'
 import type { DiscordSchedule, WeekPost } from '../_lib/supabase'
 import { addDays, localNow, mondayOf, timeToMinutes } from '../_lib/time'
 import { ensureWeekPost } from '../_lib/week'
+import { drainOutbox } from '../_lib/updates'
 import { sameSecret } from '../_lib/crypto'
 
 interface TeamRow {
@@ -65,5 +70,7 @@ export default async function handler(req: Request): Promise<Response> {
       out[s.team_id] = `error: ${err instanceof Error ? err.message : String(err)}`
     }
   }
-  return json({ teams: schedules.length, out })
+  // 3. Change messages that have waited their two minutes.
+  const updates = await drainOutbox()
+  return json({ teams: schedules.length, out, updates })
 }
