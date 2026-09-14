@@ -271,8 +271,10 @@ async function disconnect(teamId: string, link: DiscordLink) {
     try {
       await discord('DELETE', `/users/@me/guilds/${link.guild_id}`)
       left = true
-    } catch {
-      /* already kicked, or no such server any more */
+      await log(teamId, 'link', `Left ${link.guild_name ?? 'the server'}`, true)
+    } catch (err) {
+      // Already kicked, no such server, or something we want to see in the log.
+      await log(teamId, 'link', `Could not leave ${link.guild_name ?? 'the server'}`, false, explain(err))
     }
   }
   return { ok: true, left, remaining: others.length }

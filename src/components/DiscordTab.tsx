@@ -790,31 +790,38 @@ function TryCard({ team, run }: { team: MyTeam; run: Run }) {
     },
   ];
 
+  // A plain list: one row per action, no boxes inside the card. The hint sits
+  // under the name and gives way to the result once the action has run.
   return (
-    <Card className="flex flex-col gap-4">
-      <div className="flex flex-col gap-0.5">
+    <Card className="flex flex-col gap-3">
+      <div className="flex items-baseline justify-between gap-3">
         <h3 className="text-[15px] font-extrabold">Try it out</h3>
-        <p className="text-[13px] text-muted">Everything here goes to you alone or is marked as a test. Nothing wakes the team.</p>
+        <span className="text-[12px] text-muted">Only you, or marked as a test</span>
       </div>
-      {rows.map((g) => (
-        <div key={g.group} className="flex flex-col gap-2">
-          <Label>{g.group}</Label>
-          <div className="grid gap-2 sm:grid-cols-2">
+      <div className="flex flex-col">
+        {rows.map((g, gi) => (
+          <div key={g.group} className={`flex flex-col ${gi ? "mt-2 border-t border-line-soft pt-2" : ""}`}>
+            <div className="py-1">
+              <Label>{g.group}</Label>
+            </div>
             {g.items.map((it) => {
               const r = result[it.key];
+              const running = busy === it.key;
               return (
-                <div key={it.key} className="flex flex-col gap-2 rounded-[14px] border-[1.5px] border-line bg-surface p-3">
-                  <Button variant="secondary" size="sm" className="h-10 justify-start" disabled={busy !== null} onClick={() => go(it.key, it.fn)}>
-                    {busy === it.key ? "Working…" : it.label}
-                  </Button>
-                  <span className="px-1 text-[12px] leading-snug text-muted">{it.hint}</span>
-                  {r && <span className={`px-1 text-[12px] font-bold ${r.ok ? "text-green-ink" : "text-red-ink"}`}>{r.text}</span>}
+                <div key={it.key} className="flex items-center justify-between gap-4 py-1.5">
+                  <div className="flex min-w-0 flex-col">
+                    <span className="text-[14px] font-bold">{it.label}</span>
+                    <span className={`truncate text-[12px] ${r ? (r.ok ? "font-bold text-green-ink" : "font-bold text-red-ink") : "text-muted"}`}>{running ? "Working…" : (r?.text ?? it.hint)}</span>
+                  </div>
+                  <Pill disabled={busy !== null} onClick={() => go(it.key, it.fn)} className="shrink-0">
+                    Run
+                  </Pill>
                 </div>
               );
             })}
           </div>
-        </div>
-      ))}
+        ))}
+      </div>
     </Card>
   );
 }
