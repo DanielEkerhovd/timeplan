@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import type { ReactNode } from 'react'
 import { Navigate } from 'react-router-dom'
 import { useAuth } from '../lib/auth'
 import { AvatarStack, Button, DotRow, ErrorText } from '../components/ui'
@@ -6,9 +7,10 @@ import { AvatarStack, Button, DotRow, ErrorText } from '../components/ui'
 /**
  * Framsida på gatherapp.gg.
  *
- * Den som lander her vet ikke hva dette er. Så: hva appen gjør, en tegnet uke
- * som viser det på ett blikk, og knappen. Uka er tegnet og ikke et skjermbilde
- * — da følger den lys og mørk modus, og den blir aldri utdatert.
+ * Den som lander her vet ikke hva dette er. Så: hva appen gjør, en kortstokk
+ * med tre tegnede kort som viser det på ett blikk (uka, botens ukeplan i
+ * Discord, en endringsmelding), og knappen. Kortene er tegnet og ikke
+ * skjermbilder — da følger de lys og mørk modus, og de blir aldri utdaterte.
  */
 export default function Login() {
   const { user, loading, signInWithDiscord } = useAuth()
@@ -44,7 +46,10 @@ export default function Login() {
           <div className="flex flex-col gap-5">
             <h1 className="text-[34px] font-extrabold leading-[1.1] tracking-tight sm:text-[50px]">When can you play this week?</h1>
             <p className="max-w-[46ch] text-[15px] leading-relaxed text-muted">
-              Sick of juggling messages and polls on Discord? Gatherapp.gg keeps track of your group’s availability. Plan activities, like scrims, matches, hangouts or whatever, and share a link to the week on Discord. No signups, no ads, no tracking.
+              Sick of juggling messages and polls on Discord? Gatherapp.gg keeps track of your group’s availability. Plan activities, like scrims, matches, hangouts or whatever. No signups, no ads, no tracking.
+            </p>
+            <p className="max-w-[46ch] text-[15px] leading-relaxed text-muted">
+              Then let the bot do the talking: it posts the week in your server, keeps it up to date, and tells the people it concerns when something is added, moved or cancelled.
             </p>
             <p className="max-w-[46ch] text-[15px] leading-relaxed text-muted">
               Made for Discord, by people who use Discord. A lot.
@@ -60,19 +65,140 @@ export default function Login() {
           </div>
         </div>
 
-        <div className="flex w-full max-w-[520px] flex-col gap-5">
-          <WeekPeek />
-          {/* Stegene står under bildet: de forklarer det du nettopp så. */}
-          <div className="flex flex-col gap-3 px-1">
-            <Step n="1" title="Mark your week" body="Tap the blocks you can make. Every tap saves right away." />
-            <Step n="2" title="See the overlap" body="The grid counts who can make each block, and points at the ones everybody can." />
-            <Step n="3" title="Book it, share it" body="Put a scrim or a match on a block. One link shows the week on Discord as a picture." />
-          </div>
-        </div>
+        <Deck />
       </div>
 
       <footer className="px-6 pb-8 text-center text-[12px] text-faint">Gatherapp.gg · made in Hardanger, Norway</footer>
     </main>
+  )
+}
+
+/** The three cards in the deck, with the steps that explain each. */
+const CARDS: { key: string; label: string; card: ReactNode; steps: [string, string][] }[] = [
+  {
+    key: 'week',
+    label: 'The week',
+    card: <WeekPeek />,
+    steps: [
+      ['Mark your week', 'Tap the blocks you can make. Every tap saves right away.'],
+      ['See the overlap', 'The grid counts who can make each block, and points at the ones everybody can.'],
+      ['Book it', 'Put a scrim or a match on a block. The people who can make it are one tap away.'],
+    ],
+  },
+  {
+    key: 'bot',
+    label: 'The bot',
+    card: <BotPeek />,
+    steps: [
+      ['Add the bot', 'Pick a channel in Settings. Several teams on one server each get their own channels.'],
+      ['It posts the week', 'One pinned message, kept up to date as the plan changes. No new post per session.'],
+      ['Join from Discord', 'Update your availability easily.'],
+    ],
+  },
+  {
+    key: 'updates',
+    label: 'The update',
+    card: <UpdatePeek />,
+    steps: [
+      ['It tells the right people', 'A new session pings the team. A move or a cancellation pings those who had said yes.'],
+      ['Channel or DM', 'Each team picks how: a card in the updates channel, a DM to each player, or both.'],
+      ['Nothing to remember', 'The captain changes the plan on the website. The bot does the rest.'],
+    ],
+  },
+]
+
+const ROTATE_MS = 6000
+
+/**
+ * The cards, stacked like a deck: the active one on top, the others tucked
+ * behind. Turns over on its own every few seconds, waits while the pointer is
+ * on it, and any card can be picked by hand. Sits still for people who asked
+ * for reduced motion.
+ */
+function Deck() {
+  const [i, setI] = useState(0)
+  const [hold, setHold] = useState(false)
+  const [still, setStill] = useState(false)
+
+  useEffect(() => {
+    const mq = window.matchMedia('(prefers-reduced-motion: reduce)')
+    setStill(mq.matches)
+    const on = () => setStill(mq.matches)
+    mq.addEventListener('change', on)
+    return () => mq.removeEventListener('change', on)
+  }, [])
+
+  useEffect(() => {
+    if (hold || still) return
+    const t = setInterval(() => setI((n) => (n + 1) % CARDS.length), ROTATE_MS)
+    return () => clearInterval(t)
+  }, [hold, still, i])
+
+  return (
+    <div className="flex w-full max-w-[520px] flex-col gap-5" onPointerEnter={() => setHold(true)} onPointerLeave={() => setHold(false)}>
+      {/* All three share one grid cell and stretch to the tallest, so the deck
+          never changes height. The ones behind peek out up and to the left,
+          and only their transform and opacity move: the top card slides into
+          place, the old one slips back. */}
+      <div className="grid pl-6 pt-6">
+        {CARDS.map((c, n) => {
+          const behind = (n - i + CARDS.length) % CARDS.length
+          return (
+            <div
+              key={c.key}
+              aria-hidden={behind !== 0}
+              className={`relative [grid-area:1/1] overflow-hidden rounded-[22px] transition-transform duration-500 ease-out motion-reduce:transition-none ${
+                behind === 0 ? 'z-20' : behind === 1 ? 'z-10' : 'z-0'
+              }`}
+              style={{
+                transform: behind === 0 ? 'none' : `translate(-${behind * 12}px, -${behind * 12}px)`,
+                pointerEvents: behind === 0 ? 'auto' : 'none',
+              }}
+            >
+              {c.card}
+              {/* Cards stay opaque; the ones behind are dimmed by a veil, so a
+                  card coming to the front never shows the old one through it. */}
+              <div
+                className="pointer-events-none absolute inset-0 bg-bg transition-opacity duration-500 ease-out motion-reduce:transition-none"
+                style={{ opacity: behind === 0 ? 0 : behind === 1 ? 0.45 : 0.7 }}
+              />
+            </div>
+          )
+        })}
+      </div>
+
+      <div className="flex flex-wrap gap-1.5 px-1" role="tablist" aria-label="What Gather does">
+        {CARDS.map((c, n) => (
+          <button
+            key={c.key}
+            type="button"
+            role="tab"
+            aria-selected={n === i}
+            onClick={() => setI(n)}
+            className={`h-8 rounded-full px-3.5 text-[12px] font-extrabold transition ${n === i ? 'bg-ink text-on-ink' : 'bg-surface text-muted shadow-card hover:text-ink'}`}
+          >
+            {c.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Stegene står under kortet: de forklarer det du nettopp så. Alle tre
+          settene ligger i samme rute, så blokken er like høy uansett kort og
+          ingenting under den hopper; bare det aktive settet er synlig. */}
+      <div className="grid px-1">
+        {CARDS.map((c, n) => (
+          <div
+            key={c.key}
+            aria-hidden={n !== i}
+            className={`flex flex-col gap-3 [grid-area:1/1] transition-opacity duration-300 ease-out motion-reduce:transition-none ${n === i ? 'opacity-100' : 'pointer-events-none opacity-0'}`}
+          >
+            {c.steps.map(([title, body], k) => (
+              <Step key={title} n={String(k + 1)} title={title} body={body} />
+            ))}
+          </div>
+        ))}
+      </div>
+    </div>
   )
 }
 
@@ -107,7 +233,7 @@ const peekPeople = ['Daniel', 'Sander', 'Mathias', 'Jonas', 'Emil'].map((n, i) =
 /** Uka slik den ser ut inni appen, i miniatyr. Tallene er oppdiktet. */
 function WeekPeek() {
   return (
-    <div className="flex w-full max-w-[520px] flex-col gap-3 rounded-[22px] bg-surface p-5 shadow-card">
+    <div className="flex h-full w-full max-w-[520px] flex-col gap-3 rounded-[22px] bg-surface p-5 shadow-card">
       <div className="flex items-baseline justify-between gap-3">
         <span className="text-[14px] font-extrabold">Week 37</span>
         <span className="text-xs text-muted">5 of 5 answered</span>
@@ -171,7 +297,181 @@ function WeekPeek() {
         </div>
         <AvatarStack people={peekPeople} size={26} ring="var(--act-coral-soft)" />
       </div>
+      <div
+        className="flex items-center gap-3 rounded-[12px] px-3.5 py-3"
+        style={{ background: 'var(--act-yellow-soft)' }}
+      >
+        <div className="flex w-9 shrink-0 flex-col items-center leading-none">
+          <span className="text-[9px] font-bold uppercase tracking-[0.1em]" style={{ color: 'var(--act-yellow-sub)' }}>
+            Tue
+          </span>
+          <span className="text-[17px] font-extrabold" style={{ color: 'var(--act-yellow-ink)' }}>
+            9
+          </span>
+        </div>
+        <div className="flex min-w-0 flex-1 flex-col leading-tight">
+          <span className="truncate text-[13px] font-extrabold" style={{ color: 'var(--act-yellow-ink)' }}>
+            Scrim <span className="font-bold" style={{ color: 'var(--act-yellow-sub)' }}>vs Foxes</span>
+          </span>
+          <span className="text-[11px] font-semibold" style={{ color: 'var(--act-yellow-sub)' }}>
+            20:00 – 23:00 · three joined
+          </span>
+        </div>
+        <AvatarStack people={peekPeople.slice(0, 3)} size={26} ring="var(--act-yellow-soft)" />
+      </div>
     </div>
+  )
+}
+
+// --- The bot's cards, drawn the way Discord shows them --------------------------
+//
+// Discord is dark whatever the page theme, so the chat panel keeps Discord's own
+// greys: that is what makes it read as "this is in Discord" at a glance.
+
+const DC = {
+  panel: '#313338',
+  card: '#2b2d31',
+  line: '#3f4147',
+  text: '#dbdee1',
+  muted: '#949ba4',
+  faint: '#6d6f78',
+  chip: '#3b3f6b',
+  chipText: '#c9cdfb',
+  green: '#3e9a63',
+  grey: '#4e5058',
+  yellow: '#f0cf7e',
+  coral: '#f0a58e',
+} as const
+
+/** The chat panel: the bot's avatar and name, then whatever the message is. */
+function DiscordFrame({ children }: { children: ReactNode }) {
+  return (
+    <div className="flex h-full w-full max-w-[520px] flex-col gap-2.5 rounded-[22px] p-5 shadow-card" style={{ background: DC.panel, color: DC.text }}>
+      <div className="flex items-center gap-3">
+        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-white" style={{ background: DC.green }}>
+          <svg width="18" height="18" viewBox="0 0 64 64" fill="none" stroke="currentColor" strokeWidth="7" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M44 22a15 15 0 1 0 3 10h-11" />
+          </svg>
+        </span>
+        <div className="flex items-center gap-2 leading-none">
+          <span className="text-[14px] font-bold text-white">Gather</span>
+          <span className="rounded-[4px] px-1.5 py-[3px] text-[9px] font-extrabold uppercase tracking-wide text-white" style={{ background: '#5865f2' }}>
+            App
+          </span>
+          <span className="text-[11px]" style={{ color: DC.muted }}>
+            Today at 20:00
+          </span>
+        </div>
+      </div>
+      <div className="pl-12">{children}</div>
+    </div>
+  )
+}
+
+/** A Discord card with the coloured bar down the left, like the bot's real ones. */
+function DiscordCard({ accent, children }: { accent: string; children: ReactNode }) {
+  return (
+    <div className="flex flex-col gap-2 rounded-[8px] border-l-4 px-3.5 py-3" style={{ background: DC.card, borderColor: accent }}>
+      {children}
+    </div>
+  )
+}
+
+function DiscordButtons({ yes, dim }: { yes: string; dim?: boolean }) {
+  return (
+    <div className="flex gap-2 pt-1">
+      <span className="rounded-[4px] px-3.5 py-1.5 text-[12px] font-bold text-white" style={{ background: dim ? DC.grey : DC.green }}>
+        {yes}
+      </span>
+      <span className="rounded-[4px] px-3.5 py-1.5 text-[12px] font-bold text-white" style={{ background: DC.grey }}>
+        Can’t
+      </span>
+    </div>
+  )
+}
+
+const T = ({ t }: { t: string }) => (
+  <span className="rounded-[3px] px-1 py-px" style={{ background: DC.line }}>
+    {t}
+  </span>
+)
+
+/** The week plan as the bot posts it: one message, a card per session, Join on each. */
+function BotPeek() {
+  return (
+    <DiscordFrame>
+      <div className="flex flex-col gap-2">
+        <DiscordCard accent={DC.green}>
+          <div className="flex flex-col gap-0.5">
+            <span className="text-[15px] font-extrabold text-white">Quack Attack · Week 38</span>
+            <span className="text-[12px]" style={{ color: DC.muted }}>
+              14 – 20 September · 2 sessions
+            </span>
+          </div>
+        </DiscordCard>
+        <DiscordCard accent={DC.yellow}>
+          <span className="text-[14px] font-extrabold text-white">Scrim vs Foxes</span>
+          <span className="text-[12px]">
+            <strong>Tuesday</strong> <T t="20:00" /> – <T t="23:00" />
+            <span style={{ color: DC.muted }}> · Daniel, Sander, Mathias</span>
+          </span>
+          <DiscordButtons yes="Joined" dim />
+        </DiscordCard>
+        <DiscordCard accent={DC.coral}>
+          <span className="text-[14px] font-extrabold text-white">Match vs Quack Attack</span>
+          <span className="text-[12px]">
+            <strong>Wednesday</strong> <T t="18:00" /> – <T t="21:00" />
+            <span style={{ color: DC.muted }}> · all five in</span>
+          </span>
+          <DiscordButtons yes="Join" />
+        </DiscordCard>
+        <span className="pl-1 text-[11px]" style={{ color: DC.faint }}>
+          📌 Pinned · kept up to date
+        </span>
+      </div>
+    </DiscordFrame>
+  )
+}
+
+/** A change: the session moved, and the people who had said yes get a ping. */
+function UpdatePeek() {
+  return (
+    <DiscordFrame>
+      <div className="flex flex-col gap-2">
+        <DiscordCard accent={DC.yellow}>
+          <span className="text-[15px] font-extrabold text-white">Moved · Scrim vs Foxes</span>
+          <span className="flex flex-wrap gap-1.5">
+            {['Daniel', 'Sander', 'Mathias'].map((n) => (
+              <span key={n} className="rounded-[3px] px-1 text-[12px] font-semibold" style={{ background: DC.chip, color: DC.chipText }}>
+                @{n}
+              </span>
+            ))}
+          </span>
+          <span className="text-[12px]">
+            <span className="line-through" style={{ color: DC.muted }}>
+              Tuesday 20:00 – 23:00
+            </span>{' '}
+            → <strong>Wednesday</strong> <T t="20:00" /> – <T t="23:00" />
+          </span>
+          <DiscordButtons yes="Still in" />
+        </DiscordCard>
+        <DiscordCard accent={DC.green}>
+          <span className="text-[15px] font-extrabold text-white">New · VOD review</span>
+          <span>
+            <span className="rounded-[3px] px-1 text-[12px] font-semibold" style={{ background: DC.chip, color: DC.chipText }}>
+              @Quack Attack
+            </span>
+          </span>
+          <span className="text-[12px]">
+            <strong>Thursday</strong> <T t="19:00" /> – <T t="20:00" />
+          </span>
+          <DiscordButtons yes="Join" />
+        </DiscordCard>
+        <span className="pl-1 text-[11px]" style={{ color: DC.faint }}>
+          In the updates channel, as a DM to each player, or both. The team picks.
+        </span>
+      </div>
+    </DiscordFrame>
   )
 }
 
