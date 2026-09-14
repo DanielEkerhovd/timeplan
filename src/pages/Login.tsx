@@ -82,7 +82,7 @@ const CARDS: { key: string; label: string; card: ReactNode; steps: [string, stri
     steps: [
       ['Mark your week', 'Pick your availability for the week.'],
       ['See the overlap', 'The app shows when everyone can make it.'],
-      ['Book it', 'The captain picks a time and the bot posts it in Discord.'],
+      ['Book it', 'Set up the weekplan and share it on Discord. With link or bot.'],
     ],
   },
   {
@@ -91,7 +91,7 @@ const CARDS: { key: string; label: string; card: ReactNode; steps: [string, stri
     card: <BotPeek />,
     steps: [
       ['Add the bot', 'Connect Gather to your Discord server.'],
-      ['Display the weekplan automatically', 'The bot posts the week in a channel of your choice.'],
+      ['Display the weekplan automatically', 'The bot posts and updates the weekplan in a channel of your choice.'],
       ['Join from Discord', 'Answer events from Discord.'],
     ],
   },
