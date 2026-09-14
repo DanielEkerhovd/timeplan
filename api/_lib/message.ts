@@ -50,8 +50,15 @@ const GATHER_GREEN = 0x3e9a63
 export const COMPONENTS_V2 = 1 << 15
 
 // Discord allows 40 components in a V2 message. Each session card is five
-// (container, text, row, two buttons); header, spacer, footer and the ping line are five.
-const MAX_EVENTS = 6
+// (container, text, row, two buttons); header, footer and the ping line are four.
+const MAX_EVENTS = 7
+
+// Discord has no width setting: a card is as wide as its widest line, so
+// "4 minutes ago" turning into "an hour ago" made the whole message breathe.
+// One line of blank braille cells (U+2800) is wide, invisible and one line
+// tall; an image would have cost a whole blank band. It sets the width for
+// every card in the message.
+const WIDTH = '-# ' + '\u2800'.repeat(56)
 
 const person = (p: BotPerson) => (p.discord_id ? `<@${p.discord_id}>` : p.name)
 
@@ -77,11 +84,7 @@ export function buildWeekMessage(week: BotWeek, opts: { ping: string | null; lin
     type: 17,
     accent_color: GATHER_GREEN,
     components: [
-      // Discord has no width setting: a card is as wide as its widest line, so
-      // "4 minutes ago" turning into "an hour ago" made the whole message
-      // breathe. An invisible 600×2 image sets the width once, for every card.
-      { type: 12, items: [{ media: { url: `${opts.appUrl}/discord-spacer.png` }, description: 'spacer' }] },
-      { type: 10, content: `## ${week.team.name} · Week ${nr}\n-# ${weekRangeLabel(week.week_start)}  ·  ${summary}` },
+      { type: 10, content: `## ${week.team.name} · Week ${nr}\n-# ${weekRangeLabel(week.week_start)}  ·  ${summary}\n${WIDTH}` },
     ],
   })
 

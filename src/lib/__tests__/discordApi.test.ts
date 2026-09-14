@@ -85,9 +85,8 @@ describe("week message", () => {
     expect(msg.flags).toBe(1 << 15);
     expect(msg.allowed_mentions).toEqual({ parse: [] });
     const [header, card, footer] = msg.components;
-    expect(header.components?.[0].type).toBe(12); // the width spacer
-    expect(header.components?.[1].content).toContain("## Dogs · Week 38");
-    expect(header.components?.[1].content).toContain("1 session");
+    expect(header.components?.[0].content).toContain("## Dogs · Week 38");
+    expect(header.components?.[0].content).toContain("1 session");
     expect(card.accent_color).toBe(0xf0cf7e); // yellow, like the app
     const text = card.components?.[0].content ?? "";
     expect(text).toContain("### Scrim vs Foxes");
@@ -103,7 +102,7 @@ describe("week message", () => {
     const count = (nodes: unknown[]): number => nodes.reduce<number>((n, c) => n + 1 + count(((c as { components?: unknown[] }).components ?? [])), 0);
     expect(count(msg.components)).toBeLessThanOrEqual(40);
     const text = JSON.stringify(msg);
-    expect(text).toContain("+6 more in the app");
+    expect(text).toContain("+5 more in the app");
   });
   it("only the fresh weekly post pings, and only who the team chose", () => {
     const link = { team_id: "t", guild_id: "9", guild_name: null, ping_mode: "members" as const, ping_role_id: null, managed_role: false };
