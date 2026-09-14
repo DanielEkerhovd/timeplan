@@ -201,7 +201,7 @@ function Setup({ team, state, run, error, onDone }: { team: MyTeam; state: Disco
 
   useEffect(() => {
     setChoice(step === 2 ? schedule : step === 3 ? (updates ?? "same") : null);
-    setNewName(step === 2 ? `${slug}-weekplan` : step === 3 ? `${slug}-updates` : "");
+    setNewName(step === 2 ? `${slug}-schedule` : step === 3 ? `${slug}-updates` : "");
   }, [step, schedule, updates, slug]);
 
   /** "new" means make the channel first, then use it. The new channel joins the list so it shows up on the next step. */
@@ -463,16 +463,18 @@ function PingPicker({ team, link, run }: { team: MyTeam; link: DiscordState["lin
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap gap-2">
+        {/* The pills follow what was clicked, not what is saved: "A role" is only
+            saved once a role is chosen, and the pill should not wait for that. */}
         <Pill
-          active={mode === "members"}
+          active={!open}
           onClick={() => {
             setOpen(false);
-            void run(() => setPing(team.id, "members", null));
+            if (mode !== "members") void run(() => setPing(team.id, "members", null));
           }}
         >
           Everyone on the team
         </Pill>
-        <Pill active={mode === "role"} onClick={() => setOpen(true)}>
+        <Pill active={open} onClick={() => setOpen(true)}>
           A role
         </Pill>
       </div>
