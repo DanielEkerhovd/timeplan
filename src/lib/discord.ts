@@ -192,6 +192,14 @@ export function sendTestDm(teamId: string) {
   });
 }
 
+/** One of the try-it-out actions on the Discord tab. All owner-only, all answered with a plain message. */
+export function tryAction(teamId: string, action: "preview" | "sample_change" | "flush" | "ping_me") {
+  return api<{ ok?: boolean; where?: string[]; week?: string; sent?: number; errors?: number }>("/api/discord/post", {
+    method: "POST",
+    body: JSON.stringify({ team: teamId, action }),
+  });
+}
+
 export function postWeekNow(teamId: string, which: "this" | "next") {
   return api<{ action: "posted" | "edited" | "unchanged" | "skipped"; detail?: string }>("/api/discord/post", {
     method: "POST",

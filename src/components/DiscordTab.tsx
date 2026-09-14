@@ -22,6 +22,7 @@ import {
   shortTime,
   startConnect,
   syncManagedRole,
+  tryAction,
   updateSchedule,
 } from "../lib/discord";
 import { DiscordApiError } from "../lib/discord";
@@ -155,7 +156,7 @@ function NotConnected({ team, isOwner, onConnect, error }: { team: MyTeam; isOwn
         </div>
         <div className="grid gap-3.5 sm:grid-cols-3">
           <Feature label="Week plan">One message with the whole week, pinned, edited in place when something changes. Reposted with a ping every new week.</Feature>
-          <Feature label="Updates">New, moved or cancelled sessions, with Join and Can&rsquo;t right on the message. Comes in the next round.</Feature>
+          <Feature label="Updates">New, moved or cancelled sessions in the posted week, with Join and Can&rsquo;t right on the message.</Feature>
           <Feature label="Reminders">A nudge to fill in next week, and a heads-up on the day of a session. Comes in the next round.</Feature>
         </div>
         <p className="px-1 text-[13px] text-muted">Availability never leaves the app. The bot only ever posts what is booked.</p>
@@ -610,7 +611,8 @@ function Connected({ team, state, isOwner, run, error, onRerun }: { team: MyTeam
       <ErrorText>{error}</ErrorText>
       <div className="grid gap-4 xl:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)] xl:items-start">
         <div className="flex min-w-0 flex-col gap-4">
-          <StatusCard team={team} state={state} isOwner={isOwner} run={run} />
+          <StatusCard team={team} state={state} isOwner={isOwner} />
+          {isOwner && <TryCard team={team} run={run} />}
           {isOwner && <ChannelsCard team={team} state={state} run={run} onRerun={onRerun} />}
           {isOwner && <PingCard team={team} state={state} run={run} />}
         </div>
@@ -624,11 +626,10 @@ function Connected({ team, state, isOwner, run, error, onRerun }: { team: MyTeam
   );
 }
 
-function StatusCard({ team, state, isOwner, run }: { team: MyTeam; state: DiscordState; isOwner: boolean; run: Run }) {
+function StatusCard({ team, state, isOwner }: { team: MyTeam; state: DiscordState; isOwner: boolean }) {
   const [checks, setChecks] = useState<StatusCheck[] | null>(null);
   const [failed, setFailed] = useState<string | null>(null);
   const [tick, setTick] = useState(0);
-  const [posting, setPosting] = useState(false);
 
   useEffect(() => {
     if (!isOwner) return;
@@ -674,56 +675,147 @@ function StatusCard({ team, state, isOwner, run }: { team: MyTeam; state: Discor
       ) : (
         <p className="text-[13px] text-muted">The owner sees the health checks here.</p>
       )}
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-col">
-          <span className="text-[14px] font-semibold">Last week plan</span>
-          <span className="text-[13px] text-muted">{last ? `${last.summary}, ${when(last.at)}` : "Not posted yet"}</span>
-        </div>
-        {isOwner && (
-          <div className="flex flex-wrap gap-2">
-            <Button
-              variant="secondary"
-              size="sm"
-              className="h-10"
-              disabled={posting}
-              onClick={() => {
-                setPosting(true);
-                void run(async () => {
-                  const r = await postWeekNow(team.id, "this");
-                  if (r.action === "skipped") throw new Error(r.detail ?? "Nothing to post");
-                }, "Week plan is up").finally(() => setPosting(false));
-              }}
-            >
-              Post this week now
-            </Button>
-            <TestButton team={team} run={run} />
-            <TestDmButton team={team} run={run} />
-          </div>
-        )}
+      <div className="flex flex-col">
+        <span className="text-[14px] font-semibold">Last week plan</span>
+        <span className="text-[13px] text-muted">{last ? `${last.summary}, ${when(last.at)}` : "Not posted yet"}</span>
       </div>
     </Card>
   );
 }
 
-/** A DM to whoever is signed in. The failure it surfaces (DMs blocked) is the one reminders will hit for some players. */
-function TestDmButton({ team, run }: { team: MyTeam; run: Run }) {
-  const [busy, setBusy] = useState(false);
+/**
+ * Try it out: every button here either goes to the owner alone, or is marked
+ * as a test on Discord. Nothing wakes the team. Grouped by what it exercises,
+ * with the outcome under the button, so the whole path can be checked from
+ * this one card without waiting for the clock.
+ */
+function TryCard({ team, run }: { team: MyTeam; run: Run }) {
+  const [busy, setBusy] = useState<string | null>(null);
+  const [result, setResult] = useState<Record<string, { ok: boolean; text: string }>>({});
+
+  function go(key: string, fn: () => Promise<string>) {
+    setBusy(key);
+    void run(async () => {
+      const text = await fn();
+      setResult((r) => ({ ...r, [key]: { ok: true, text } }));
+    })
+      .then((ok) => {
+        if (!ok) setResult((r) => ({ ...r, [key]: { ok: false, text: "Failed. See the message above." } }));
+      })
+      .finally(() => setBusy(null));
+  }
+
+  const rows: { group: string; items: { key: string; label: string; hint: string; fn: () => Promise<string> }[] }[] = [
+    {
+      group: "Week plan",
+      items: [
+        {
+          key: "post",
+          label: "Post or refresh now",
+          hint: "In the week-plan channel, for everyone.",
+          fn: async () => {
+            const r = await postWeekNow(team.id, "this");
+            if (r.action === "skipped") throw new DiscordApiError(r.detail ?? "Nothing to post");
+            return r.action === "posted" ? "Posted and pinned." : r.action === "edited" ? "Refreshed." : "Already up to date.";
+          },
+        },
+        {
+          key: "preview",
+          label: "Send me a preview",
+          hint: "The week plan as a DM to you only.",
+          fn: async () => {
+            await tryAction(team.id, "preview");
+            return "Sent to your DMs.";
+          },
+        },
+      ],
+    },
+    {
+      group: "Changes",
+      items: [
+        {
+          key: "sample",
+          label: "Send a sample change",
+          hint: "A made-up “Moved” card, delivered the way changes are set to go.",
+          fn: async () => {
+            const r = await tryAction(team.id, "sample_change");
+            return `Sent (${(r.where ?? []).join(" + ")}).`;
+          },
+        },
+        {
+          key: "flush",
+          label: "Send what’s waiting now",
+          hint: "Runs the clock for this team instead of waiting up to five minutes.",
+          fn: async () => {
+            const r = await tryAction(team.id, "flush");
+            const bits = [`week plan: ${r.week}`, `${r.sent ?? 0} change${r.sent === 1 ? "" : "s"} sent`];
+            if (r.errors) bits.push(`${r.errors} failed`);
+            return bits.join(", ") + ".";
+          },
+        },
+      ],
+    },
+    {
+      group: "Pings and DMs",
+      items: [
+        {
+          key: "ping",
+          label: "Ping me",
+          hint: "A card in the updates channel that mentions only you.",
+          fn: async () => {
+            await tryAction(team.id, "ping_me");
+            return "Sent. You should have a notification.";
+          },
+        },
+        {
+          key: "dm",
+          label: "Send me a test DM",
+          hint: "Shows what players see, and whether Discord lets DMs through.",
+          fn: async () => {
+            await sendTestDm(team.id);
+            return "Sent to your DMs.";
+          },
+        },
+        {
+          key: "channels",
+          label: "Post a test card in each channel",
+          hint: "Confirms the bot can write where you pointed it.",
+          fn: async () => {
+            const r = await sendTestMessage(team.id);
+            if (r.failed.length) throw new DiscordApiError(r.failed.map((f) => f.reason).join(" "));
+            return `Sent to ${r.sent} channel${r.sent === 1 ? "" : "s"}.`;
+          },
+        },
+      ],
+    },
+  ];
+
   return (
-    <Button
-      variant="secondary"
-      size="sm"
-      className="h-10"
-      disabled={busy}
-      onClick={() => {
-        setBusy(true);
-        void run(async () => {
-          await sendTestDm(team.id);
-        }, "Check your Discord DMs").finally(() => setBusy(false));
-      }}
-    >
-      <ChatIcon />
-      {busy ? "Sending…" : "Send me a test DM"}
-    </Button>
+    <Card className="flex flex-col gap-4">
+      <div className="flex flex-col gap-0.5">
+        <h3 className="text-[15px] font-extrabold">Try it out</h3>
+        <p className="text-[13px] text-muted">Everything here goes to you alone or is marked as a test. Nothing wakes the team.</p>
+      </div>
+      {rows.map((g) => (
+        <div key={g.group} className="flex flex-col gap-2">
+          <Label>{g.group}</Label>
+          <div className="grid gap-2 sm:grid-cols-2">
+            {g.items.map((it) => {
+              const r = result[it.key];
+              return (
+                <div key={it.key} className="flex flex-col gap-2 rounded-[14px] border-[1.5px] border-line bg-surface p-3">
+                  <Button variant="secondary" size="sm" className="h-10 justify-start" disabled={busy !== null} onClick={() => go(it.key, it.fn)}>
+                    {busy === it.key ? "Working…" : it.label}
+                  </Button>
+                  <span className="px-1 text-[12px] leading-snug text-muted">{it.hint}</span>
+                  {r && <span className={`px-1 text-[12px] font-bold ${r.ok ? "text-green-ink" : "text-red-ink"}`}>{r.text}</span>}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      ))}
+    </Card>
   );
 }
 

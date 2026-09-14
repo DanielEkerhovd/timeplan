@@ -128,10 +128,11 @@ async function done(rows: OutboxRow[], messageId: string | null) {
  * attempt and pushes the row back; after five it is left alone and shows up
  * in the team's log.
  */
-export async function drainOutbox(limit = 20): Promise<Record<string, string>> {
+export async function drainOutbox(limit = 20, onlyTeam?: string): Promise<Record<string, string>> {
   const due = await db.select<OutboxRow>('discord_outbox', {
     sent_at: 'is.null',
-    send_after: `lte.${new Date().toISOString()}`,
+    // "Send what's waiting now" from Settings skips the two-minute wait; the clock respects it.
+    ...(onlyTeam ? { team_id: `eq.${onlyTeam}` } : { send_after: `lte.${new Date().toISOString()}` }),
     attempts: 'lt.5',
     order: 'send_after.asc',
     limit: String(limit),
