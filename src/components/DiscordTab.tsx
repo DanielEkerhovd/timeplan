@@ -201,7 +201,7 @@ function Setup({ team, state, run, error, onDone }: { team: MyTeam; state: Disco
 
   useEffect(() => {
     setChoice(step === 2 ? schedule : step === 3 ? (updates ?? "same") : null);
-    setNewName(step === 2 ? `${slug}-schedule` : step === 3 ? `${slug}-updates` : "");
+    setNewName(step === 2 ? `${slug}-weekplan` : step === 3 ? `${slug}-updates` : "");
   }, [step, schedule, updates, slug]);
 
   /** "new" means make the channel first, then use it. The new channel joins the list so it shows up on the next step. */
