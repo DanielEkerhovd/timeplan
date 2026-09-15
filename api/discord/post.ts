@@ -3,7 +3,7 @@
 
 export const config = { runtime: 'edge' }
 
-import { discord, explain } from '../_lib/discord'
+import { discord, explain, leaveGuild } from '../_lib/discord'
 import { env, guard, HttpError, json } from '../_lib/env'
 import { db, log, requireOwner, throttle } from '../_lib/supabase'
 import type { DiscordChannel, DiscordLink, DiscordSchedule, WeekPost } from '../_lib/supabase'
@@ -272,13 +272,12 @@ async function disconnect(teamId: string, link: DiscordLink) {
   // for someone. Channels are never touched: they belong to the server.
   const others = await db.select<{ team_id: string }>('discord_links', { select: 'team_id', guild_id: `eq.${link.guild_id}` })
   let left = false
+  let leaveError: string | null = null
   if (others.length === 0) {
-    try {
-      await discord('DELETE', `/users/@me/guilds/${link.guild_id}`)
-      left = true
-    } catch {
-      /* already kicked, or no such server any more */
-    }
+    leaveError = await leaveGuild(link.guild_id)
+    left = leaveError === null
+    // The team's rows are gone by now, so this cannot land in its log. Vercel's log has it, and the clock retries.
+    if (leaveError) console.error(`[discord/disconnect] could not leave ${link.guild_id}: ${leaveError}`)
   }
-  return { ok: true, left, remaining: others.length }
+  return { ok: true, left, remaining: others.length, leaveError }
 }

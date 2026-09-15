@@ -27,6 +27,7 @@ import { addDays, localNow, mondayOf, timeToMinutes } from '../_lib/time'
 import { ensureWeekPost } from '../_lib/week'
 import { drainOutbox } from '../_lib/updates'
 import { sameSecret } from '../_lib/crypto'
+import { leaveOrphanGuilds } from '../_lib/discord'
 
 interface TeamRow {
   id: string
@@ -40,8 +41,19 @@ export default async function handler(req: Request): Promise<Response> {
   const key = req.headers.get('x-cron-secret') ?? (auth.startsWith('Bearer ') ? auth.slice(7) : '')
   if (!key || !(await sameSecret(key, env.cronSecret()))) return text('forbidden', 403)
 
+  // 0. Leave servers no team is linked to any more (a deleted team, a failed
+  //    disconnect). Before the early return: with the last team gone, this is
+  //    the only job left to do.
+  let orphans: Record<string, string> = {}
+  try {
+    const links = await db.select<{ guild_id: string }>('discord_links', { select: 'guild_id' })
+    orphans = await leaveOrphanGuilds(links.map((l) => l.guild_id))
+  } catch (err) {
+    orphans = { error: err instanceof Error ? err.message : String(err) }
+  }
+
   const schedules = await db.select<DiscordSchedule>('discord_schedules', {})
-  if (schedules.length === 0) return json({ teams: 0 })
+  if (schedules.length === 0) return json({ teams: 0, orphans })
   const teams = await db.select<TeamRow>('teams', { select: 'id,timezone', id: `in.(${schedules.map((s) => s.team_id).join(',')})` })
   const posts = await db.select<WeekPost>('discord_week_post', {})
 
@@ -72,5 +84,5 @@ export default async function handler(req: Request): Promise<Response> {
   }
   // 3. Change messages that have waited their two minutes.
   const updates = await drainOutbox()
-  return json({ teams: schedules.length, out, updates })
+  return json({ teams: schedules.length, out, updates, orphans })
 }

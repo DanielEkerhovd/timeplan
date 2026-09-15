@@ -835,7 +835,7 @@ function TryCard({ team, run }: { team: MyTeam; run: Run }) {
         {
           key: "post",
           label: "Post or refresh now",
-          hint: "Post the week plan in the channel you picked, or refresh it if it's already there",
+          hint: "In the week-plan channel, for everyone.",
           fn: async () => {
             const r = await postWeekNow(team.id, "this");
             if (r.action === "skipped") throw new DiscordApiError(r.detail ?? "Nothing to post");
@@ -845,7 +845,7 @@ function TryCard({ team, run }: { team: MyTeam; run: Run }) {
         {
           key: "preview",
           label: "Send me a preview",
-          hint: "The weekplan as a DM to you only",
+          hint: "The week plan as a DM to you only.",
           fn: async () => {
             await tryAction(team.id, "preview");
             return "Sent to your DMs.";
@@ -858,8 +858,8 @@ function TryCard({ team, run }: { team: MyTeam; run: Run }) {
       items: [
         {
           key: "sample",
-          label: "Send a dummy change",
-          hint: "Sends a dummy change update to the selected notification channel",
+          label: "Send a sample change",
+          hint: "A made-up “Moved” card, delivered the way changes are set to go.",
           fn: async () => {
             const r = await tryAction(team.id, "sample_change");
             return `Sent (${(r.where ?? []).join(" + ")}).`;
@@ -867,8 +867,8 @@ function TryCard({ team, run }: { team: MyTeam; run: Run }) {
         },
         {
           key: "flush",
-          label: "Publish changes now",
-          hint: "Publish current changes to the weekplan, skipping the five-minute waiting period",
+          label: "Send what’s waiting now",
+          hint: "Runs the clock for this team instead of waiting up to five minutes.",
           fn: async () => {
             const r = await tryAction(team.id, "flush");
             const bits = [`week plan: ${r.week}`, `${r.sent ?? 0} change${r.sent === 1 ? "" : "s"} sent`];
@@ -884,7 +884,7 @@ function TryCard({ team, run }: { team: MyTeam; run: Run }) {
         {
           key: "ping",
           label: "Ping me",
-          hint: "Test pinging functionality. Ping's only you",
+          hint: "A card in the updates channel that mentions only you.",
           fn: async () => {
             await tryAction(team.id, "ping_me");
             return "Sent. You should have a notification.";
@@ -893,7 +893,7 @@ function TryCard({ team, run }: { team: MyTeam; run: Run }) {
         {
           key: "dm",
           label: "Send me a test DM",
-          hint: "Shows what players see, and whether Discord lets DMs through",
+          hint: "Shows what players see, and whether Discord lets DMs through.",
           fn: async () => {
             await sendTestDm(team.id);
             return "Sent to your DMs.";
@@ -902,7 +902,7 @@ function TryCard({ team, run }: { team: MyTeam; run: Run }) {
         {
           key: "channels",
           label: "Post a test card in each channel",
-          hint: "Confirms the bot can write in channels connected to Gather",
+          hint: "Confirms the bot can write where you pointed it.",
           fn: async () => {
             const r = await sendTestMessage(team.id);
             if (r.failed.length) throw new DiscordApiError(r.failed.map((f) => f.reason).join(" "));
@@ -918,8 +918,8 @@ function TryCard({ team, run }: { team: MyTeam; run: Run }) {
   return (
     <Card className="flex flex-col gap-3">
       <div className="flex items-baseline justify-between gap-3">
-        <h3 className="text-[15px] font-extrabold">Test notifications</h3>
-        <span className="text-[12px] text-muted">Unsure how the bot behaves? Test it out here</span>
+        <h3 className="text-[15px] font-extrabold">Try it out</h3>
+        <span className="text-[12px] text-muted">Only you, or marked as a test</span>
       </div>
       <div className="flex flex-col gap-2">
         {rows.map((g) => (
@@ -1076,24 +1076,24 @@ function SendsCard({ team, state, run }: { team: MyTeam; state: DiscordState; ru
     // Last card in the Settings column: it grows to the column's full height so the
     // two columns end together, and the rows share the extra room evenly.
     <Card className="flex flex-1 flex-col gap-2.5">
-      <h3 className="text-[15px] font-extrabold">Notification settings</h3>
-      <SendRow title="Week plan" sub="Automatically post weekplan once a week" on={s.post_enabled} onToggle={(v) => save({ post_enabled: v })}>
+      <h3 className="text-[15px] font-extrabold">What the bot sends</h3>
+      <SendRow title="Week plan" sub="Posted once a week, then kept up to date." on={s.post_enabled} onToggle={(v) => save({ post_enabled: v })}>
         <Dropdown look="pill" value={s.post_dow} options={DOW_OPTIONS} search={false} onChange={(v) => save({ post_dow: v })} />
         <Dropdown look="pill" value={shortTime(s.post_at)} options={TIME_OPTIONS} search={false} onChange={(v) => save({ post_at: v })} />
       </SendRow>
-      <SendRow title="Nudge for next week" sub="For anyone who hasn't filled in their times for next week yet" on={s.nudge_enabled} onToggle={(v) => save({ nudge_enabled: v })}>
+      <SendRow title="Nudge for next week" sub="For anyone who hasn't filled in their times yet. Next round." on={s.nudge_enabled} onToggle={(v) => save({ nudge_enabled: v })}>
         <Dropdown look="pill" value={s.nudge_dow} options={DOW_OPTIONS} search={false} onChange={(v) => save({ nudge_dow: v })} />
         <Dropdown look="pill" value={shortTime(s.nudge_at)} options={TIME_OPTIONS} search={false} onChange={(v) => save({ nudge_at: v })} />
       </SendRow>
       <SendRow
         title="New and changed sessions"
-        sub="Keep the team up to date on new sessions and changes to existing ones."
+        sub="Only for the week that is posted. New sessions ping the team; moves and cancellations ping the people who had said yes."
         on={s.updates_enabled}
         onToggle={(v) => save({ updates_enabled: v })}
       >
         <Dropdown look="pill" value={s.updates_mode ?? "channel"} options={MODE_OPTIONS} search={false} onChange={(v) => save({ updates_mode: v })} />
       </SendRow>
-      <SendRow title="Same-day reminder" sub="Reminds users about sessions they are signed up for" on={s.same_day_enabled} onToggle={(v) => save({ same_day_enabled: v })}>
+      <SendRow title="Same-day reminder" sub="To the people who are in. Next round." on={s.same_day_enabled} onToggle={(v) => save({ same_day_enabled: v })}>
         <Dropdown look="pill" value={Number(s.same_day_hours)} options={HOURS_OPTIONS} search={false} onChange={(v) => save({ same_day_hours: v })} />
         <Dropdown look="pill" value={s.same_day_mode} options={MODE_OPTIONS} search={false} onChange={(v) => save({ same_day_mode: v })} />
       </SendRow>
@@ -1121,7 +1121,9 @@ function SendRow({ title, sub, on, onToggle, children }: { title: string; sub: s
 function LogCard({ state, last }: { state: DiscordState; last: DiscordState["log"][number] | undefined }) {
   const failedDm = state.log.find((l) => !l.ok && l.detail);
   return (
-    <Card className="flex flex-col gap-3">
+    // Last card in the Activity column: grows to the column's full height, and
+    // the list scrolls inside it if the log is longer than the room it has.
+    <Card className="flex min-h-0 flex-1 flex-col gap-3">
       <div className="flex items-center justify-between gap-3">
         <h3 className="text-[15px] font-extrabold">Recent messages</h3>
         <span className="text-[13px] text-muted">Last 10</span>
@@ -1133,7 +1135,7 @@ function LogCard({ state, last }: { state: DiscordState; last: DiscordState["log
       {state.log.length === 0 ? (
         <p className="text-[13px] text-muted">Nothing sent yet.</p>
       ) : (
-        <div className="flex flex-col">
+        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain">
           {state.log.map((l, i) => (
             <div key={l.id} className={`grid grid-cols-[76px_minmax(0,1fr)_auto] items-center gap-3 py-2.5 ${i ? "border-t border-line-soft" : ""}`}>
               <span className="text-[12px] font-extrabold text-muted">{KIND_LABEL[l.kind]}</span>
@@ -1151,7 +1153,7 @@ function LogCard({ state, last }: { state: DiscordState; last: DiscordState["log
           ))}
         </div>
       )}
-      {failedDm && <p className="text-[13px] text-red-ink">{failedDm.detail}</p>}
+      {failedDm && <p className="mt-auto text-[13px] text-red-ink">{failedDm.detail}</p>}
     </Card>
   );
 }
@@ -1168,6 +1170,7 @@ const KIND_LABEL: Record<DiscordState["log"][number]["kind"], string> = {
 function DisconnectCard({ team, state, run }: { team: MyTeam; state: DiscordState; run: Run }) {
   const [arm, setArm] = useState(false);
   const [busy, setBusy] = useState(false);
+  const toast = useToast();
   return (
     <Card className="flex flex-col gap-3 border-[1.5px] border-red-line bg-transparent shadow-none">
       <div className="flex items-center justify-between gap-4">
@@ -1194,8 +1197,11 @@ function DisconnectCard({ team, state, run }: { team: MyTeam; state: DiscordStat
               onClick={() => {
                 setBusy(true);
                 void run(async () => {
-                  await disconnectDiscord(team.id);
-                }, "Disconnected").finally(() => setBusy(false));
+                  const r = await disconnectDiscord(team.id);
+                  // The bot leaves only when this was the last team on the server.
+                  if (r.leaveError) throw new Error(`Disconnected, but the bot could not leave the server: ${r.leaveError}. It will try again on its own.`);
+                  toast(r.left ? "Disconnected. The bot has left the server." : r.remaining > 0 ? `Disconnected. The bot stays for ${r.remaining} other team${r.remaining === 1 ? "" : "s"} on the server.` : "Disconnected.");
+                }).finally(() => setBusy(false));
               }}
             >
               Yes, disconnect

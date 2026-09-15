@@ -145,6 +145,51 @@ export async function channelInGuild(channelId: string, guildId: string): Promis
   }
 }
 
+/**
+ * Leave a server. Bots leave through the same route as people
+ * (DELETE /users/@me/guilds/{id}). Already gone is fine; anything else is
+ * handed back as text so the caller can log it instead of swallowing it.
+ */
+export async function leaveGuild(guildId: string): Promise<string | null> {
+  try {
+    await discord('DELETE', `/users/@me/guilds/${guildId}`)
+    return null
+  } catch (err) {
+    if (err instanceof DiscordError && (err.status === 404 || err.code === 10004)) return null
+    return explain(err)
+  }
+}
+
+/**
+ * Servers the bot is in that no team is linked to any more. A team can be
+ * deleted outright (the link row goes with it, and nothing tells Discord), a
+ * disconnect can fail halfway, or two teams can disconnect at once. This runs
+ * from the clock and leaves such servers, so the bot never lingers where nobody
+ * uses it. A server the bot joined in the last ten minutes is left alone: the
+ * team's connect may still be on its way through OAuth.
+ */
+export async function leaveOrphanGuilds(linkedGuildIds: string[]): Promise<Record<string, string>> {
+  const out: Record<string, string> = {}
+  const mine = await discord<{ id: string; name: string }[]>('GET', '/users/@me/guilds')
+  const linked = new Set(linkedGuildIds)
+  const me = await botId()
+  for (const g of mine) {
+    if (linked.has(g.id)) continue
+    try {
+      const m = await discord<GuildMember & { joined_at?: string }>('GET', `/guilds/${g.id}/members/${me}`)
+      if (m.joined_at && Date.now() - Date.parse(m.joined_at) < 10 * 60_000) {
+        out[g.id] = 'just joined, waiting'
+        continue
+      }
+    } catch {
+      /* cannot read our own membership: still try to leave */
+    }
+    const err = await leaveGuild(g.id)
+    out[g.id] = err ? `error: ${err}` : `left ${g.name}`
+  }
+  return out
+}
+
 /** The bot's own membership in a server, or null when it is not there. */
 export async function botMember(guildId: string): Promise<GuildMember | null> {
   const id = await botId()
