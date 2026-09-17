@@ -47,11 +47,31 @@ export interface DiscordLogRow {
   detail: string | null;
   at: string;
 }
+/** One session as the queued message describes it. */
+export interface PendingSnap {
+  title: string;
+  opponent: string | null;
+  date: string;
+  start_hour: number;
+  end_hour: number;
+  color: string;
+}
+/** A change message waiting its two minutes. The owner can send or drop it. */
+export interface DiscordPending {
+  id: number;
+  kind: "new" | "changed" | "cancelled";
+  event_id: string;
+  payload: { before?: PendingSnap; after?: PendingSnap };
+  send_after: string;
+  attempts: number;
+  last_error: string | null;
+}
 export interface DiscordState {
   link: DiscordLink | null;
   channels: DiscordChannel[];
   schedule: DiscordSchedule | null;
   log: DiscordLogRow[];
+  pending: DiscordPending[];
 }
 
 export interface PickerChannel {
@@ -74,18 +94,20 @@ export interface PickerRole {
 }
 
 export async function fetchDiscordState(teamId: string): Promise<DiscordState> {
-  const [link, channels, schedule, log] = await Promise.all([
+  const [link, channels, schedule, log, pending] = await Promise.all([
     supabase.from("discord_links").select("*").eq("team_id", teamId).maybeSingle(),
     supabase.from("discord_channels").select("*").eq("team_id", teamId),
     supabase.from("discord_schedules").select("*").eq("team_id", teamId).maybeSingle(),
     supabase.from("discord_log").select("*").eq("team_id", teamId).order("at", { ascending: false }).limit(10),
+    supabase.from("discord_outbox").select("id,kind,event_id,payload,send_after,attempts,last_error").eq("team_id", teamId).is("sent_at", null).order("send_after"),
   ]);
-  for (const r of [link, channels, schedule, log]) if (r.error) throw r.error;
+  for (const r of [link, channels, schedule, log, pending]) if (r.error) throw r.error;
   return {
     link: (link.data as DiscordLink | null) ?? null,
     channels: (channels.data ?? []) as DiscordChannel[],
     schedule: (schedule.data as DiscordSchedule | null) ?? null,
     log: (log.data ?? []) as DiscordLogRow[],
+    pending: (pending.data ?? []) as DiscordPending[],
   };
 }
 
@@ -207,7 +229,7 @@ export function sendTestDm(teamId: string) {
 
 /** One of the try-it-out actions on the Discord tab. All owner-only, all answered with a plain message. */
 export function tryAction(teamId: string, action: "preview" | "sample_change" | "sample_reminder" | "nudge_now" | "flush" | "ping_me") {
-  return api<{ ok?: boolean; where?: string[]; week?: string; sent?: number | string; errors?: number; missing?: number }>("/api/discord/post", {
+  return api<{ ok?: boolean; where?: string[]; week?: string; sent?: number | string; errors?: number; missing?: number; why?: string }>("/api/discord/post", {
     method: "POST",
     body: JSON.stringify({ team: teamId, action }),
   });
@@ -218,6 +240,14 @@ export function sendReminderNow(teamId: string, eventId: string) {
   return api<{ sent: string; people: number }>("/api/discord/post", {
     method: "POST",
     body: JSON.stringify({ team: teamId, action: "remind", event_id: eventId }),
+  });
+}
+
+/** Send one waiting change now, or throw it away before anyone sees it. Owner only. */
+export function outboxAction(teamId: string, id: number, action: "outbox_send" | "outbox_cancel") {
+  return api<{ ok: true; result: string }>("/api/discord/post", {
+    method: "POST",
+    body: JSON.stringify({ team: teamId, action, outbox_id: id }),
   });
 }
 

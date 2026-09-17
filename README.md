@@ -150,6 +150,12 @@ Mindre ting fra samme runde: en brems per lag på knappene i innstillingene (mak
 
 Det som ble sjekket og var i orden: eier-sjekk på hvert endepunkt med lagets id fra forespørselen; ingen filter-injeksjon i PostgREST (alle verdier er regex-sjekket, signerte eller lest fra databasen under constraint); ingen bruker-styrte URL-er mot Discord; OAuth-state med HMAC, utløp og konto-match; cron-hemmelighet i header med konstant-tids sammenlikning; ingen hemmeligheter i svar eller logg; ingen CORS, ingen cookies.
 
+## Køen av endringsmeldinger (0026)
+
+En endring blir ikke sendt med en gang: den ligger to minutter i `discord_outbox`, så en byge med redigeringer blir ett kort. «Recent messages» viser nå det som venter, med hva det gjelder og når det går. Eieren kan sende én med en gang eller kaste den før noen ser den (`outbox_send` / `outbox_cancel`; serveren sjekker at raden hører til laget). Laget kan lese køen, ingen kan skrive i den.
+
+To ting som kunne skjule seg her er rettet samtidig: kunne ikke serveren finne kanalen, ble radene før stemplet som sendt og forsvant — nå venter de og prøver igjen, og bare et slettet lag kaster dem. Og «Send what's waiting now» sier hvorfor det ble null: enten er endringsmeldinger av, eller det er ingenting i kø — og da gjerne fordi uka ikke er postet ennå. Utboks-triggeren fyller bare for uka som faktisk ligger i Discord.
+
 ## Purring for neste uke (0024)
 
 På valgt ukedag og klokkeslett (Settings → Discord) finner boten dem som ikke har krysset av én eneste time for neste uke, og ber dem gjøre det — i kanal, som DM, eller begge (`nudge_mode`). Kanalkortet pinger dem vi kan nå og nevner resten ved navn, med «x av y har fylt ut»; DM-en er skrevet til én person, uten mentions. `discord_nudge` holder hvilken uke som sist ble purret, så det skjer én gang per uke; har alle svart, stemples uka uten at noen får melding. `discord_nudge_missing()` (bare service_role) er utvalget. «Send now» ved siden av valgene gjør det samme med én gang, og hopper over den planlagte.

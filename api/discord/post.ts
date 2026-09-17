@@ -18,7 +18,7 @@ import type { OutboxRow } from '../_lib/updates'
 export default function handler(req: Request): Promise<Response> {
   return guard(async () => {
     if (req.method !== 'POST') throw new HttpError(405, 'method not allowed')
-    const body = (await req.json().catch(() => ({}))) as { team?: string; action?: string; which?: string; event_id?: string }
+    const body = (await req.json().catch(() => ({}))) as { team?: string; action?: string; which?: string; event_id?: string; outbox_id?: number }
     const teamId = body.team ?? ''
     // "Send a reminder now" belongs to whoever books sessions: owner or admin.
     // Everything else here is the owner's.
@@ -41,6 +41,8 @@ export default function handler(req: Request): Promise<Response> {
     if (body.action === 'sample_change') return json(await sampleChange(teamId, user.id))
     if (body.action === 'sample_reminder') return json(await sampleReminder(teamId, user.id))
     if (body.action === 'nudge_now') return json(await nudgeNow(teamId))
+    if (body.action === 'outbox_send') return json(await outboxSend(teamId, body.outbox_id))
+    if (body.action === 'outbox_cancel') return json(await outboxCancel(teamId, body.outbox_id))
     if (body.action === 'flush') return json(await flush(teamId))
     if (body.action === 'ping_me') return json(await pingMe(teamId, user.id, link))
     if (body.action === 'disconnect') return json(await disconnect(teamId, link))
@@ -164,6 +166,30 @@ async function sampleReminder(teamId: string, userId: string) {
   return { ok: true, where }
 }
 
+/** One queued change, sent now instead of waiting out its two minutes. */
+async function outboxSend(teamId: string, id?: number) {
+  const row = await pendingRow(teamId, id)
+  const out = await drainOutbox(1, teamId, row.id)
+  const result = Object.values(out)[0] ?? 'nothing to send'
+  if (result.startsWith('error')) throw new HttpError(409, result.slice(7))
+  return { ok: true, result }
+}
+
+/** One queued change, thrown away before anyone sees it. */
+async function outboxCancel(teamId: string, id?: number) {
+  const row = await pendingRow(teamId, id)
+  await db.remove('discord_outbox', { id: `eq.${row.id}`, team_id: `eq.${teamId}` })
+  return { ok: true, result: 'cancelled' }
+}
+
+/** The queued row, checked against the team in the request. Never trust the id alone. */
+async function pendingRow(teamId: string, id?: number) {
+  if (!Number.isInteger(id) || (id as number) < 1) throw new HttpError(400, 'bad message id')
+  const row = await db.one<OutboxRow>('discord_outbox', { id: `eq.${id}`, team_id: `eq.${teamId}`, sent_at: 'is.null' })
+  if (!row) throw new HttpError(404, 'That message has already gone out, or is no longer waiting.')
+  return row
+}
+
 /** Run the clock for this team now: refresh the week plan, send what is queued. */
 async function flush(teamId: string) {
   const team = await db.one<{ timezone: string }>('teams', { id: `eq.${teamId}`, select: 'timezone' })
@@ -180,8 +206,21 @@ async function flush(teamId: string) {
   const updates = await drainOutbox(20, teamId)
   const sent = Object.values(updates).filter((v) => v === 'sent').length
   const errors = Object.values(updates).filter((v) => v.startsWith('error')).length
+  // Nothing sent and nothing failed is the confusing case. Say which of the
+  // three reasons it was, instead of leaving a silent zero.
+  let why: string | undefined
+  if (sent === 0 && errors === 0) {
+    const [schedule, pending] = await Promise.all([
+      db.one<DiscordSchedule>('discord_schedules', { team_id: `eq.${teamId}` }),
+      db.select<{ id: number }>('discord_outbox', { select: 'id', team_id: `eq.${teamId}`, sent_at: 'is.null', limit: '1' }),
+    ])
+    if (!schedule?.updates_enabled) why = 'Change messages are turned off for this team.'
+    else if (pending.length > 0) why = 'Something is waiting, but it could not go out. Check the log.'
+    else if (!live) why = 'Nothing was waiting. New and changed sessions are only announced for the week that is posted — post the week first.'
+    else why = 'Nothing was waiting.'
+  }
   await log(teamId, 'test', `Sent what was waiting: week ${week}, ${sent} sent, ${errors} failed`, errors === 0)
-  return { week, sent, errors, detail: updates }
+  return { week, sent, errors, why, detail: updates }
 }
 
 /** A card that mentions only the owner, in the updates channel. Proves the mention renders and notifies. */

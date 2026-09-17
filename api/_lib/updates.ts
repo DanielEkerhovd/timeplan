@@ -44,20 +44,27 @@ interface TeamCtx {
   channel: string
 }
 
-async function teamCtx(teamId: string): Promise<TeamCtx | null> {
+/**
+ * What sending needs, or the reason it cannot. `gone` is the only answer that
+ * means "throw the queued messages away"; everything else is something a person
+ * can put right, so the rows wait and try again instead of vanishing.
+ */
+type Ctx = { ctx: TeamCtx; why: '' } | { ctx: null; why: string }
+
+async function teamCtx(teamId: string): Promise<Ctx> {
   const [link, schedule, team, channel] = await Promise.all([
     db.one<DiscordLink>('discord_links', { team_id: `eq.${teamId}` }),
     db.one<DiscordSchedule>('discord_schedules', { team_id: `eq.${teamId}` }),
     db.one<{ timezone: string; name: string }>('teams', { id: `eq.${teamId}`, select: 'timezone,name' }),
     updatesChannel(teamId),
   ])
-  if (!link || !schedule || !team || !channel) return null
-  // One check per team per run: the channel must be in the linked server.
+  if (!team) return { ctx: null, why: 'gone' }
+  if (!link || !schedule) return { ctx: null, why: 'The team is not connected to Discord.' }
+  if (!channel) return { ctx: null, why: 'No channel is picked for updates.' }
   if (!(await channelInGuild(channel, link.guild_id))) {
-    await log(teamId, 'update', 'The updates channel is not in the connected server. Pick it again in Settings.', false)
-    return null
+    return { ctx: null, why: 'The updates channel is not in the connected server. Pick it again in Settings.' }
   }
-  return { link, schedule, timezone: team.timezone, name: team.name, channel }
+  return { ctx: { link, schedule, timezone: team.timezone, name: team.name, channel }, why: '' }
 }
 
 /**
@@ -142,30 +149,40 @@ async function done(rows: OutboxRow[], messageId: string | null) {
  * attempt and pushes the row back; after five it is left alone and shows up
  * in the team's log.
  */
-export async function drainOutbox(limit = 20, onlyTeam?: string): Promise<Record<string, string>> {
+export async function drainOutbox(limit = 20, onlyTeam?: string, onlyRow?: number): Promise<Record<string, string>> {
   const due = await db.select<OutboxRow>('discord_outbox', {
     sent_at: 'is.null',
-    // "Send what's waiting now" from Settings skips the two-minute wait; the clock respects it.
+    // "Send now" from Settings skips the two-minute wait; the clock respects it.
+    // One row at a time when the owner picked that one off the queue.
     ...(onlyTeam ? { team_id: `eq.${onlyTeam}` } : { send_after: `lte.${new Date().toISOString()}` }),
+    ...(onlyRow ? { id: `eq.${onlyRow}` } : {}),
     attempts: 'lt.5',
     order: 'send_after.asc',
     limit: String(limit),
   })
   const out: Record<string, string> = {}
-  const ctxs = new Map<string, TeamCtx | null>()
-  const ctxFor = async (teamId: string) => {
-    if (!ctxs.has(teamId)) ctxs.set(teamId, await teamCtx(teamId))
-    return ctxs.get(teamId) ?? null
+  const ctxs = new Map<string, Ctx>()
+  const ctxFor = async (teamId: string): Promise<Ctx> => {
+    const had = ctxs.get(teamId)
+    if (had) return had
+    const fresh = await teamCtx(teamId)
+    ctxs.set(teamId, fresh)
+    return fresh
   }
 
   // 1. New sessions, grouped per team.
   const newByTeam = new Map<string, OutboxRow[]>()
   for (const r of due) if (r.kind === 'new') newByTeam.set(r.team_id, [...(newByTeam.get(r.team_id) ?? []), r])
   for (const [teamId, rows] of newByTeam) {
-    const ctx = await ctxFor(teamId)
+    const { ctx, why } = await ctxFor(teamId)
     if (!ctx) {
-      await done(rows, null)
-      out[`${teamId}:new`] = 'dropped'
+      // The team is gone: nobody to tell. Anything else waits for a fix.
+      if (why === 'gone') {
+        await done(rows, null)
+        out[`${teamId}:new`] = 'dropped'
+      } else {
+        for (const r of rows) out[`${teamId}:${r.event_id}`] = await fail(r, new Error(why))
+      }
       continue
     }
     for (let i = 0; i < rows.length; i += 5) {
@@ -188,10 +205,14 @@ export async function drainOutbox(limit = 20, onlyTeam?: string): Promise<Record
   for (const row of due) {
     if (row.kind === 'new') continue
     const key = `${row.team_id}:${row.event_id}`
-    const ctx = await ctxFor(row.team_id)
+    const { ctx, why } = await ctxFor(row.team_id)
     if (!ctx) {
-      await done([row], null)
-      out[key] = 'dropped'
+      if (why === 'gone') {
+        await done([row], null)
+        out[key] = 'dropped'
+      } else {
+        out[key] = await fail(row, new Error(why))
+      }
       continue
     }
     try {

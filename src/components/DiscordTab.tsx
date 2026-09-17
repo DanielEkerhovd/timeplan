@@ -22,11 +22,12 @@ import {
   shortTime,
   startConnect,
   syncManagedRole,
+  outboxAction,
   tryAction,
   updateSchedule,
 } from "../lib/discord";
 import { DiscordApiError } from "../lib/discord";
-import type { ChannelKind, DiscordState, PickerChannel, PickerRole, StatusCheck } from "../lib/discord";
+import type { ChannelKind, DiscordPending, DiscordState, PickerChannel, PickerRole, StatusCheck } from "../lib/discord";
 import { Button, Card, Check, Eyebrow, ErrorText, Input, Label, Pill, Spinner, Toggle, useToast } from "./ui";
 import { Dropdown } from "./pickers";
 import type { DropdownOption } from "./pickers";
@@ -772,7 +773,7 @@ function Connected({ team, state, isOwner, run, error, onRerun }: { team: MyTeam
           </div>
           {isOwner && (problems.length > 0 || health.failed) && <ProblemsCard health={health} problems={problems} />}
           {isOwner && <TryCard team={team} run={run} />}
-          <LogCard state={state} last={last} />
+          <LogCard state={state} last={last} isOwner={isOwner} run={run} />
         </div>
       </div>
 
@@ -937,6 +938,7 @@ function TryCard({ team, run }: { team: MyTeam; run: Run }) {
           hint: "Runs the clock for this team instead of waiting up to five minutes.",
           fn: async () => {
             const r = await tryAction(team.id, "flush");
+            if (r.why) return r.why;
             const bits = [`week plan: ${r.week}`, `${r.sent ?? 0} change${r.sent === 1 ? "" : "s"} sent`];
             if (r.errors) bits.push(`${r.errors} failed`);
             return bits.join(", ") + ".";
@@ -1149,7 +1151,7 @@ function SendsCard({ team, state, run }: { team: MyTeam; state: DiscordState; ru
       </SendRow>
       <SendRow
         title="Nudge for next week"
-        sub="To anyone who hasnt marked a single hour for next week."
+        sub="To anyone who hasn\u2019t marked a single hour for next week. Once a week, and not at all if everyone has answered."
         on={s.nudge_enabled}
         onToggle={(v) => save({ nudge_enabled: v })}
       >
@@ -1160,13 +1162,13 @@ function SendsCard({ team, state, run }: { team: MyTeam; state: DiscordState; ru
       </SendRow>
       <SendRow
         title="New and changed sessions"
-        sub="Sends message to users about new events and changes to existing events."
+        sub="Only for the week that is posted. New sessions ping the team; moves and cancellations ping the people who had said yes."
         on={s.updates_enabled}
         onToggle={(v) => save({ updates_enabled: v })}
       >
         <Dropdown look="pill" value={s.updates_mode ?? "channel"} options={MODE_OPTIONS} search={false} onChange={(v) => save({ updates_mode: v })} />
       </SendRow>
-      <SendRow title="Reminder before a session" sub="Sends message to users who have joined the session" on={s.same_day_enabled} onToggle={(v) => save({ same_day_enabled: v })}>
+      <SendRow title="Reminder before a session" sub="To the people who said yes, with Still in / Can’t. Sent once; a moved session gets a new one." on={s.same_day_enabled} onToggle={(v) => save({ same_day_enabled: v })}>
         <Dropdown look="pill" value={Number(s.same_day_hours)} options={HOURS_OPTIONS} search={false} onChange={(v) => save({ same_day_hours: v })} />
         <Dropdown look="pill" value={s.same_day_mode} options={MODE_OPTIONS} search={false} onChange={(v) => save({ same_day_mode: v })} />
       </SendRow>
@@ -1215,7 +1217,7 @@ function SendRow({ title, sub, on, onToggle, children }: { title: string; sub: s
   );
 }
 
-function LogCard({ state, last }: { state: DiscordState; last: DiscordState["log"][number] | undefined }) {
+function LogCard({ state, last, isOwner, run }: { state: DiscordState; last: DiscordState["log"][number] | undefined; isOwner: boolean; run: Run }) {
   const failedDm = state.log.find((l) => !l.ok && l.detail);
   return (
     // Last card in the Activity column: grows to the column's full height, and
@@ -1229,6 +1231,17 @@ function LogCard({ state, last }: { state: DiscordState; last: DiscordState["log
         <span className="text-[13px] font-bold">Week plan on Discord</span>
         <span className="text-[13px] text-muted">{last ? `${last.summary}, ${when(last.at)}` : "Not posted yet"}</span>
       </div>
+      {state.pending.length > 0 && (
+        <div className="flex flex-col gap-2 rounded-[14px] border-[1.5px] border-yellow/60 bg-yellow-soft p-3">
+          <div className="flex items-baseline justify-between gap-3 px-0.5">
+            <span className="text-[13px] font-extrabold text-yellow-ink">Waiting to send</span>
+            <span className="text-[12.5px] text-yellow-ink">A couple of minutes, so quick edits become one message</span>
+          </div>
+          {state.pending.map((p) => (
+            <PendingRow key={p.id} team={state.link!.team_id} row={p} isOwner={isOwner} run={run} />
+          ))}
+        </div>
+      )}
       {state.log.length === 0 ? (
         <p className="text-[13px] text-muted">Nothing sent yet.</p>
       ) : (
@@ -1254,6 +1267,47 @@ function LogCard({ state, last }: { state: DiscordState; last: DiscordState["log
     </Card>
   );
 }
+
+/**
+ * One change message still in the queue: what it is about, when it goes, and —
+ * for the owner — send it now or drop it. Dropping is the only way to take back
+ * a message nobody has seen yet.
+ */
+function PendingRow({ team, row, isOwner, run }: { team: string; row: DiscordPending; isOwner: boolean; run: Run }) {
+  const [busy, setBusy] = useState(false);
+  const what = row.payload.after ?? row.payload.before;
+  const name = what ? (what.opponent ? `${what.title} vs ${what.opponent}` : what.title) : "a session";
+  const due = new Date(row.send_after).getTime();
+  const act = (action: "outbox_send" | "outbox_cancel") => {
+    setBusy(true);
+    void run(() => outboxAction(team, row.id, action).then(() => undefined), action === "outbox_send" ? "Sent" : "Cancelled").finally(() => setBusy(false));
+  };
+  return (
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-[12px] bg-surface px-3.5 py-2.5">
+      <span className="text-[12px] font-extrabold text-muted">{PENDING_LABEL[row.kind]}</span>
+      <span className="min-w-0 flex-1 truncate text-[14px] font-semibold" title={row.last_error ?? undefined}>
+        {name}
+      </span>
+      <span className="text-[12px] text-muted">{row.last_error ? "Could not send" : due <= Date.now() ? "Any moment now" : `Goes at ${when(row.send_after)}`}</span>
+      {isOwner && (
+        <span className="flex gap-1.5">
+          <Pill disabled={busy} onClick={() => act("outbox_send")}>
+            Send now
+          </Pill>
+          <Pill disabled={busy} onClick={() => act("outbox_cancel")}>
+            Cancel
+          </Pill>
+        </span>
+      )}
+    </div>
+  );
+}
+
+const PENDING_LABEL: Record<DiscordPending["kind"], string> = {
+  new: "New",
+  changed: "Changed",
+  cancelled: "Cancelled",
+};
 
 const KIND_LABEL: Record<DiscordState["log"][number]["kind"], string> = {
   week_post: "Week plan",

@@ -785,11 +785,11 @@ select pg_temp.expect_count('bot_week har ingen tilgjengelighet i seg',
 select pg_temp.expect_denied('bot_week krever mandag',
   format('select public.bot_week(%L, %L)', :'team_a', :'dato'));
 
--- Utboksen (0019, 0020): endringer blir rader, raske endringer blir én rad, klienten ser ingenting.
+-- Utboksen (0019, 0020): endringer blir rader, og raske endringer blir én rad.
 -- Bare for uka som er postet: uten ukepost skjer ingenting.
 select pg_temp.become(:'eier_a');
 set local role authenticated;
-select pg_temp.expect_denied('innlogget kan ikke lese utboksen', 'select * from public.discord_outbox');
+select pg_temp.expect_count('laget ser sin egen kø, og den er tom ennå (0026)', 'select * from public.discord_outbox', 0);
 insert into public.events (team_id, date, start_hour, end_hour, title, color) values (:'team_a', :'dato', 9, 11, 'Før posten', 'grey');
 reset role;
 select pg_temp.expect_count('ingen ukepost, ingen rad i utboksen',
@@ -828,6 +828,23 @@ update public.events set note = 'bare et notat' where id = :'outbox_event';
 reset role;
 select pg_temp.expect_count('et notat er ingen endring folk skal varsles om',
   format('select 1 from public.discord_outbox where event_id = %L and sent_at is null', :'outbox_event'), 1);
+
+-- Køen er synlig for laget (0026), men bare å lese.
+select pg_temp.become(:'spiller_a');
+set local role authenticated;
+select pg_temp.expect_count('medlem ser køen til sitt eget lag',
+  format('select 1 from public.discord_outbox where team_id = %L and event_id = %L and sent_at is null', :'team_a', :'outbox_event'), 1);
+select pg_temp.expect_denied('medlem kan ikke kaste noe fra køen',
+  format('delete from public.discord_outbox where team_id = %L', :'team_a'));
+select pg_temp.expect_denied('medlem kan ikke legge noe i køen',
+  format('insert into public.discord_outbox (team_id, kind, event_id, payload) values (%L, ''new'', %L, ''{}''::jsonb)', :'team_a', :'outbox_event'));
+reset role;
+select pg_temp.expect_count('køen står urørt etter medlemmet',
+  format('select 1 from public.discord_outbox where team_id = %L and event_id = %L and sent_at is null', :'team_a', :'outbox_event'), 1);
+select pg_temp.become(:'fremmed_b');
+set local role authenticated;
+select pg_temp.expect_count('en fremmed ser ingen kø', 'select * from public.discord_outbox', 0);
+reset role;
 
 -- Påminnelser (0023): stempelet er serverens, nullstilles når aktiviteten flyttes, og utvalget er bare for serveren.
 select pg_temp.become(:'eier_a');
