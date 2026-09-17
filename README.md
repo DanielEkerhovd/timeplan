@@ -4,7 +4,7 @@ Ukeplan for lag. Medlemmene krysser av kveldene de kan, eier og admin ser hvor a
 
 React + Vite + TypeScript + Tailwind i front. Supabase (Postgres, Auth med Discord, Realtime, Edge Functions) bak.
 
-Status: steg 1 (grunnmur og sikkerhet), steg 2 (ukevisningen), steg 3 (ledervisningen), steg 4 (deling på Discord), steg 5 (innstillinger og lagstyring) og steg 7 runde 1 (Discord-bot: kobling, ukepost, /week) er ferdig. Igjen: tidssonehint, drift, og runde 2 av boten (purring, endringsvarsler, påminnelser).
+Status: steg 1 (grunnmur og sikkerhet), steg 2 (ukevisningen), steg 3 (ledervisningen), steg 4 (deling på Discord), steg 5 (innstillinger og lagstyring) og steg 7 runde 1 (Discord-bot: kobling, ukepost, /week) er ferdig. Igjen: tidssonehint og drift. Boten er ferdig: kobling, ukepost, /week, endringsvarsler, påminnelser og purring.
 
 ## Roller
 
@@ -149,6 +149,10 @@ En egen gjennomgang med angriper-briller (uten konto, vanlig medlem, eier av lag
 Mindre ting fra samme runde: en brems per lag på knappene i innstillingene (maks 12 handlinger i minuttet, 5 for å lage kanal/rolle), så én eier ikke kan få Discord til å strupe bot-tokenet for alle; 429 fra Discord teller ikke som et forsøk i utboksen; interaksjoner eldre enn fem minutter avvises selv med gyldig signatur; feilmeldinger fra databasen og uventede feil går til loggen, ikke til klienten.
 
 Det som ble sjekket og var i orden: eier-sjekk på hvert endepunkt med lagets id fra forespørselen; ingen filter-injeksjon i PostgREST (alle verdier er regex-sjekket, signerte eller lest fra databasen under constraint); ingen bruker-styrte URL-er mot Discord; OAuth-state med HMAC, utløp og konto-match; cron-hemmelighet i header med konstant-tids sammenlikning; ingen hemmeligheter i svar eller logg; ingen CORS, ingen cookies.
+
+## Purring for neste uke (0024)
+
+På valgt ukedag og klokkeslett (Settings → Discord) finner boten dem som ikke har krysset av én eneste time for neste uke, og ber dem gjøre det — i kanal, som DM, eller begge (`nudge_mode`). Kanalkortet pinger dem vi kan nå og nevner resten ved navn, med «x av y har fylt ut»; DM-en er skrevet til én person, uten mentions. `discord_nudge` holder hvilken uke som sist ble purret, så det skjer én gang per uke; har alle svart, stemples uka uten at noen får melding. `discord_nudge_missing()` (bare service_role) er utvalget. «Send now» ved siden av valgene gjør det samme med én gang, og hopper over den planlagte.
 
 ## Påminnelser (0023)
 

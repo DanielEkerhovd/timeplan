@@ -27,8 +27,8 @@ interface Candidate {
   mode: 'channel' | 'dm' | 'both'
 }
 
-/** Where reminders land: the reminders channel, else updates, else the week plan. */
-async function reminderChannel(teamId: string): Promise<string | null> {
+/** Where reminders and nudges land: the reminders channel, else updates, else the week plan. */
+export async function notifyChannel(teamId: string): Promise<string | null> {
   const rows = await db.select<DiscordChannel>('discord_channels', { team_id: `eq.${teamId}` })
   const pick = (k: DiscordChannel['kind']) => rows.find((c) => c.kind === k)?.channel_id
   return pick('reminders') ?? pick('updates') ?? pick('schedule') ?? null
@@ -42,7 +42,8 @@ async function people(eventId: string): Promise<string[]> {
   }
 }
 
-async function dmable(teamId: string): Promise<Set<string>> {
+/** Team members the bot is still allowed to DM. */
+export async function dmable(teamId: string): Promise<Set<string>> {
   try {
     return new Set((await db.rpc<string[] | null>('discord_team_people', { team: teamId, for_dm: true })) ?? [])
   } catch {
@@ -138,7 +139,7 @@ async function sendOne(c: Candidate, now: Date): Promise<string> {
     return 'nobody in'
   }
   const link = await db.one<DiscordLink>('discord_links', { team_id: `eq.${c.team_id}` })
-  const channel = await reminderChannel(c.team_id)
+  const channel = await notifyChannel(c.team_id)
   if (!link || !channel) {
     await stamp(c.event_id)
     return 'no channel'

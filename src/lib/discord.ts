@@ -32,6 +32,7 @@ export interface DiscordSchedule {
   nudge_enabled: boolean;
   nudge_dow: number;
   nudge_at: string;
+  nudge_mode: "channel" | "dm" | "both";
   updates_enabled: boolean;
   updates_mode: "channel" | "dm" | "both";
   same_day_enabled: boolean;
@@ -86,6 +87,13 @@ export async function fetchDiscordState(teamId: string): Promise<DiscordState> {
     schedule: (schedule.data as DiscordSchedule | null) ?? null,
     log: (log.data ?? []) as DiscordLogRow[],
   };
+}
+
+/** Is the bot connected for this team? One small read; members may run it. */
+export async function isDiscordConnected(teamId: string): Promise<boolean> {
+  const { data, error } = await supabase.from("discord_links").select("team_id").eq("team_id", teamId).maybeSingle();
+  if (error) throw error;
+  return data !== null;
 }
 
 // --- Straight to the tables (RLS: owner) ---------------------------------------
@@ -198,8 +206,8 @@ export function sendTestDm(teamId: string) {
 }
 
 /** One of the try-it-out actions on the Discord tab. All owner-only, all answered with a plain message. */
-export function tryAction(teamId: string, action: "preview" | "sample_change" | "sample_reminder" | "flush" | "ping_me") {
-  return api<{ ok?: boolean; where?: string[]; week?: string; sent?: number; errors?: number }>("/api/discord/post", {
+export function tryAction(teamId: string, action: "preview" | "sample_change" | "sample_reminder" | "nudge_now" | "flush" | "ping_me") {
+  return api<{ ok?: boolean; where?: string[]; week?: string; sent?: number | string; errors?: number; missing?: number }>("/api/discord/post", {
     method: "POST",
     body: JSON.stringify({ team: teamId, action }),
   });

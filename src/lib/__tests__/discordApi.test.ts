@@ -117,7 +117,7 @@ describe("week message", () => {
   });
 });
 
-import { buildNewSessionsCard, buildReminderCard, buildUpdateCard, forPeople, forRole } from "../../../api/_lib/updateCard";
+import { buildNewSessionsCard, buildNudgeCard, buildReminderCard, buildUpdateCard, forPeople, forRole } from "../../../api/_lib/updateCard";
 import type { OutboxRow } from "../../../api/_lib/updateCard";
 
 describe("change cards", () => {
@@ -157,6 +157,25 @@ describe("change cards", () => {
     expect(msg.allowed_mentions.users).toEqual(["100"]);
     expect(text(msg)).toContain("## Cancelled · Scrim vs Foxes");
     expect(text(msg)).not.toContain("custom_id");
+  });
+  it("the nudge pings who we can reach, names who we cannot, and counts the rest", () => {
+    const missing = [
+      { name: "Per", discord_id: "100" },
+      { name: "Kari", discord_id: null },
+    ];
+    const msg = buildNudgeCard({ weekStart: "2026-09-21", missing, total: 5, appUrl: "https://x.test", team: "Quackers" }) as { allowed_mentions: { users: string[] } };
+    expect(msg.allowed_mentions.users).toEqual(["100"]);
+    expect(text(msg)).toContain("## Next week needs your times");
+    expect(text(msg)).toContain("Week 39 · 21 – 27 September");
+    expect(text(msg)).toContain("<@100> Kari");
+    expect(text(msg)).toContain("3 of 5 have marked their week");
+    expect(text(msg)).toContain("https://x.test");
+
+    const dm = buildNudgeCard({ weekStart: "2026-09-21", missing, total: 5, appUrl: "https://x.test", team: "Quackers" }, true) as { allowed_mentions: { users: string[] } };
+    expect(dm.allowed_mentions.users).toEqual([]);
+    expect(text(dm)).toContain("## Your times for next week");
+    expect(text(dm)).toContain("-# Quackers");
+    expect(text(dm)).not.toContain("<@100>");
   });
   it("a reminder says Today, pings those who said yes, and its buttons are its own", () => {
     const msg = buildReminderCard(snap, "Europe/Oslo", ["100", "200"], "2026-09-15") as { allowed_mentions: { users: string[] } };

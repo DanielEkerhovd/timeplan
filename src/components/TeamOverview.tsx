@@ -1,4 +1,4 @@
-import { useState, useMemo, type CSSProperties } from "react";
+import { useState, useMemo, useEffect, type CSSProperties } from "react";
 import { format } from "date-fns";
 import { useAuth } from "../lib/auth";
 import { coversSlot } from "../lib/availability";
@@ -23,6 +23,7 @@ import {
   type WeekDay,
 } from "../lib/week";
 import { useZone } from "../lib/zone";
+import { isDiscordConnected, sendReminderNow } from "../lib/discord";
 import EventForm, { type EventDraft } from "./EventForm";
 import SessionsList from "./SessionsList";
 import ShareWeekButton from "./ShareWeekButton";
@@ -76,6 +77,17 @@ export default function TeamOverview({
   const { user } = useAuth();
   // Dagen du holder på å stenge eller åpne. Knappen venter, resten av uka gjør ikke det.
   const [busyDay, setBusyDay] = useState<string | null>(null);
+  // Whether the Remind pill is offered at all. One small read per team.
+  const [botConnected, setBotConnected] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    isDiscordConnected(team.id)
+      .then((yes) => alive && setBotConnected(yes))
+      .catch(() => undefined);
+    return () => {
+      alive = false;
+    };
+  }, [team.id]);
 
   async function toggleDay(day: WeekDay) {
     if (busyDay || weekLock(week.monday) || !user) return;
@@ -182,6 +194,15 @@ export default function TeamOverview({
       draft: { date: cell.day.key, start_hour: cell.start, end_hour: cell.end },
     });
   }
+  /**
+   * The bot's reminder for one session, sent now. Only offered when the team is
+   * connected; the answer goes back to the pill on the card.
+   */
+  async function remind(e: EventWithResponses) {
+    const r = await sendReminderNow(team.id, e.id);
+    return `Sent to ${r.people}`;
+  }
+
   function openExisting(e: EventWithResponses) {
     if (lock) return;
     setForm({
@@ -292,6 +313,7 @@ export default function TeamOverview({
           members={members}
           locked={lock !== null}
           onEdit={lock ? undefined : openExisting}
+          onRemind={lock || !botConnected ? undefined : remind}
           hint={lock ? undefined : "click a block below to add one"}
         />
 

@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { format } from "date-fns";
 import {
   eventLabel,
@@ -20,6 +21,8 @@ interface Props {
   onToggleJoin?: (event: EventWithResponses) => void;
   /** … or an Edit button (plan week). Both can be shown. */
   onEdit?: (event: EventWithResponses) => void;
+  /** Discord reminder for this session, now. Only for teams with the bot connected. */
+  onRemind?: (event: EventWithResponses) => Promise<string>;
   hint?: string;
   /** Past or too-far-ahead weeks: show the sessions, but no Join / Edit. */
   locked?: boolean;
@@ -34,6 +37,7 @@ export default function SessionsList({
   userId,
   onToggleJoin,
   onEdit,
+  onRemind,
   hint,
   locked = false,
   className = "",
@@ -117,11 +121,40 @@ export default function SessionsList({
                 {onEdit && !locked && (
                   <Pill onClick={() => onEdit(e)}>Edit</Pill>
                 )}
+                {onRemind && !locked && ids.length > 0 && (
+                  <RemindPill event={e} onRemind={onRemind} />
+                )}
               </div>
             );
           })}
         </div>
       )}
     </section>
+  );
+}
+
+/**
+ * "Remind" on a session: the Discord reminder goes out now to the people who
+ * said yes, and the scheduled one for that session is skipped. Shown only when
+ * somebody has actually joined — there is nobody to remind otherwise.
+ */
+function RemindPill({ event, onRemind }: { event: EventWithResponses; onRemind: (e: EventWithResponses) => Promise<string> }) {
+  const [busy, setBusy] = useState(false);
+  const [said, setSaid] = useState<string | null>(null);
+  if (said) return <span className="max-w-[140px] truncate text-[12px] font-bold text-muted" title={said}>{said}</span>;
+  return (
+    <Pill
+      disabled={busy}
+      title="Send the Discord reminder for this session now"
+      onClick={() => {
+        setBusy(true);
+        onRemind(event)
+          .then(setSaid)
+          .catch((err: unknown) => setSaid(err instanceof Error ? err.message : "Could not send"))
+          .finally(() => setBusy(false));
+      }}
+    >
+      {busy ? "Sending…" : "Remind"}
+    </Pill>
   );
 }

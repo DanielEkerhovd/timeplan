@@ -20,6 +20,9 @@
 //
 //   4. Reminders. A session that starts within the team's chosen number of
 //      hours gets one card to the people who said yes (reminders.ts).
+//
+//   5. The nudge. On the team's chosen weekday and time, whoever has not
+//      marked a single hour for next week is asked to (nudge.ts).
 
 export const config = { runtime: 'edge' }
 
@@ -30,6 +33,7 @@ import { addDays, localNow, mondayOf, timeToMinutes } from '../_lib/time'
 import { ensureWeekPost } from '../_lib/week'
 import { drainOutbox } from '../_lib/updates'
 import { sendReminders } from '../_lib/reminders'
+import { sendNudges } from '../_lib/nudge'
 import { sameSecret } from '../_lib/crypto'
 import { leaveOrphanGuilds } from '../_lib/discord'
 
@@ -95,5 +99,12 @@ export default async function handler(req: Request): Promise<Response> {
   } catch (err) {
     reminders = { error: err instanceof Error ? err.message : String(err) }
   }
-  return json({ teams: schedules.length, out, updates, reminders, orphans })
+  // 5. The nudge for next week.
+  let nudges: Record<string, string> = {}
+  try {
+    nudges = await sendNudges()
+  } catch (err) {
+    nudges = { error: err instanceof Error ? err.message : String(err) }
+  }
+  return json({ teams: schedules.length, out, updates, reminders, nudges, orphans })
 }

@@ -878,6 +878,32 @@ select pg_temp.expect_count('en Discord nekter DM til, hoppes over for DM',
   format('select 1 from jsonb_array_elements_text(public.discord_team_people(%L, true)) x where x = ''111111111111111111''', :'team_a'), 0);
 select pg_temp.expect_count('men står fortsatt i lista for kanalping',
   format('select 1 from jsonb_array_elements_text(public.discord_team_people(%L, false)) x where x = ''111111111111111111''', :'team_a'), 1);
+
+-- Purring (0024): eieren velger måte, men boka og utvalget er serverens.
+select pg_temp.become(:'eier_a');
+set local role authenticated;
+select pg_temp.expect_ok('eier velger måte for purringa',
+  format('update public.discord_schedules set nudge_mode = ''both'' where team_id = %L', :'team_a'));
+select pg_temp.expect_denied('ukjent måte avvises',
+  format('update public.discord_schedules set nudge_mode = ''sms'' where team_id = %L', :'team_a'));
+select pg_temp.expect_denied('eier ser ikke purreboka i det hele tatt', 'select * from public.discord_nudge');
+select pg_temp.expect_denied('eier kan ikke skrive i purreboka',
+  format('insert into public.discord_nudge (team_id, week_start) values (%L, %L)', :'team_a', :'mandag'));
+select pg_temp.expect_denied('eier kan ikke spørre hvem som mangler',
+  format('select * from public.discord_nudge_missing(%L, %L)', :'team_a', :'mandag'));
+reset role;
+-- En uke ingen har rørt: da mangler hele laget.
+select pg_temp.expect_count('alle mangler en uke ingen har krysset av',
+  format('select 1 from public.discord_nudge_missing(%L, date %L + 35)', :'team_a', :'mandag'),
+  (select count(*)::int from public.members where team_id = :'team_a'));
+insert into public.availability (team_id, user_id, date, hour)
+  values (:'team_a', :'eier_a', (date :'mandag' + 36), 20);
+select pg_temp.expect_count('én avkrysset halvtime er nok til å ikke bli purret',
+  format('select 1 from public.discord_nudge_missing(%L, date %L + 35) where discord_id = ''111111111111111111''', :'team_a', :'mandag'), 0);
+select pg_temp.expect_count('de andre står fortsatt på lista',
+  format('select 1 from public.discord_nudge_missing(%L, date %L + 35)', :'team_a', :'mandag'),
+  (select count(*)::int - 1 from public.members where team_id = :'team_a'));
+delete from public.availability where team_id = :'team_a' and date = (date :'mandag' + 36);
 update public.profiles set dm_blocked_at = null where user_id = :'eier_a';
 select pg_temp.become(:'eier_a');
 set local role authenticated;

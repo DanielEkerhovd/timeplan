@@ -12,6 +12,7 @@ import { buildWeekMessage, COMPONENTS_V2, ensureWeekPost, fetchBotWeek } from '.
 import { buildUpdateCard, drainOutbox, updatesChannel } from '../_lib/updates'
 import { buildReminderCard } from '../_lib/updateCard'
 import { remindNow } from '../_lib/reminders'
+import { nudgeNow } from '../_lib/nudge'
 import type { OutboxRow } from '../_lib/updates'
 
 export default function handler(req: Request): Promise<Response> {
@@ -39,6 +40,7 @@ export default function handler(req: Request): Promise<Response> {
     if (body.action === 'preview') return json(await preview(teamId, user.id))
     if (body.action === 'sample_change') return json(await sampleChange(teamId, user.id))
     if (body.action === 'sample_reminder') return json(await sampleReminder(teamId, user.id))
+    if (body.action === 'nudge_now') return json(await nudgeNow(teamId))
     if (body.action === 'flush') return json(await flush(teamId))
     if (body.action === 'ping_me') return json(await pingMe(teamId, user.id, link))
     if (body.action === 'disconnect') return json(await disconnect(teamId, link))

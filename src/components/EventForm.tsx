@@ -16,7 +16,6 @@ import {
   type ActivityType,
 } from "../lib/types";
 import { useZone } from "../lib/zone";
-import { DiscordApiError, sendReminderNow } from "../lib/discord";
 import { Button, CloseButton, ErrorText, Input, Label, Modal } from "./ui";
 import { DatePicker, Dropdown, hourOptions } from "./pickers";
 
@@ -126,22 +125,6 @@ export default function EventForm({
       onSaved();
     } catch (err) {
       setError(friendlyError(err));
-      setBusy(false);
-    }
-  }
-
-  const [reminded, setReminded] = useState<string | null>(null);
-
-  /** The Discord reminder for this session, now. The scheduled one is then skipped. */
-  async function remind() {
-    setBusy(true);
-    setError(null);
-    try {
-      const r = await sendReminderNow(teamId, existing!.id);
-      setReminded(`Reminder sent to ${r.people} player${r.people === 1 ? "" : "s"}.`);
-    } catch (err) {
-      setError(err instanceof DiscordApiError ? err.message : friendlyError(err));
-    } finally {
       setBusy(false);
     }
   }
@@ -362,23 +345,14 @@ export default function EventForm({
                 Yes, delete
               </Button>
             ) : (
-              <>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  onClick={() => setConfirmDelete(true)}
-                  disabled={busy}
-                >
-                  Delete
-                </Button>
-                {reminded ? (
-                  <span className="text-[13px] font-bold text-green-ink">{reminded}</span>
-                ) : (
-                  <Button type="button" variant="ghost" onClick={() => void remind()} disabled={busy} title="Send the Discord reminder for this session now. The scheduled one is then skipped.">
-                    Send reminder
-                  </Button>
-                )}
-              </>
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => setConfirmDelete(true)}
+                disabled={busy}
+              >
+                Delete
+              </Button>
             ))}
           <div className="flex-1" />
           <Button

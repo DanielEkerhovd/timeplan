@@ -8,7 +8,7 @@
 //   * cancelled: the people who had said yes. Nobody had? Then nobody planned
 //     for it, and nobody is pinged.
 
-import { dayName, localToInstant, unix } from './time'
+import { dayName, isoWeek, localToInstant, unix, weekRangeLabel } from './time'
 import { ACCENT, COMPONENTS_V2, GATHER_GREEN, WIDTH } from './message'
 
 export interface Snapshot {
@@ -137,6 +137,39 @@ export function buildUpdateCard(row: OutboxRow, tz: string, people: string[], dm
     blocks.push({ type: 10, content: `## Update\n${WIDTH}` })
   }
   return wrap(accent, blocks, audience)
+}
+
+export interface Missing {
+  name: string
+  discord_id: string | null
+}
+
+/**
+ * The nudge: next week is open and some of the team have not marked a single
+ * hour. Names the ones missing (a ping where we have a Discord account, plain
+ * text where we do not) and links into the app. In a DM it is written to the
+ * one person, with no mentions at all.
+ */
+export function buildNudgeCard(o: { weekStart: string; missing: Missing[]; total: number; appUrl: string; team: string }, dm?: boolean): Record<string, unknown> {
+  const ids = o.missing.map((m) => m.discord_id).filter((x): x is string => Boolean(x))
+  const audience: Audience = dm ? silent : forPeople(ids)
+  const answered = o.total - o.missing.length
+  const week = `Week ${isoWeek(o.weekStart).week} · ${weekRangeLabel(o.weekStart)}`
+  const lines = dm
+    ? [`## Your times for next week`, `-# ${o.team}`, week, 'You have not marked any hours yet. Tap the blocks you can make, and the team can plan around you.']
+    : [`## Next week needs your times`, week]
+  if (!dm) {
+    // A ping for those we can reach; the rest by name, so the list is complete.
+    const named = o.missing.filter((m) => !m.discord_id).map((m) => m.name)
+    const who = [...ids.map((id) => `<@${id}>`), ...named].join(' ')
+    if (who) lines.push(who)
+    lines.push(`-# ${answered} of ${o.total} have marked their week`)
+  }
+  const blocks: Record<string, unknown>[] = [
+    { type: 10, content: `${lines.join('\n')}\n${WIDTH}` },
+    { type: 1, components: [{ type: 2, style: 5, label: 'Mark your week', url: o.appUrl }] },
+  ]
+  return wrap(GATHER_GREEN, blocks, audience)
 }
 
 /**

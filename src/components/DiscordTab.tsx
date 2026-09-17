@@ -157,7 +157,7 @@ function NotConnected({ team, isOwner, onConnect, error }: { team: MyTeam; isOwn
         <div className="grid gap-3.5 sm:grid-cols-3">
           <Feature label="Week plan">One message with the whole week, pinned, edited in place when something changes. Reposted with a ping every new week.</Feature>
           <Feature label="Updates">New, moved or cancelled sessions in the posted week, with Join and Can&rsquo;t right on the message.</Feature>
-          <Feature label="Reminders">A nudge to fill in next week, and a heads-up on the day of a session. Comes in the next round.</Feature>
+          <Feature label="Reminders">A nudge for anyone who has not marked next week, and a heads-up before a session to the people who said yes.</Feature>
         </div>
         <p className="px-1 text-[13px] text-muted">Availability never leaves the app. The bot only ever posts what is booked.</p>
       </Card>
@@ -1147,9 +1147,16 @@ function SendsCard({ team, state, run }: { team: MyTeam; state: DiscordState; ru
         <Dropdown look="pill" value={s.post_dow} options={DOW_OPTIONS} search={false} onChange={(v) => save({ post_dow: v })} />
         <Dropdown look="pill" value={shortTime(s.post_at)} options={TIME_OPTIONS} search={false} onChange={(v) => save({ post_at: v })} />
       </SendRow>
-      <SendRow title="Nudge for next week" sub="For anyone who hasn't filled in their times yet. Next round." on={s.nudge_enabled} onToggle={(v) => save({ nudge_enabled: v })}>
+      <SendRow
+        title="Nudge for next week"
+        sub="To anyone who hasn\u2019t marked a single hour for next week. Once a week, and not at all if everyone has answered."
+        on={s.nudge_enabled}
+        onToggle={(v) => save({ nudge_enabled: v })}
+      >
         <Dropdown look="pill" value={s.nudge_dow} options={DOW_OPTIONS} search={false} onChange={(v) => save({ nudge_dow: v })} />
         <Dropdown look="pill" value={shortTime(s.nudge_at)} options={TIME_OPTIONS} search={false} onChange={(v) => save({ nudge_at: v })} />
+        <Dropdown look="pill" value={s.nudge_mode ?? "channel"} options={MODE_OPTIONS} search={false} onChange={(v) => save({ nudge_mode: v })} />
+        <NudgeNow team={team} />
       </SendRow>
       <SendRow
         title="New and changed sessions"
@@ -1165,6 +1172,30 @@ function SendsCard({ team, state, run }: { team: MyTeam; state: DiscordState; ru
       </SendRow>
       <p className="mt-auto text-[13px] text-muted">Times are in the team&rsquo;s zone, {team.timezone}.</p>
     </Card>
+  );
+}
+
+/**
+ * "Send it now" for the nudge. The real thing, to real people, so it says who
+ * it reached; the scheduled one for that week is then skipped.
+ */
+function NudgeNow({ team }: { team: MyTeam }) {
+  const [busy, setBusy] = useState(false);
+  const [said, setSaid] = useState<string | null>(null);
+  if (said) return <span className="self-center text-[12.5px] font-bold text-green-ink">{said}</span>;
+  return (
+    <Pill
+      disabled={busy}
+      onClick={() => {
+        setBusy(true);
+        tryAction(team.id, "nudge_now")
+          .then((r) => setSaid(`Asked ${r.missing ?? 0} player${r.missing === 1 ? "" : "s"}.`))
+          .catch((err) => setSaid(explain(err)))
+          .finally(() => setBusy(false));
+      }}
+    >
+      {busy ? "Sending\u2026" : "Send now"}
+    </Pill>
   );
 }
 
