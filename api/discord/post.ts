@@ -20,7 +20,7 @@ export default function handler(req: Request): Promise<Response> {
     if (req.method !== 'POST') throw new HttpError(405, 'method not allowed')
     const body = (await req.json().catch(() => ({}))) as { team?: string; action?: string; which?: string; event_id?: string }
     const teamId = body.team ?? ''
-    // "Send a reminder now" belongs to whoever books sessions: owner or coach.
+    // "Send a reminder now" belongs to whoever books sessions: owner or admin.
     // Everything else here is the owner's.
     if (body.action === 'remind') {
       await requireEditor(req, teamId)

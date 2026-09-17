@@ -8,7 +8,7 @@
 //   * cancelled: the people who had said yes. Nobody had? Then nobody planned
 //     for it, and nobody is pinged.
 
-import { dayName, isoWeek, localToInstant, unix, weekRangeLabel } from './time'
+import { isoWeek, localToInstant, unix, weekRangeLabel } from './time'
 import { ACCENT, COMPONENTS_V2, GATHER_GREEN, WIDTH } from './message'
 
 export interface Snapshot {
@@ -72,10 +72,15 @@ function standing(people: string[], me: string, tone: 'new' | 'changed'): string
   return others ? `${others} in so far` : 'Nobody has answered yet'
 }
 
+/**
+ * When a session is, in the reader's own clock and calendar. `F` is Discord's
+ * full stamp — "Tuesday, 15 September 2026 20:00" — so a card that arrives a day
+ * early still says which day it is about, not just "Tuesday".
+ */
 function when(s: Snapshot, tz: string): string {
   const a = unix(localToInstant(s.date, s.start_hour, 0, tz))
   const b = unix(localToInstant(s.date, s.end_hour, 0, tz))
-  return `**${dayName(s.date)}** <t:${a}:t> – <t:${b}:t>`
+  return `<t:${a}:F> – <t:${b}:t>`
 }
 
 const sameTime = (a: Snapshot, b: Snapshot) => a.date === b.date && a.start_hour === b.start_hour && a.end_hour === b.end_hour
@@ -181,8 +186,10 @@ export function buildReminderCard(s: Snapshot, tz: string, people: string[], tod
   const audience = dm ? silent : forPeople(people)
   const start = unix(localToInstant(s.date, s.start_hour, 0, tz))
   const heading = `## Reminder · ${title(s)}`
-  const dayWord = s.date === today ? 'Today' : `**${dayName(s.date)}**`
-  let line = `${dayWord} <t:${start}:t> · starts <t:${start}:R>`
+  // The full date, always: a reminder can land a day or more ahead, and
+  // "Tuesday 18:00" on its own does not say which Tuesday.
+  const day = s.date === today ? '**Today** · ' : ''
+  let line = `${day}${when(s, tz)}\nstarts <t:${start}:R>`
   if (dm) line = `-# ${dm.team}\n${line}\n${standing(people, dm.me, 'changed')}`
   else if (audience.line) line += `\n${audience.line}`
   const blocks: Record<string, unknown>[] = [

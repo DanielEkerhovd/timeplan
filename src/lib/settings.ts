@@ -13,6 +13,15 @@ export async function fetchMembers(teamId: string): Promise<MemberWithProfile[]>
 }
 
 /** Your own display name in every team. Empty = back to the Discord name. */
+/** Turn the bot's DMs to you off or on. Channel messages are not affected. */
+export async function setDmOptOut(off: boolean) {
+  const { data } = await supabase.auth.getUser()
+  const uid = data.user?.id
+  if (!uid) throw new Error('signed out')
+  const { error } = await supabase.from('profiles').update({ dm_opt_out: off }).eq('user_id', uid)
+  if (error) throw error
+}
+
 export async function setDisplayName(name: string | null) {
   const { error } = await supabase.rpc('set_display_name', { new_name: name })
   if (error) throw error

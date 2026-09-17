@@ -879,6 +879,39 @@ select pg_temp.expect_count('en Discord nekter DM til, hoppes over for DM',
 select pg_temp.expect_count('men står fortsatt i lista for kanalping',
   format('select 1 from jsonb_array_elements_text(public.discord_team_people(%L, false)) x where x = ''111111111111111111''', :'team_a'), 1);
 
+-- «Ikke send meg DM» (0025): spilleren styrer sin egen, og står fortsatt i kanallista.
+update public.profiles set dm_blocked_at = null where user_id = :'eier_a';
+select pg_temp.become(:'eier_a');
+set local role authenticated;
+select pg_temp.expect_ok('du skrur av DM selv',
+  format('update public.profiles set dm_opt_out = true where user_id = %L', :'eier_a'));
+select pg_temp.expect_ok('forsøk på å skru av DM for en annen treffer ingen rader',
+  format('update public.profiles set dm_opt_out = true where user_id = %L', :'spiller_a'));
+reset role;
+select pg_temp.expect_count('den andre er urørt',
+  format('select 1 from public.profiles where user_id = %L and not dm_opt_out', :'spiller_a'), 1);
+select pg_temp.expect_count('den som har sagt nei får ikke DM',
+  format('select 1 from jsonb_array_elements_text(public.discord_team_people(%L, true)) x where x = ''111111111111111111''', :'team_a'), 0);
+select pg_temp.expect_count('men får fortsatt ping i kanalen',
+  format('select 1 from jsonb_array_elements_text(public.discord_team_people(%L, false)) x where x = ''111111111111111111''', :'team_a'), 1);
+update public.profiles set dm_opt_out = false where user_id = :'eier_a';
+
+-- Rolla følger medlemskapet (0025): går du ut, legges det i køen.
+update public.discord_links set ping_mode = 'role', ping_role_id = '700000000000000055', managed_role = true where team_id = :'team_a';
+update public.profiles set discord_id = '999999999999999999' where user_id = :'fremmed_b';
+insert into public.members (team_id, user_id, role) values (:'team_a', :'fremmed_b', 'member');
+select pg_temp.expect_count('ingenting i køen så lenge du er med', 'select * from public.discord_role_queue', 0);
+delete from public.members where team_id = :'team_a' and user_id = :'fremmed_b';
+select pg_temp.expect_count('å gå ut legger rollen i køen',
+  format('select 1 from public.discord_role_queue where team_id = %L and discord_id = ''999999999999999999'' and role_id = ''700000000000000055''', :'team_a'), 1);
+select pg_temp.become(:'eier_a');
+set local role authenticated;
+select pg_temp.expect_denied('køen er serverens alene', 'select * from public.discord_role_queue');
+reset role;
+delete from public.discord_role_queue where team_id = :'team_a';
+update public.profiles set discord_id = null where user_id = :'fremmed_b';
+update public.discord_links set ping_mode = 'members', ping_role_id = null, managed_role = false where team_id = :'team_a';
+
 -- Purring (0024): eieren velger måte, men boka og utvalget er serverens.
 select pg_temp.become(:'eier_a');
 set local role authenticated;

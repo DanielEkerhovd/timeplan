@@ -112,15 +112,15 @@ export async function requireOwner(req: Request, teamId: string): Promise<{ id: 
   return user
 }
 
-/** Owner or coach: the people who book sessions. Same mechanics as requireOwner. */
+/** Owner or admin: the people who book sessions (0010 renamed coach → admin). Same mechanics as requireOwner. */
 export async function requireEditor(req: Request, teamId: string): Promise<{ id: string; token: string }> {
   if (!/^[0-9a-f-]{36}$/i.test(teamId)) throw new HttpError(400, 'bad team id')
   const user = await requireUser(req)
-  const res = await fetch(url('members', { select: 'role', team_id: `eq.${teamId}`, user_id: `eq.${user.id}`, role: 'in.(owner,coach)' }), {
+  const res = await fetch(url('members', { select: 'role', team_id: `eq.${teamId}`, user_id: `eq.${user.id}`, role: 'in.(owner,admin)' }), {
     headers: headers(user.token),
   })
   const rows = await read<{ role: string }[]>(res, 'members')
-  if (rows.length === 0) throw new HttpError(403, 'only the owner or a coach can do this')
+  if (rows.length === 0) throw new HttpError(403, 'only the owner or an admin can do this')
   return user
 }
 

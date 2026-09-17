@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
-import { refreshDiscordName, setDisplayName } from '../lib/settings'
+import { refreshDiscordName, setDisplayName, setDmOptOut } from '../lib/settings'
 import { friendlyError, type Profile } from '../lib/types'
-import { Avatar, Button, CloseButton, ErrorText, Input, Label, Modal, useToast } from './ui'
+import { Avatar, Button, CloseButton, ErrorText, Input, Label, Modal, Toggle, useToast } from './ui'
 
 interface Props {
   profile: Profile | null
@@ -21,6 +21,7 @@ export default function ProfileModal({ profile, avatarUrl, onClose, onSaved }: P
   // innlogging, så vi spør på nytt når dialogen åpnes.
   const [discord, setDiscord] = useState(profile?.discord_name ?? null)
   const [busy, setBusy] = useState(false)
+  const [dmOff, setDmOff] = useState(profile?.dm_opt_out ?? false)
   const [error, setError] = useState<string | null>(null)
   const toast = useToast()
   // Discord-navnet, men bare når det faktisk er et annet navn enn det du heter nå.
@@ -104,6 +105,30 @@ export default function ProfileModal({ profile, avatarUrl, onClose, onSaved }: P
               </>
             )}
           </span>
+        </div>
+
+        {/* Boten sin DM, av eller på. Lagres med en gang, som sone og tema —
+            det er en bryter, ikke noe du skal trykke Lagre for. */}
+        <div className="flex items-center justify-between gap-4 rounded-[14px] bg-bg p-3.5">
+          <div className="flex flex-col gap-0.5">
+            <span className="text-[14px] font-extrabold">Direct messages from the bot</span>
+            <span className="text-[13px] leading-snug text-muted">
+              {dmOff ? 'Off. You still get the pings in the channel.' : 'Reminders and changes land in your Discord inbox.'}
+            </span>
+          </div>
+          <Toggle
+            on={!dmOff}
+            label="Direct messages from the bot"
+            onChange={(on) => {
+              setDmOff(!on)
+              setDmOptOut(!on)
+                .then(() => toast(on ? 'DMs on' : 'DMs off'))
+                .catch((err) => {
+                  setDmOff(on)
+                  setError(friendlyError(err))
+                })
+            }}
+          />
         </div>
 
         <ErrorText>{error}</ErrorText>

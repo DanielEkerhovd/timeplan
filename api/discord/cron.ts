@@ -23,6 +23,8 @@
 //
 //   5. The nudge. On the team's chosen weekday and time, whoever has not
 //      marked a single hour for next week is asked to (nudge.ts).
+//
+//   6. The team role, taken back off whoever left the team (roleQueue.ts).
 
 export const config = { runtime: 'edge' }
 
@@ -34,6 +36,7 @@ import { ensureWeekPost } from '../_lib/week'
 import { drainOutbox } from '../_lib/updates'
 import { sendReminders } from '../_lib/reminders'
 import { sendNudges } from '../_lib/nudge'
+import { drainRoleQueue } from '../_lib/roleQueue'
 import { sameSecret } from '../_lib/crypto'
 import { leaveOrphanGuilds } from '../_lib/discord'
 
@@ -61,7 +64,7 @@ export default async function handler(req: Request): Promise<Response> {
   }
 
   const schedules = await db.select<DiscordSchedule>('discord_schedules', {})
-  if (schedules.length === 0) return json({ teams: 0, orphans })
+  if (schedules.length === 0) return json({ teams: 0, orphans, roles: await drainRoleQueue().catch(() => ({})) })
   const teams = await db.select<TeamRow>('teams', { select: 'id,timezone', id: `in.(${schedules.map((s) => s.team_id).join(',')})` })
   const posts = await db.select<WeekPost>('discord_week_post', {})
 
@@ -106,5 +109,12 @@ export default async function handler(req: Request): Promise<Response> {
   } catch (err) {
     nudges = { error: err instanceof Error ? err.message : String(err) }
   }
-  return json({ teams: schedules.length, out, updates, reminders, nudges, orphans })
+  // 6. The team role, off whoever left.
+  let roles: Record<string, string> = {}
+  try {
+    roles = await drainRoleQueue()
+  } catch (err) {
+    roles = { error: err instanceof Error ? err.message : String(err) }
+  }
+  return json({ teams: schedules.length, out, updates, reminders, nudges, roles, orphans })
 }

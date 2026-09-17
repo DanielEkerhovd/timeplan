@@ -69,6 +69,8 @@ export interface Profile {
   custom_name: boolean;
   /** Your own zone, used only to explain the team's times. Null until we know it. */
   timezone: string | null;
+  /** You asked the bot not to DM you. Channel pings still reach you. */
+  dm_opt_out: boolean;
 }
 
 export interface MemberWithProfile extends Member {
