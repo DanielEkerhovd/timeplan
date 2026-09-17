@@ -5,11 +5,11 @@ export const config = { runtime: 'edge' }
 
 import { discord, explain, leaveGuild } from '../_lib/discord'
 import { env, guard, HttpError, json } from '../_lib/env'
-import { db, log, requireEditor, requireOwner, throttle } from '../_lib/supabase'
+import { db, log, requireEditor, requireOwner, requireUser, throttle } from '../_lib/supabase'
 import type { DiscordChannel, DiscordLink, DiscordSchedule, WeekPost } from '../_lib/supabase'
 import { addDays, localNow, mondayOf } from '../_lib/time'
 import { buildWeekMessage, COMPONENTS_V2, ensureWeekPost, fetchBotWeek } from '../_lib/week'
-import { buildUpdateCard, drainOutbox, updatesChannel } from '../_lib/updates'
+import { buildUpdateCard, drainOutbox } from '../_lib/updates'
 import { buildReminderCard } from '../_lib/updateCard'
 import { remindNow } from '../_lib/reminders'
 import { nudgeNow } from '../_lib/nudge'
@@ -29,6 +29,9 @@ export default function handler(req: Request): Promise<Response> {
       if (!/^[0-9a-f-]{36}$/i.test(eventId)) throw new HttpError(400, 'bad event id')
       return json(await remindNow(teamId, eventId))
     }
+    // Any signed-in person can ask the bot to DM them. It reaches only their
+    // own inbox, so there is nothing here to gate on a team or a role.
+    if (body.action === 'my_dm') return json(await myDm(req))
     const user = await requireOwner(req, teamId)
     const link = await db.one<DiscordLink>('discord_links', { team_id: `eq.${teamId}` })
     if (!link) throw new HttpError(409, 'not connected')
@@ -37,17 +40,33 @@ export default function handler(req: Request): Promise<Response> {
     if (body.action === 'test') return json(await test(teamId))
     if (body.action === 'test_dm') return json(await testDm(teamId, user.id, link))
     if (body.action === 'post') return json(await postNow(teamId, body.which === 'next' ? 'next' : 'this'))
-    if (body.action === 'preview') return json(await preview(teamId, user.id))
-    if (body.action === 'sample_change') return json(await sampleChange(teamId, user.id))
-    if (body.action === 'sample_reminder') return json(await sampleReminder(teamId, user.id))
+    if (body.action === 'self_check') return json(await selfCheck(teamId, user.id))
     if (body.action === 'nudge_now') return json(await nudgeNow(teamId))
     if (body.action === 'outbox_send') return json(await outboxSend(teamId, body.outbox_id))
     if (body.action === 'outbox_cancel') return json(await outboxCancel(teamId, body.outbox_id))
     if (body.action === 'flush') return json(await flush(teamId))
-    if (body.action === 'ping_me') return json(await pingMe(teamId, user.id, link))
     if (body.action === 'disconnect') return json(await disconnect(teamId, link))
     throw new HttpError(400, 'unknown action')
   })
+}
+
+/**
+ * "Can the bot reach me?" from a person's own profile. Discord's DM privacy
+ * setting is per person and fails silently, so the player who is missing
+ * messages needs to be able to check it themselves.
+ */
+async function myDm(req: Request) {
+  const user = await requireUser(req)
+  const me = await ownDiscordId(user.id)
+  try {
+    await dm(me, {
+      flags: COMPONENTS_V2,
+      components: [{ type: 17, components: [{ type: 10, content: "## The bot can reach you\nReminders and changes will land here.\n-# Sent from your profile in Gather" }] }],
+    })
+  } catch (err) {
+    throw new HttpError(409, explain(err))
+  }
+  return { ok: true }
 }
 
 /** The owner's Discord id, or a clear error when the profile has none yet. */
@@ -77,94 +96,39 @@ function markTest(msg: Record<string, unknown>): Record<string, unknown> {
   return { ...msg, components: comps }
 }
 
-/** The week plan as it looks right now, to the owner's DMs only. Nobody else sees a thing. */
-async function preview(teamId: string, userId: string) {
+
+/**
+ * Everything the bot sends, to the owner's own DMs: the week as it stands, a
+ * made-up change, a made-up reminder. Nothing is posted where the team reads —
+ * a fake "Moved · Scrim vs Sample FC" in the updates channel is noise somebody
+ * has to scroll past and wonder about.
+ */
+async function selfCheck(teamId: string, userId: string) {
   const me = await ownDiscordId(userId)
-  const team = await db.one<{ timezone: string }>('teams', { id: `eq.${teamId}`, select: 'timezone' })
+  const team = await db.one<{ timezone: string; name: string }>('teams', { id: `eq.${teamId}`, select: 'timezone,name' })
   if (!team) throw new HttpError(404, 'team not found')
-  const week = await fetchBotWeek(teamId, mondayOf(localNow(team.timezone).dateKey))
-  if (!week) throw new HttpError(404, 'team not found')
-  try {
-    await dm(me, markTest(buildWeekMessage(week, { ping: null, link: null, appUrl: env.appUrl() })))
-  } catch (err) {
-    throw new HttpError(409, explain(err))
-  }
-  await log(teamId, 'test', 'Week plan preview sent as a DM', true)
-  return { ok: true }
-}
-
-/**
- * A made-up "Moved" card, delivered the way changes are set to go: the channel,
- * a DM to the owner, or both. Real sessions are not touched, and only the
- * owner is mentioned.
- */
-async function sampleChange(teamId: string, userId: string) {
-  const me = await ownDiscordId(userId)
-  const [team, schedule, channel] = await Promise.all([
-    db.one<{ timezone: string; name: string }>('teams', { id: `eq.${teamId}`, select: 'timezone,name' }),
-    db.one<DiscordSchedule>('discord_schedules', { team_id: `eq.${teamId}` }),
-    updatesChannel(teamId),
-  ])
-  if (!team || !schedule) throw new HttpError(404, 'team not found')
-  if (!channel) throw new HttpError(409, 'Pick a channel first.')
   const today = localNow(team.timezone).dateKey
+  const week = await fetchBotWeek(teamId, mondayOf(today))
+
   const before = { id: 'sample', date: addDays(today, 1), start_hour: 20, end_hour: 23, title: 'Scrim', opponent: 'Sample FC', color: 'yellow' }
-  const row: OutboxRow = { id: 0, team_id: teamId, kind: 'changed', event_id: '00000000-0000-4000-8000-000000000000', payload: { before, after: { ...before, date: addDays(today, 2) } }, send_after: '', attempts: 0, sent_at: null, message_id: null }
-  const card = markTest(buildUpdateCard(row, team.timezone, [me]))
-  const mode = schedule.updates_mode
-  const where: string[] = []
+  const moved: OutboxRow = { id: 0, team_id: teamId, kind: 'changed', event_id: '00000000-0000-4000-8000-000000000000', payload: { before, after: { ...before, date: addDays(today, 2) } }, send_after: '', attempts: 0, sent_at: null, message_id: null }
+  const soon = { id: '00000000-0000-4000-8000-000000000000', date: today, start_hour: 20, end_hour: 23, title: 'Scrim', opponent: 'Sample FC', color: 'yellow' }
+
+  const cards: Record<string, unknown>[] = []
+  if (week) cards.push(markTest(buildWeekMessage(week, { ping: null, link: null, appUrl: env.appUrl() })))
+  cards.push(markTest(buildUpdateCard(moved, team.timezone, [me], { team: team.name, me })))
+  cards.push(markTest(buildReminderCard(soon, team.timezone, [me], today, { team: team.name, me })))
+
   try {
-    if (mode === 'channel' || mode === 'both') {
-      await discord('POST', `/channels/${channel}/messages`, card)
-      where.push('channel')
-    }
-    if (mode === 'dm' || mode === 'both') {
-      await dm(me, markTest(buildUpdateCard(row, team.timezone, [me], { team: team.name, me })))
-      where.push('DM')
-    }
+    for (const c of cards) await dm(me, c)
   } catch (err) {
     throw new HttpError(409, explain(err))
   }
-  await log(teamId, 'test', `Sample change sent (${where.join(' + ')})`, true)
-  return { ok: true, where }
+  await log(teamId, 'test', `Check sent as ${cards.length} DMs`, true)
+  return { ok: true, sent: cards.length }
 }
 
-/**
- * A made-up reminder for a session "tonight", delivered the way reminders are
- * set to go. Only the owner is mentioned; the buttons are dropped (there is no
- * session behind it) and the test line added.
- */
-async function sampleReminder(teamId: string, userId: string) {
-  const me = await ownDiscordId(userId)
-  const [team, schedule, link, channels] = await Promise.all([
-    db.one<{ timezone: string; name: string }>('teams', { id: `eq.${teamId}`, select: 'timezone,name' }),
-    db.one<DiscordSchedule>('discord_schedules', { team_id: `eq.${teamId}` }),
-    db.one<DiscordLink>('discord_links', { team_id: `eq.${teamId}` }),
-    db.select<DiscordChannel>('discord_channels', { team_id: `eq.${teamId}` }),
-  ])
-  if (!team || !schedule || !link) throw new HttpError(404, 'team not found')
-  const pick = (k: DiscordChannel['kind']) => channels.find((c) => c.kind === k)?.channel_id
-  const channel = pick('reminders') ?? pick('updates') ?? pick('schedule')
-  if (!channel) throw new HttpError(409, 'Pick a channel first.')
-  const today = localNow(team.timezone).dateKey
-  const snap = { id: '00000000-0000-4000-8000-000000000000', date: today, start_hour: 20, end_hour: 23, title: 'Scrim', opponent: 'Sample FC', color: 'yellow' }
-  const mode = schedule.same_day_mode
-  const where: string[] = []
-  try {
-    if (mode === 'channel' || mode === 'both') {
-      await discord('POST', `/channels/${channel}/messages`, markTest(buildReminderCard(snap, team.timezone, [me], today)))
-      where.push('channel')
-    }
-    if (mode === 'dm' || mode === 'both') {
-      await dm(me, markTest(buildReminderCard(snap, team.timezone, [me], today, { team: team.name, me })))
-      where.push('DM')
-    }
-  } catch (err) {
-    throw new HttpError(409, explain(err))
-  }
-  await log(teamId, 'test', `Sample reminder sent (${where.join(' + ')})`, true)
-  return { ok: true, where }
-}
+
 
 /** One queued change, sent now instead of waiting out its two minutes. */
 async function outboxSend(teamId: string, id?: number) {
@@ -223,29 +187,6 @@ async function flush(teamId: string) {
   return { week, sent, errors, why, detail: updates }
 }
 
-/** A card that mentions only the owner, in the updates channel. Proves the mention renders and notifies. */
-async function pingMe(teamId: string, userId: string, link: DiscordLink) {
-  const me = await ownDiscordId(userId)
-  const channel = await updatesChannel(teamId)
-  if (!channel) throw new HttpError(409, 'Pick a channel first.')
-  try {
-    await discord('POST', `/channels/${channel}/messages`, {
-      flags: COMPONENTS_V2,
-      components: [
-        {
-          type: 17,
-          accent_color: 0x3e9a63,
-          components: [{ type: 10, content: `**Ping test**\n<@${me}>\n-# Only you were mentioned. When the bot pings ${link.ping_mode === 'role' ? 'the team role' : 'the team'}, everyone on it gets this.` }],
-        },
-      ],
-      allowed_mentions: { parse: [], users: [me] },
-    })
-  } catch (err) {
-    throw new HttpError(409, explain(err))
-  }
-  await log(teamId, 'test', 'Ping test sent', true)
-  return { ok: true }
-}
 
 async function test(teamId: string) {
   const [team, channels] = await Promise.all([

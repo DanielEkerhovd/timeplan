@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { refreshDiscordName, setDisplayName, setDmOptOut } from '../lib/settings'
+import { DiscordApiError, sendMyDmTest } from '../lib/discord'
 import { friendlyError, type Profile } from '../lib/types'
 import { Avatar, Button, CloseButton, ErrorText, Input, Label, Modal, Toggle, useToast } from './ui'
 
@@ -22,6 +23,7 @@ export default function ProfileModal({ profile, avatarUrl, onClose, onSaved }: P
   const [discord, setDiscord] = useState(profile?.discord_name ?? null)
   const [busy, setBusy] = useState(false)
   const [dmOff, setDmOff] = useState(profile?.dm_opt_out ?? false)
+  const [dmTest, setDmTest] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const toast = useToast()
   // Discord-navnet, men bare når det faktisk er et annet navn enn det du heter nå.
@@ -130,6 +132,23 @@ export default function ProfileModal({ profile, avatarUrl, onClose, onSaved }: P
             }}
           />
         </div>
+        {/* Discord kan blokkere botens DM-er uten å si fra, og det er per person.
+            Da må hver enkelt kunne sjekke sin egen innboks. */}
+        {!dmOff && (
+          <button
+            type="button"
+            disabled={busy || dmTest !== null}
+            onClick={() => {
+              setDmTest('…')
+              sendMyDmTest()
+                .then(() => setDmTest('Sent. Check your Discord inbox.'))
+                .catch((err) => setDmTest(err instanceof DiscordApiError ? err.message : friendlyError(err)))
+            }}
+            className="-mt-2 self-start px-1 text-[13px] font-semibold text-muted underline-offset-2 hover:text-ink hover:underline disabled:opacity-50"
+          >
+            {dmTest ?? 'Can the bot reach me?'}
+          </button>
+        )}
 
         <ErrorText>{error}</ErrorText>
 

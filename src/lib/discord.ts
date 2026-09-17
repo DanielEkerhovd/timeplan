@@ -220,6 +220,14 @@ export function sendTestMessage(teamId: string) {
   });
 }
 
+/** "Can the bot reach me?" — any signed-in person, their own inbox, no team needed. */
+export function sendMyDmTest() {
+  return api<{ ok: true }>("/api/discord/post", {
+    method: "POST",
+    body: JSON.stringify({ action: "my_dm" }),
+  });
+}
+
 export function sendTestDm(teamId: string) {
   return api<{ ok: true }>("/api/discord/post", {
     method: "POST",
@@ -228,7 +236,7 @@ export function sendTestDm(teamId: string) {
 }
 
 /** One of the try-it-out actions on the Discord tab. All owner-only, all answered with a plain message. */
-export function tryAction(teamId: string, action: "preview" | "sample_change" | "sample_reminder" | "nudge_now" | "flush" | "ping_me") {
+export function tryAction(teamId: string, action: "self_check" | "nudge_now" | "flush") {
   return api<{ ok?: boolean; where?: string[]; week?: string; sent?: number | string; errors?: number; missing?: number; why?: string }>("/api/discord/post", {
     method: "POST",
     body: JSON.stringify({ team: teamId, action }),

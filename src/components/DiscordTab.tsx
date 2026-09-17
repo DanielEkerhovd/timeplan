@@ -772,8 +772,8 @@ function Connected({ team, state, isOwner, run, error, onRerun }: { team: MyTeam
             <Eyebrow>Activity</Eyebrow>
           </div>
           {isOwner && (problems.length > 0 || health.failed) && <ProblemsCard health={health} problems={problems} />}
-          {isOwner && <TryCard team={team} run={run} />}
           <LogCard state={state} last={last} isOwner={isOwner} run={run} />
+          {isOwner && <TryCard team={team} run={run} />}
         </div>
       </div>
 
@@ -886,55 +886,33 @@ function TryCard({ team, run }: { team: MyTeam; run: Run }) {
       .finally(() => setBusy(null));
   }
 
+  // Three rows, all safe: nothing here posts into a channel the team reads.
+  // Wiring a fresh setup up is the job of the wizard's own test step.
   const rows: { group: string; items: { key: string; label: string; hint: string; fn: () => Promise<string> }[] }[] = [
     {
-      group: "Week plan",
+      group: "Check it works",
       items: [
         {
-          key: "post",
-          label: "Post or refresh now",
-          hint: "In the week-plan channel, for everyone.",
+          key: "check",
+          label: "Send me a full check",
+          hint: "The week as it stands, a sample change and a sample reminder \u2014 all to your DMs, marked as a test. Nothing lands in the team\u2019s channels.",
           fn: async () => {
-            const r = await postWeekNow(team.id, "this");
-            if (r.action === "skipped") throw new DiscordApiError(r.detail ?? "Nothing to post");
-            return r.action === "posted" ? "Posted and pinned." : r.action === "edited" ? "Refreshed." : "Already up to date.";
+            const r = await tryAction(team.id, "self_check");
+            return `Sent ${r.sent ?? 0} messages to your DMs.`;
           },
         },
         {
-          key: "preview",
-          label: "Send me a preview",
-          hint: "The week plan as a DM to you only.",
+          key: "dm",
+          label: "Send me a test DM",
+          hint: "One line, to check Discord lets the bot into your inbox.",
           fn: async () => {
-            await tryAction(team.id, "preview");
+            await sendTestDm(team.id);
             return "Sent to your DMs.";
-          },
-        },
-      ],
-    },
-    {
-      group: "Changes",
-      items: [
-        {
-          key: "sample",
-          label: "Send a sample change",
-          hint: "A made-up “Moved” card, delivered the way changes are set to go.",
-          fn: async () => {
-            const r = await tryAction(team.id, "sample_change");
-            return `Sent (${(r.where ?? []).join(" + ")}).`;
-          },
-        },
-        {
-          key: "sample_reminder",
-          label: "Send a sample reminder",
-          hint: "A made-up reminder for a session tonight, delivered the way reminders are set to go. Only you are mentioned.",
-          fn: async () => {
-            const r = await tryAction(team.id, "sample_reminder");
-            return `Sent (${(r.where ?? []).join(" + ")}).`;
           },
         },
         {
           key: "flush",
-          label: "Send what’s waiting now",
+          label: "Send what\u2019s waiting now",
           hint: "Runs the clock for this team instead of waiting up to five minutes.",
           fn: async () => {
             const r = await tryAction(team.id, "flush");
@@ -946,45 +924,12 @@ function TryCard({ team, run }: { team: MyTeam; run: Run }) {
         },
       ],
     },
-    {
-      group: "Pings and DMs",
-      items: [
-        {
-          key: "ping",
-          label: "Ping me",
-          hint: "A card in the updates channel that mentions only you.",
-          fn: async () => {
-            await tryAction(team.id, "ping_me");
-            return "Sent. You should have a notification.";
-          },
-        },
-        {
-          key: "dm",
-          label: "Send me a test DM",
-          hint: "Shows what players see, and whether Discord lets DMs through.",
-          fn: async () => {
-            await sendTestDm(team.id);
-            return "Sent to your DMs.";
-          },
-        },
-        {
-          key: "channels",
-          label: "Post a test card in each channel",
-          hint: "Confirms the bot can write where you pointed it.",
-          fn: async () => {
-            const r = await sendTestMessage(team.id);
-            if (r.failed.length) throw new DiscordApiError(r.failed.map((f) => f.reason).join(" "));
-            return `Sent to ${r.sent} channel${r.sent === 1 ? "" : "s"}.`;
-          },
-        },
-      ],
-    },
   ];
 
   // A plain list: one row per action, no boxes inside the card. The hint sits
   // under the name and gives way to the result once the action has run.
   return (
-    <Card className="flex flex-col gap-3">
+    <Card className="flex flex-1 flex-col gap-3">
       <div className="flex items-baseline justify-between gap-3">
         <h3 className="text-[15px] font-extrabold">Try it out</h3>
         <span className="text-[12px] text-muted">Only you, or marked as a test</span>
@@ -1148,6 +1093,7 @@ function SendsCard({ team, state, run }: { team: MyTeam; state: DiscordState; ru
       <SendRow title="Week plan" sub="Posted once a week, then kept up to date." on={s.post_enabled} onToggle={(v) => save({ post_enabled: v })}>
         <Dropdown look="pill" value={s.post_dow} options={DOW_OPTIONS} search={false} onChange={(v) => save({ post_dow: v })} />
         <Dropdown look="pill" value={shortTime(s.post_at)} options={TIME_OPTIONS} search={false} onChange={(v) => save({ post_at: v })} />
+        <PostNow team={team} />
       </SendRow>
       <SendRow
         title="Nudge for next week"
@@ -1174,6 +1120,30 @@ function SendsCard({ team, state, run }: { team: MyTeam; state: DiscordState; ru
       </SendRow>
       <p className="mt-auto text-[13px] text-muted">Times are in the team&rsquo;s zone, {team.timezone}.</p>
     </Card>
+  );
+}
+
+/**
+ * Put the week up now rather than waiting for the chosen evening. A real thing
+ * a captain does, so it lives with the setting and not among the tests.
+ */
+function PostNow({ team }: { team: MyTeam }) {
+  const [busy, setBusy] = useState(false);
+  const [said, setSaid] = useState<string | null>(null);
+  if (said) return <span className="self-center text-[12.5px] font-bold text-green-ink">{said}</span>;
+  return (
+    <Pill
+      disabled={busy}
+      onClick={() => {
+        setBusy(true);
+        postWeekNow(team.id, "this")
+          .then((r) => setSaid(r.action === "posted" ? "Posted." : r.action === "edited" ? "Brought up to date." : r.action === "unchanged" ? "Already current." : `Skipped: ${r.detail ?? "nothing to post"}`))
+          .catch((err) => setSaid(explain(err)))
+          .finally(() => setBusy(false));
+      }}
+    >
+      {busy ? "Posting\u2026" : "Post now"}
+    </Pill>
   );
 }
 
@@ -1222,7 +1192,7 @@ function LogCard({ state, last, isOwner, run }: { state: DiscordState; last: Dis
   return (
     // Last card in the Activity column: grows to the column's full height, and
     // the list scrolls inside it if the log is longer than the room it has.
-    <Card className="flex min-h-0 flex-1 flex-col gap-3">
+    <Card className="flex flex-col gap-3">
       <div className="flex items-center justify-between gap-3">
         <h3 className="text-[15px] font-extrabold">Recent messages</h3>
         <span className="text-[13px] text-muted">Last 10</span>
@@ -1245,7 +1215,7 @@ function LogCard({ state, last, isOwner, run }: { state: DiscordState; last: Dis
       {state.log.length === 0 ? (
         <p className="text-[13px] text-muted">Nothing sent yet.</p>
       ) : (
-        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain">
+        <div className="flex flex-col">
           {state.log.map((l, i) => (
             <div key={l.id} className={`grid grid-cols-[76px_minmax(0,1fr)_auto] items-center gap-3 py-2.5 ${i ? "border-t border-line-soft" : ""}`}>
               <span className="text-[12px] font-extrabold text-muted">{KIND_LABEL[l.kind]}</span>
@@ -1263,7 +1233,7 @@ function LogCard({ state, last, isOwner, run }: { state: DiscordState; last: Dis
           ))}
         </div>
       )}
-      {failedDm && <p className="mt-auto text-[13px] text-red-ink">{failedDm.detail}</p>}
+      {failedDm && <p className="text-[13px] text-red-ink">{failedDm.detail}</p>}
     </Card>
   );
 }

@@ -150,6 +150,16 @@ Mindre ting fra samme runde: en brems per lag på knappene i innstillingene (mak
 
 Det som ble sjekket og var i orden: eier-sjekk på hvert endepunkt med lagets id fra forespørselen; ingen filter-injeksjon i PostgREST (alle verdier er regex-sjekket, signerte eller lest fra databasen under constraint); ingen bruker-styrte URL-er mot Discord; OAuth-state med HMAC, utløp og konto-match; cron-hemmelighet i header med konstant-tids sammenlikning; ingen hemmeligheter i svar eller logg; ingen CORS, ingen cookies.
 
+## «Try it out» — hva den er til
+
+Kortet var åtte knapper, og fire av dem la oppdiktet innhold i kanalene laget faktisk leser. Nå står tre igjen, og ingen av dem skriver der andre ser det:
+
+- **Send me a full check** — uka slik den står, en oppdiktet endring og en oppdiktet påminnelse, alt som DM til deg, merket som test.
+- **Send me a test DM** — én linje, for å se at Discord slipper boten inn i innboksen din.
+- **Send what's waiting now** — kjører klokka for laget i stedet for å vente i opptil fem minutter.
+
+«Post or refresh now» var aldri en test: den ligger nå som «Post now» ved siden av ukeplan-innstillingen, der den hører hjemme. Å sette opp en fersk kobling er veiviserens jobb, og den har sitt eget teststeg. Og siden Discord blokkerer DM-er per person og uten å si fra, kan hver spiller sjekke sin egen innboks fra profilen («Can the bot reach me?») — ikke bare eieren.
+
 ## Køen av endringsmeldinger (0026)
 
 En endring blir ikke sendt med en gang: den ligger to minutter i `discord_outbox`, så en byge med redigeringer blir ett kort. «Recent messages» viser nå det som venter, med hva det gjelder og når det går. Eieren kan sende én med en gang eller kaste den før noen ser den (`outbox_send` / `outbox_cancel`; serveren sjekker at raden hører til laget). Laget kan lese køen, ingen kan skrive i den.
