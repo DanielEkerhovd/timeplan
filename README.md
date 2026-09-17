@@ -150,15 +150,17 @@ Mindre ting fra samme runde: en brems per lag på knappene i innstillingene (mak
 
 Det som ble sjekket og var i orden: eier-sjekk på hvert endepunkt med lagets id fra forespørselen; ingen filter-injeksjon i PostgREST (alle verdier er regex-sjekket, signerte eller lest fra databasen under constraint); ingen bruker-styrte URL-er mot Discord; OAuth-state med HMAC, utløp og konto-match; cron-hemmelighet i header med konstant-tids sammenlikning; ingen hemmeligheter i svar eller logg; ingen CORS, ingen cookies.
 
-## «Try it out» — hva den er til
+## Testknappene er borte
 
-Kortet var åtte knapper, og fire av dem la oppdiktet innhold i kanalene laget faktisk leser. Nå står tre igjen, og ingen av dem skriver der andre ser det:
+«Try it out» var åtte knapper, og fire av dem la oppdiktet innhold i kanalene laget faktisk leser. Kortet er fjernet: det jobben gjorde, gjør resten av skjermen bedre.
 
-- **Send me a full check** — uka slik den står, en oppdiktet endring og en oppdiktet påminnelse, alt som DM til deg, merket som test.
-- **Send me a test DM** — én linje, for å se at Discord slipper boten inn i innboksen din.
-- **Send what's waiting now** — kjører klokka for laget i stedet for å vente i opptil fem minutter.
+- **Virker oppsettet?** Statusboksen øverst spør Discord og svarer med hva som eventuelt mangler.
+- **Går meldingene ut?** Køen i «Recent messages» viser det som venter, med «Send now» og «Cancel» per melding, og loggen under viser hva som faktisk ble sendt.
+- **Kommer uka ut nå?** «Post now» ligger ved siden av ukeplan-innstillingen, der den hører hjemme.
+- **Slipper Discord boten inn i innboksen min?** Hver spiller sjekker sin egen fra profilen («Can the bot reach me?») — DM-blokkering er per person, og eieren kan bare teste sin egen.
+- **En fersk kobling** testes av veiviseren, som har sitt eget teststeg.
 
-«Post or refresh now» var aldri en test: den ligger nå som «Post now» ved siden av ukeplan-innstillingen, der den hører hjemme. Å sette opp en fersk kobling er veiviserens jobb, og den har sitt eget teststeg. Og siden Discord blokkerer DM-er per person og uten å si fra, kan hver spiller sjekke sin egen innboks fra profilen («Can the bot reach me?») — ikke bare eieren.
+Loggen fyller nå hele kolonnen og ruller. Basen tar vare på 150 rader per lag (0027), appen henter 60.
 
 ## Køen av endringsmeldinger (0026)
 

@@ -147,8 +147,9 @@ describe("change cards", () => {
     const msg = buildUpdateCard(row, "Europe/Oslo", ["100", "200"]) as { allowed_mentions: { users: string[] } };
     expect(msg.allowed_mentions.users).toEqual(["100", "200"]);
     expect(text(msg)).toContain("## Moved · Scrim vs Foxes");
-    expect(text(msg)).toContain("~~<t:1789495200:F>");
-    expect(text(msg)).toContain("→ <t:1789581600:F>");
+    expect(text(msg)).toContain("~~<t:1789495200:f>~~ →");
+    expect(text(msg)).toContain("**Wednesday** <t:1789581600:D>");
+    expect(text(msg)).toContain("<t:1789581600:t> – <t:1789592400:t>");
     expect(text(msg)).toContain("Still in");
   });
   it("a cancellation has no buttons and pings the people from the snapshot", () => {
@@ -181,11 +182,12 @@ describe("change cards", () => {
     const msg = buildReminderCard(snap, "Europe/Oslo", ["100", "200"], "2026-09-15") as { allowed_mentions: { users: string[] } };
     expect(msg.allowed_mentions.users).toEqual(["100", "200"]);
     expect(text(msg)).toContain("## Reminder · Scrim vs Foxes");
-    expect(text(msg)).toContain("**Today** · <t:1789495200:F>");
+    expect(text(msg)).toContain("**Today** <t:1789495200:D>");
+    expect(text(msg)).toContain("<t:1789495200:t> – <t:1789506000:t>");
     expect(text(msg)).toContain("<@100> <@200>");
     expect(text(msg)).toContain("rj:e");
     const later = buildReminderCard(snap, "Europe/Oslo", ["100"], "2026-09-14");
-    expect(text(later)).toContain("<t:1789495200:F>");
+    expect(text(later)).toContain("**Tuesday** <t:1789495200:D>");
     const dm = buildReminderCard(snap, "Europe/Oslo", ["100", "200"], "2026-09-15", { team: "Quackers", me: "100" }) as { allowed_mentions: { users: string[] } };
     expect(dm.allowed_mentions.users).toEqual([]);
     expect(text(dm)).toContain("You're in");

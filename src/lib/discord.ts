@@ -98,7 +98,8 @@ export async function fetchDiscordState(teamId: string): Promise<DiscordState> {
     supabase.from("discord_links").select("*").eq("team_id", teamId).maybeSingle(),
     supabase.from("discord_channels").select("*").eq("team_id", teamId),
     supabase.from("discord_schedules").select("*").eq("team_id", teamId).maybeSingle(),
-    supabase.from("discord_log").select("*").eq("team_id", teamId).order("at", { ascending: false }).limit(10),
+    // Enough to fill the card and scroll back through the week; the table keeps 150 (0027).
+    supabase.from("discord_log").select("*").eq("team_id", teamId).order("at", { ascending: false }).limit(60),
     supabase.from("discord_outbox").select("id,kind,event_id,payload,send_after,attempts,last_error").eq("team_id", teamId).is("sent_at", null).order("send_after"),
   ]);
   for (const r of [link, channels, schedule, log, pending]) if (r.error) throw r.error;
@@ -228,16 +229,9 @@ export function sendMyDmTest() {
   });
 }
 
-export function sendTestDm(teamId: string) {
-  return api<{ ok: true }>("/api/discord/post", {
-    method: "POST",
-    body: JSON.stringify({ team: teamId, action: "test_dm" }),
-  });
-}
-
-/** One of the try-it-out actions on the Discord tab. All owner-only, all answered with a plain message. */
-export function tryAction(teamId: string, action: "self_check" | "nudge_now" | "flush") {
-  return api<{ ok?: boolean; where?: string[]; week?: string; sent?: number | string; errors?: number; missing?: number; why?: string }>("/api/discord/post", {
+/** Owner-only actions answered with a plain message. */
+export function tryAction(teamId: string, action: "nudge_now") {
+  return api<{ ok?: boolean; sent?: number | string; missing?: number }>("/api/discord/post", {
     method: "POST",
     body: JSON.stringify({ team: teamId, action }),
   });

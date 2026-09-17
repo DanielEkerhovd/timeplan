@@ -8,7 +8,7 @@
 //   * cancelled: the people who had said yes. Nobody had? Then nobody planned
 //     for it, and nobody is pinged.
 
-import { isoWeek, localToInstant, unix, weekRangeLabel } from './time'
+import { dayName, isoWeek, localToInstant, unix, weekRangeLabel } from './time'
 import { ACCENT, COMPONENTS_V2, GATHER_GREEN, WIDTH } from './message'
 
 export interface Snapshot {
@@ -72,15 +72,21 @@ function standing(people: string[], me: string, tone: 'new' | 'changed'): string
   return others ? `${others} in so far` : 'Nobody has answered yet'
 }
 
+const at = (s: Snapshot, hour: number, tz: string) => unix(localToInstant(s.date, hour, 0, tz))
+
 /**
- * When a session is, in the reader's own clock and calendar. `F` is Discord's
- * full stamp — "Tuesday, 15 September 2026 20:00" — so a card that arrives a day
- * early still says which day it is about, not just "Tuesday".
+ * When a session is, over two lines: the day and date, then the hours. One long
+ * line reads as a run-on, and the two halves answer different questions — "is
+ * that today?" and "can I make it?". Both stamps are Discord's own, so every
+ * reader sees their own clock and calendar.
  */
-function when(s: Snapshot, tz: string): string {
-  const a = unix(localToInstant(s.date, s.start_hour, 0, tz))
-  const b = unix(localToInstant(s.date, s.end_hour, 0, tz))
-  return `<t:${a}:F> – <t:${b}:t>`
+function whenLines(s: Snapshot, tz: string): string {
+  return `**${dayName(s.date)}** <t:${at(s, s.start_hour, tz)}:D>\n<t:${at(s, s.start_hour, tz)}:t> – <t:${at(s, s.end_hour, tz)}:t>`
+}
+
+/** One line, for a time being struck out: strikethrough cannot cross a line break. */
+function whenShort(s: Snapshot, tz: string): string {
+  return `<t:${at(s, s.start_hour, tz)}:f>`
 }
 
 const sameTime = (a: Snapshot, b: Snapshot) => a.date === b.date && a.start_hour === b.start_hour && a.end_hour === b.end_hour
@@ -126,14 +132,16 @@ export function buildUpdateCard(row: OutboxRow, tz: string, people: string[], dm
   } else if (kind === 'changed' && after && before) {
     const moved = !sameTime(before, after)
     heading = `## ${moved ? 'Moved' : 'Changed'} · ${title(after)}`
-    line = moved ? `~~${when(before, tz)}~~ → ${when(after, tz)}` : `${when(after, tz)}${title(before) !== title(after) ? `\n-# was ${title(before)}` : ''}`
+    line = moved
+      ? `~~${whenShort(before, tz)}~~ →\n${whenLines(after, tz)}`
+      : `${whenLines(after, tz)}${title(before) !== title(after) ? `\n-# was ${title(before)}` : ''}`
     if (chips) line += `\n${chips}`
     if (dm) line += `\n${standing(people, dm.me, 'changed')}`
     accent = ACCENT[after.color] ?? GATHER_GREEN
     blocks.push({ type: 10, content: `${heading}\n${team}${line}\n${WIDTH}` }, buttons(row, 'Still in'))
   } else if (kind === 'cancelled' && before) {
     heading = `## Cancelled · ${title(before)}`
-    line = `~~${when(before, tz)}~~`
+    line = `~~${whenShort(before, tz)}~~`
     if (chips) line += `\n${chips}`
     if (dm) line += `\nYou had said yes to this one.`
     accent = ACCENT[before.color] ?? GATHER_GREEN
@@ -186,10 +194,10 @@ export function buildReminderCard(s: Snapshot, tz: string, people: string[], tod
   const audience = dm ? silent : forPeople(people)
   const start = unix(localToInstant(s.date, s.start_hour, 0, tz))
   const heading = `## Reminder · ${title(s)}`
-  // The full date, always: a reminder can land a day or more ahead, and
-  // "Tuesday 18:00" on its own does not say which Tuesday.
-  const day = s.date === today ? '**Today** · ' : ''
-  let line = `${day}${when(s, tz)}\nstarts <t:${start}:R>`
+  // The date on its own line: a reminder can land a day or more ahead, and
+  // "Tuesday 18:00" does not say which Tuesday.
+  const day = s.date === today ? '**Today**' : `**${dayName(s.date)}**`
+  let line = `${day} <t:${start}:D>\n<t:${start}:t> – <t:${at(s, s.end_hour, tz)}:t>\nstarts <t:${start}:R>`
   if (dm) line = `-# ${dm.team}\n${line}\n${standing(people, dm.me, 'changed')}`
   else if (audience.line) line += `\n${audience.line}`
   const blocks: Record<string, unknown>[] = [
@@ -223,7 +231,7 @@ export function buildNewSessionsCard(rows: OutboxRow[], tz: string, audience: Au
   const top = [heading]
   if (dm) top.push(`-# ${dm.team}`)
   if (audience.line) top.push(audience.line)
-  if (items.length === 1 && first) top.push(when(first, tz) + who(0))
+  if (items.length === 1 && first) top.push(whenLines(first, tz) + who(0))
   blocks.push({ type: 10, content: `${top.join('\n')}\n${WIDTH}` })
   if (items.length === 1) {
     blocks.push(buttons(items[0], 'Join'))
@@ -231,7 +239,7 @@ export function buildNewSessionsCard(rows: OutboxRow[], tz: string, audience: Au
     items.forEach((r, i) => {
       const s = r.payload.after!
       blocks.push({ type: 14, divider: true, spacing: 1 })
-      blocks.push({ type: 10, content: `**${title(s)}**\n${when(s, tz)}${who(i)}` }, buttons(r, 'Join'))
+      blocks.push({ type: 10, content: `**${title(s)}**\n${whenLines(s, tz)}${who(i)}` }, buttons(r, 'Join'))
     })
   }
   return wrap(accent, blocks, audience)

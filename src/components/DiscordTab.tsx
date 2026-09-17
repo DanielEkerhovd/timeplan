@@ -15,7 +15,6 @@ import {
   fetchStatus,
   postWeekNow,
   renameManagedRole,
-  sendTestDm,
   sendTestMessage,
   setChannel,
   setPing,
@@ -773,7 +772,6 @@ function Connected({ team, state, isOwner, run, error, onRerun }: { team: MyTeam
           </div>
           {isOwner && (problems.length > 0 || health.failed) && <ProblemsCard health={health} problems={problems} />}
           <LogCard state={state} last={last} isOwner={isOwner} run={run} />
-          {isOwner && <TryCard team={team} run={run} />}
         </div>
       </div>
 
@@ -860,104 +858,6 @@ function ProblemsCard({ health, problems }: { health: Health; problems: StatusCh
           </div>
         </div>
       ))}
-    </Card>
-  );
-}
-
-/**
- * Try it out: every button here either goes to the owner alone, or is marked
- * as a test on Discord. Nothing wakes the team. Grouped by what it exercises,
- * with the outcome under the button, so the whole path can be checked from
- * this one card without waiting for the clock.
- */
-function TryCard({ team, run }: { team: MyTeam; run: Run }) {
-  const [busy, setBusy] = useState<string | null>(null);
-  const [result, setResult] = useState<Record<string, { ok: boolean; text: string }>>({});
-
-  function go(key: string, fn: () => Promise<string>) {
-    setBusy(key);
-    void run(async () => {
-      const text = await fn();
-      setResult((r) => ({ ...r, [key]: { ok: true, text } }));
-    })
-      .then((ok) => {
-        if (!ok) setResult((r) => ({ ...r, [key]: { ok: false, text: "Failed. See the message above." } }));
-      })
-      .finally(() => setBusy(null));
-  }
-
-  // Three rows, all safe: nothing here posts into a channel the team reads.
-  // Wiring a fresh setup up is the job of the wizard's own test step.
-  const rows: { group: string; items: { key: string; label: string; hint: string; fn: () => Promise<string> }[] }[] = [
-    {
-      group: "Check it works",
-      items: [
-        {
-          key: "check",
-          label: "Send me a full check",
-          hint: "The week as it stands, a sample change and a sample reminder \u2014 all to your DMs, marked as a test. Nothing lands in the team\u2019s channels.",
-          fn: async () => {
-            const r = await tryAction(team.id, "self_check");
-            return `Sent ${r.sent ?? 0} messages to your DMs.`;
-          },
-        },
-        {
-          key: "dm",
-          label: "Send me a test DM",
-          hint: "One line, to check Discord lets the bot into your inbox.",
-          fn: async () => {
-            await sendTestDm(team.id);
-            return "Sent to your DMs.";
-          },
-        },
-        {
-          key: "flush",
-          label: "Send what\u2019s waiting now",
-          hint: "Runs the clock for this team instead of waiting up to five minutes.",
-          fn: async () => {
-            const r = await tryAction(team.id, "flush");
-            if (r.why) return r.why;
-            const bits = [`week plan: ${r.week}`, `${r.sent ?? 0} change${r.sent === 1 ? "" : "s"} sent`];
-            if (r.errors) bits.push(`${r.errors} failed`);
-            return bits.join(", ") + ".";
-          },
-        },
-      ],
-    },
-  ];
-
-  // A plain list: one row per action, no boxes inside the card. The hint sits
-  // under the name and gives way to the result once the action has run.
-  return (
-    <Card className="flex flex-1 flex-col gap-3">
-      <div className="flex items-baseline justify-between gap-3">
-        <h3 className="text-[15px] font-extrabold">Try it out</h3>
-        <span className="text-[12px] text-muted">Only you, or marked as a test</span>
-      </div>
-      <div className="flex flex-col gap-2">
-        {rows.map((g) => (
-          <div key={g.group} className="flex flex-col rounded-[14px] bg-bg px-3.5 py-2">
-            <div className="py-1">
-              <Label>{g.group}</Label>
-            </div>
-            {g.items.map((it) => {
-              const r = result[it.key];
-              const running = busy === it.key;
-              return (
-                <div key={it.key} className="flex items-center justify-between gap-4 py-2">
-                  <div className="flex min-w-0 flex-col">
-                    <span className="text-[14px] font-bold">{it.label}</span>
-                    <span className={`truncate text-[13px] ${r ? (r.ok ? "font-bold text-green-ink" : "font-bold text-red-ink") : "text-muted"}`}>{running ? "Working…" : (r?.text ?? it.hint)}</span>
-                  </div>
-                  <Pill disabled={busy !== null} onClick={() => go(it.key, it.fn)} className="shrink-0">
-                    Run
-                  </Pill>
-                </div>
-              );
-            })}
-          </div>
-        ))}
-      </div>
     </Card>
   );
 }
@@ -1192,10 +1092,10 @@ function LogCard({ state, last, isOwner, run }: { state: DiscordState; last: Dis
   return (
     // Last card in the Activity column: grows to the column's full height, and
     // the list scrolls inside it if the log is longer than the room it has.
-    <Card className="flex flex-col gap-3">
+    <Card className="flex min-h-0 flex-1 flex-col gap-3">
       <div className="flex items-center justify-between gap-3">
         <h3 className="text-[15px] font-extrabold">Recent messages</h3>
-        <span className="text-[13px] text-muted">Last 10</span>
+        <span className="text-[13px] text-muted">{state.log.length === 0 ? "" : `Last ${state.log.length}`}</span>
       </div>
       <div className="flex items-center justify-between gap-3 rounded-[14px] bg-bg px-3.5 py-3">
         <span className="text-[13px] font-bold">Week plan on Discord</span>
@@ -1215,7 +1115,7 @@ function LogCard({ state, last, isOwner, run }: { state: DiscordState; last: Dis
       {state.log.length === 0 ? (
         <p className="text-[13px] text-muted">Nothing sent yet.</p>
       ) : (
-        <div className="flex flex-col">
+        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain">
           {state.log.map((l, i) => (
             <div key={l.id} className={`grid grid-cols-[76px_minmax(0,1fr)_auto] items-center gap-3 py-2.5 ${i ? "border-t border-line-soft" : ""}`}>
               <span className="text-[12px] font-extrabold text-muted">{KIND_LABEL[l.kind]}</span>
@@ -1233,7 +1133,7 @@ function LogCard({ state, last, isOwner, run }: { state: DiscordState; last: Dis
           ))}
         </div>
       )}
-      {failedDm && <p className="text-[13px] text-red-ink">{failedDm.detail}</p>}
+      {failedDm && <p className="mt-auto text-[13px] text-red-ink">{failedDm.detail}</p>}
     </Card>
   );
 }

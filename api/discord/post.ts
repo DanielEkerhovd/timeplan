@@ -1,16 +1,16 @@
-// Owner actions that need the bot token: post the week now, send a test
-// message, disconnect. POST with { action } and the owner's Supabase session.
+// Actions that need the bot token: post the week now, run the wizard's test,
+// send or cancel a queued change, nudge, disconnect. POST with { action } and
+// the caller's Supabase session; every branch checks who is asking.
 
 export const config = { runtime: 'edge' }
 
 import { discord, explain, leaveGuild } from '../_lib/discord'
-import { env, guard, HttpError, json } from '../_lib/env'
+import { guard, HttpError, json } from '../_lib/env'
 import { db, log, requireEditor, requireOwner, requireUser, throttle } from '../_lib/supabase'
-import type { DiscordChannel, DiscordLink, DiscordSchedule, WeekPost } from '../_lib/supabase'
+import type { DiscordChannel, DiscordLink, WeekPost } from '../_lib/supabase'
 import { addDays, localNow, mondayOf } from '../_lib/time'
-import { buildWeekMessage, COMPONENTS_V2, ensureWeekPost, fetchBotWeek } from '../_lib/week'
-import { buildUpdateCard, drainOutbox } from '../_lib/updates'
-import { buildReminderCard } from '../_lib/updateCard'
+import { COMPONENTS_V2, ensureWeekPost } from '../_lib/week'
+import { drainOutbox } from '../_lib/updates'
 import { remindNow } from '../_lib/reminders'
 import { nudgeNow } from '../_lib/nudge'
 import type { OutboxRow } from '../_lib/updates'
@@ -32,19 +32,16 @@ export default function handler(req: Request): Promise<Response> {
     // Any signed-in person can ask the bot to DM them. It reaches only their
     // own inbox, so there is nothing here to gate on a team or a role.
     if (body.action === 'my_dm') return json(await myDm(req))
-    const user = await requireOwner(req, teamId)
+    await requireOwner(req, teamId)
     const link = await db.one<DiscordLink>('discord_links', { team_id: `eq.${teamId}` })
     if (!link) throw new HttpError(409, 'not connected')
     if (body.action !== 'disconnect') await throttle(teamId)
 
     if (body.action === 'test') return json(await test(teamId))
-    if (body.action === 'test_dm') return json(await testDm(teamId, user.id, link))
     if (body.action === 'post') return json(await postNow(teamId, body.which === 'next' ? 'next' : 'this'))
-    if (body.action === 'self_check') return json(await selfCheck(teamId, user.id))
     if (body.action === 'nudge_now') return json(await nudgeNow(teamId))
     if (body.action === 'outbox_send') return json(await outboxSend(teamId, body.outbox_id))
     if (body.action === 'outbox_cancel') return json(await outboxCancel(teamId, body.outbox_id))
-    if (body.action === 'flush') return json(await flush(teamId))
     if (body.action === 'disconnect') return json(await disconnect(teamId, link))
     throw new HttpError(400, 'unknown action')
   })
@@ -82,51 +79,8 @@ async function dm(discordId: string, msg: Record<string, unknown>) {
   await discord('POST', `/channels/${ch.id}/messages`, { ...msg, allowed_mentions: { parse: [] } })
 }
 
-/** A card with the small grey "test" line at the bottom, so nobody mistakes it for the real thing. */
-function markTest(msg: Record<string, unknown>): Record<string, unknown> {
-  const comps = (msg.components as { type: number; components?: Record<string, unknown>[] }[]).map((c) =>
-    c.type === 17 && c.components
-      ? {
-          ...c,
-          // Buttons on a sample would point at nothing. Drop them, add the label.
-          components: [...c.components.filter((b) => b.type !== 1), { type: 10, content: '-# Test from Settings · nothing real was changed' }],
-        }
-      : c,
-  )
-  return { ...msg, components: comps }
-}
 
 
-/**
- * Everything the bot sends, to the owner's own DMs: the week as it stands, a
- * made-up change, a made-up reminder. Nothing is posted where the team reads —
- * a fake "Moved · Scrim vs Sample FC" in the updates channel is noise somebody
- * has to scroll past and wonder about.
- */
-async function selfCheck(teamId: string, userId: string) {
-  const me = await ownDiscordId(userId)
-  const team = await db.one<{ timezone: string; name: string }>('teams', { id: `eq.${teamId}`, select: 'timezone,name' })
-  if (!team) throw new HttpError(404, 'team not found')
-  const today = localNow(team.timezone).dateKey
-  const week = await fetchBotWeek(teamId, mondayOf(today))
-
-  const before = { id: 'sample', date: addDays(today, 1), start_hour: 20, end_hour: 23, title: 'Scrim', opponent: 'Sample FC', color: 'yellow' }
-  const moved: OutboxRow = { id: 0, team_id: teamId, kind: 'changed', event_id: '00000000-0000-4000-8000-000000000000', payload: { before, after: { ...before, date: addDays(today, 2) } }, send_after: '', attempts: 0, sent_at: null, message_id: null }
-  const soon = { id: '00000000-0000-4000-8000-000000000000', date: today, start_hour: 20, end_hour: 23, title: 'Scrim', opponent: 'Sample FC', color: 'yellow' }
-
-  const cards: Record<string, unknown>[] = []
-  if (week) cards.push(markTest(buildWeekMessage(week, { ping: null, link: null, appUrl: env.appUrl() })))
-  cards.push(markTest(buildUpdateCard(moved, team.timezone, [me], { team: team.name, me })))
-  cards.push(markTest(buildReminderCard(soon, team.timezone, [me], today, { team: team.name, me })))
-
-  try {
-    for (const c of cards) await dm(me, c)
-  } catch (err) {
-    throw new HttpError(409, explain(err))
-  }
-  await log(teamId, 'test', `Check sent as ${cards.length} DMs`, true)
-  return { ok: true, sent: cards.length }
-}
 
 
 
@@ -154,38 +108,6 @@ async function pendingRow(teamId: string, id?: number) {
   return row
 }
 
-/** Run the clock for this team now: refresh the week plan, send what is queued. */
-async function flush(teamId: string) {
-  const team = await db.one<{ timezone: string }>('teams', { id: `eq.${teamId}`, select: 'timezone' })
-  if (!team) throw new HttpError(404, 'team not found')
-  const live = await db.one<WeekPost>('discord_week_post', { team_id: `eq.${teamId}` })
-  let week: string = 'no post'
-  if (live) {
-    try {
-      week = (await ensureWeekPost(teamId, live.week_start, 'refresh')).action
-    } catch (err) {
-      week = `error: ${explain(err)}`
-    }
-  }
-  const updates = await drainOutbox(20, teamId)
-  const sent = Object.values(updates).filter((v) => v === 'sent').length
-  const errors = Object.values(updates).filter((v) => v.startsWith('error')).length
-  // Nothing sent and nothing failed is the confusing case. Say which of the
-  // three reasons it was, instead of leaving a silent zero.
-  let why: string | undefined
-  if (sent === 0 && errors === 0) {
-    const [schedule, pending] = await Promise.all([
-      db.one<DiscordSchedule>('discord_schedules', { team_id: `eq.${teamId}` }),
-      db.select<{ id: number }>('discord_outbox', { select: 'id', team_id: `eq.${teamId}`, sent_at: 'is.null', limit: '1' }),
-    ])
-    if (!schedule?.updates_enabled) why = 'Change messages are turned off for this team.'
-    else if (pending.length > 0) why = 'Something is waiting, but it could not go out. Check the log.'
-    else if (!live) why = 'Nothing was waiting. New and changed sessions are only announced for the week that is posted — post the week first.'
-    else why = 'Nothing was waiting.'
-  }
-  await log(teamId, 'test', `Sent what was waiting: week ${week}, ${sent} sent, ${errors} failed`, errors === 0)
-  return { week, sent, errors, why, detail: updates }
-}
 
 
 async function test(teamId: string) {
@@ -223,37 +145,6 @@ async function test(teamId: string) {
   return { sent: sent.length, failed }
 }
 
-/**
- * A DM to the person pressing the button. Two Discord calls: open (or find) the
- * DM channel, then post in it. The interesting outcome is the failure: 50007
- * means their privacy settings block DMs from this server, which is exactly
- * what the reminders will run into for some players.
- */
-async function testDm(teamId: string, userId: string, link: DiscordLink) {
-  const profile = await db.one<{ discord_id: string | null }>('profiles', { user_id: `eq.${userId}`, select: 'discord_id' })
-  if (!profile?.discord_id) throw new HttpError(409, 'Your Discord account is not linked to your profile yet. Sign out and in again, then retry.')
-  const team = await db.one<{ name: string }>('teams', { id: `eq.${teamId}`, select: 'name' })
-  try {
-    const dm = await discord<{ id: string }>('POST', '/users/@me/channels', { recipient_id: profile.discord_id })
-    await discord('POST', `/channels/${dm.id}/messages`, {
-      flags: COMPONENTS_V2,
-      components: [
-        {
-          type: 17,
-          accent_color: 0x3e9a63,
-          components: [{ type: 10, content: `**Test from Gather.**\n-# Reminders for ${team?.name ?? 'the team'} on ${link.guild_name ?? 'Discord'} will look like this. Nothing else was sent.` }],
-        },
-      ],
-      allowed_mentions: { parse: [] },
-    })
-    await log(teamId, 'test', 'Test DM sent', true)
-    return { ok: true }
-  } catch (err) {
-    const reason = explain(err)
-    await log(teamId, 'test', 'Test DM failed', false, reason)
-    throw new HttpError(409, reason)
-  }
-}
 
 async function postNow(teamId: string, which: 'this' | 'next') {
   const team = await db.one<{ timezone: string }>('teams', { id: `eq.${teamId}`, select: 'timezone' })
