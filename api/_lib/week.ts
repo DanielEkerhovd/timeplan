@@ -4,6 +4,7 @@
 import { channelInGuild, discord, explain, DiscordError } from './discord'
 import { env } from './env'
 import { db, log } from './supabase'
+import { forget, record } from './sent'
 import type { DiscordLink, WeekPost } from './supabase'
 import { isoWeek } from './time'
 import { buildWeekMessage, contentHash, pingLine } from './message'
@@ -39,8 +40,12 @@ async function unpinAndDelete(channelId: string, messageId: string) {
   }
   try {
     await discord('DELETE', `/channels/${channelId}/messages/${messageId}`)
+    await forget(messageId)
   } catch (err) {
-    if (err instanceof DiscordError && err.code === 10008) return
+    if (err instanceof DiscordError && err.code === 10008) {
+      await forget(messageId)
+      return
+    }
     throw err
   }
 }
@@ -99,6 +104,7 @@ export async function ensureWeekPost(teamId: string, mondayKey: string, reason: 
     await log(teamId, 'week_post', `Could not post week ${isoWeek(mondayKey).week}`, false, explain(err))
     throw err
   }
+  await record(teamId, channel.channel_id, posted.id, 'week_post')
   await pin(channel.channel_id, posted.id)
   await db.upsert('discord_week_post', {
     team_id: teamId,

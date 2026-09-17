@@ -6,6 +6,7 @@
 import { channelInGuild, discord, DiscordError, explain } from './discord'
 import { env, HttpError } from './env'
 import { db, log } from './supabase'
+import { postAndRecord } from './sent'
 import type { DiscordLink, DiscordSchedule } from './supabase'
 import { addDays, localNow, mondayOf, timeToMinutes } from './time'
 import { buildNudgeCard } from './updateCard'
@@ -107,7 +108,7 @@ async function nudgeTeam(team: Team, mode: 'channel' | 'dm' | 'both', week: stri
       }
       try {
         const dm = await discord<{ id: string }>('POST', '/users/@me/channels', { recipient_id: m.discord_id })
-        await discord('POST', `/channels/${dm.id}/messages`, { ...dmCard, allowed_mentions: { parse: [] } })
+        await postAndRecord(team.id, dm.id, { ...dmCard, allowed_mentions: { parse: [] } }, 'nudge', true)
       } catch (err) {
         if (err instanceof DiscordError && err.code === 50007) {
           blocked++
@@ -120,7 +121,7 @@ async function nudgeTeam(team: Team, mode: 'channel' | 'dm' | 'both', week: stri
   // closed): the channel card names everyone missing, so nobody is forgotten.
   if (mode === 'channel' || mode === 'both' || blocked > 0) {
     if (!(await channelInGuild(channel, link.guild_id))) throw new DiscordError(404, 10003, 'The channel is not in the connected server.')
-    await discord('POST', `/channels/${channel}/messages`, card)
+    await postAndRecord(team.id, channel, card, 'nudge')
   }
   await stamp(team.id, week)
   await log(team.id, 'nudge', `Nudged ${missing.length} of ${members.length} about next week`, true)

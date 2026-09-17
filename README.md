@@ -162,6 +162,14 @@ Det som ble sjekket og var i orden: eier-sjekk på hvert endepunkt med lagets id
 
 Loggen fyller nå hele kolonnen og ruller. Basen tar vare på 150 rader per lag (0027), appen henter 60.
 
+## Rydd bort alt boten har lagt ut (0028)
+
+Bak «Advanced» nederst på Discord-fanen: en knapp som tar ned hver melding boten har lagt ut for dette laget — ukeplaner, endringer, påminnelser, purringer, testmeldinger, i kanal og i DM. Eieren må skrive lagets navn først, og serveren krever det samme.
+
+Grunnen til at det i det hele tatt går an å gjøre trygt er `discord_messages`: boten skriver ned hver melding den sender, med lag, kanal og meldings-id. Oppryddingen går bare gjennom den lista. Flere lag kan dele én server, og til og med én kanal — å skanne kanalen etter «meldinger fra boten» ville tatt naboens meldinger med. Ingen klient ser tabellen; eieren får bare et tall gjennom `discord_message_count()`.
+
+Sletting skjer én melding om gangen, med et lite pust imellom (Discord holder gamle meldinger på et strengere bånd), 25 per kall. Appen kaller til det ikke er flere igjen. Mangler boten en rettighet, stopper den, sier hvorfor, og lar resten ligge — trykk igjen når det er ordnet, ingenting er tapt.
+
 ## Køen av endringsmeldinger (0026)
 
 En endring blir ikke sendt med en gang: den ligger to minutter i `discord_outbox`, så en byge med redigeringer blir ett kort. «Recent messages» viser nå det som venter, med hva det gjelder og når det går. Eieren kan sende én med en gang eller kaste den før noen ser den (`outbox_send` / `outbox_cancel`; serveren sjekker at raden hører til laget). Laget kan lese køen, ingen kan skrive i den.

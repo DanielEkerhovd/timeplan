@@ -6,6 +6,7 @@
 
 import { channelInGuild, discord, DiscordError, explain } from './discord'
 import { db, log } from './supabase'
+import { postAndRecord } from './sent'
 import { HttpError } from './env'
 import type { DiscordChannel, DiscordLink } from './supabase'
 import { localNow, localToInstant } from './time'
@@ -159,7 +160,7 @@ async function sendOne(c: Candidate, now: Date): Promise<string> {
       }
       try {
         const dm = await discord<{ id: string }>('POST', '/users/@me/channels', { recipient_id: id })
-        await discord('POST', `/channels/${dm.id}/messages`, { ...buildReminderCard(snap, c.timezone, who, today, { team: c.team_name, me: id }), allowed_mentions: { parse: [] } })
+        await postAndRecord(c.team_id, dm.id, { ...buildReminderCard(snap, c.timezone, who, today, { team: c.team_name, me: id }), allowed_mentions: { parse: [] } }, 'reminder', true)
         sent.push(id)
       } catch (err) {
         if (err instanceof DiscordError && err.code === 50007) {
@@ -173,10 +174,7 @@ async function sendOne(c: Candidate, now: Date): Promise<string> {
     // DM-only, but some could not be reached: the channel card pings only them.
     const pingOnly = c.mode === 'dm' ? blocked : who
     if (!(await channelInGuild(channel, link.guild_id))) throw new DiscordError(404, 10003, 'The reminder channel is not in the connected server.')
-    await discord('POST', `/channels/${channel}/messages`, {
-      ...card,
-      allowed_mentions: { parse: [], users: pingOnly.slice(0, 100) },
-    })
+    await postAndRecord(c.team_id, channel, { ...card, allowed_mentions: { parse: [], users: pingOnly.slice(0, 100) } }, 'reminder')
     blocked = []
   }
   await stamp(c.event_id)

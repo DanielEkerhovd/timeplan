@@ -41,7 +41,7 @@ export interface DiscordSchedule {
 }
 export interface DiscordLogRow {
   id: number;
-  kind: "week_post" | "update" | "reminder" | "nudge" | "test" | "link";
+  kind: "week_post" | "update" | "reminder" | "nudge" | "test" | "link" | "cleanup";
   summary: string;
   ok: boolean;
   detail: string | null;
@@ -257,6 +257,25 @@ export function postWeekNow(teamId: string, which: "this" | "next") {
   return api<{ action: "posted" | "edited" | "unchanged" | "skipped"; detail?: string }>("/api/discord/post", {
     method: "POST",
     body: JSON.stringify({ team: teamId, action: "post", which }),
+  });
+}
+
+/** How many messages the bot still has on record for this team. Owner only; others get 0. */
+export async function countBotMessages(teamId: string): Promise<number> {
+  const { data, error } = await supabase.rpc("discord_message_count", { team: teamId });
+  if (error) throw error;
+  return (data as number | null) ?? 0;
+}
+
+/**
+ * Take down one batch of the messages the bot has posted for this team. The
+ * caller keeps going while `remaining` is above zero — a long history cannot
+ * be cleared inside one request. `confirm` must be the team's name.
+ */
+export function wipeBotMessages(teamId: string, confirm: string) {
+  return api<{ deleted: number; remaining: number; stopped: string | null }>("/api/discord/post", {
+    method: "POST",
+    body: JSON.stringify({ team: teamId, action: "wipe", confirm }),
   });
 }
 

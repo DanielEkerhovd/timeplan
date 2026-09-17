@@ -4,6 +4,7 @@ import { useSearchParams } from "react-router-dom";
 import type { MyTeam } from "../lib/teams";
 import { friendlyError } from "../lib/types";
 import {
+  countBotMessages,
   createChannel,
   createManagedRole,
   disconnectDiscord,
@@ -24,6 +25,7 @@ import {
   outboxAction,
   tryAction,
   updateSchedule,
+  wipeBotMessages,
 } from "../lib/discord";
 import { DiscordApiError } from "../lib/discord";
 import type { ChannelKind, DiscordPending, DiscordState, PickerChannel, PickerRole, StatusCheck } from "../lib/discord";
@@ -775,7 +777,12 @@ function Connected({ team, state, isOwner, run, error, onRerun }: { team: MyTeam
         </div>
       </div>
 
-      {isOwner && <DisconnectCard team={team} state={state} run={run} />}
+      {isOwner && (
+        <>
+          <WipeCard team={team} run={run} />
+          <DisconnectCard team={team} state={state} run={run} />
+        </>
+      )}
     </>
   );
 }
@@ -1115,7 +1122,10 @@ function LogCard({ state, last, isOwner, run }: { state: DiscordState; last: Dis
       {state.log.length === 0 ? (
         <p className="text-[13px] text-muted">Nothing sent yet.</p>
       ) : (
-        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain">
+        // overscroll-auto: når lista er på toppen eller botnen, held sida fram med
+        // å rulle. overscroll-contain stoppa hjulet heilt, og då stod sida bom
+        // fast så lenge peikaren var over loggen.
+        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-auto">
           {state.log.map((l, i) => (
             <div key={l.id} className={`grid grid-cols-[76px_minmax(0,1fr)_auto] items-center gap-3 py-2.5 ${i ? "border-t border-line-soft" : ""}`}>
               <span className="text-[12px] font-extrabold text-muted">{KIND_LABEL[l.kind]}</span>
@@ -1186,7 +1196,98 @@ const KIND_LABEL: Record<DiscordState["log"][number]["kind"], string> = {
   nudge: "Nudge",
   test: "Test",
   link: "Setup",
+  cleanup: "Cleanup",
 };
+
+/**
+ * Take back everything the bot has posted for this team.
+ *
+ * Folded away twice over, because it cannot be undone: it opens only when you
+ * ask for it, and then only runs once the team's name is typed. The bot keeps
+ * a note of every message it sends and for which team, and this walks that
+ * list — so a server shared by two teams loses one team's messages and not the
+ * other's. Anything posted by a person stays where it is.
+ *
+ * Long histories take several rounds; the server hands back how many are left
+ * and we keep going until there are none.
+ */
+function WipeCard({ team, run }: { team: MyTeam; run: Run }) {
+  const [open, setOpen] = useState(false);
+  const [typed, setTyped] = useState("");
+  const [count, setCount] = useState<number | null>(null);
+  const [gone, setGone] = useState<number | null>(null);
+  const [busy, setBusy] = useState(false);
+  const toast = useToast();
+
+  useEffect(() => {
+    if (!open) return;
+    let alive = true;
+    countBotMessages(team.id)
+      .then((n) => alive && setCount(n))
+      .catch(() => alive && setCount(null));
+    return () => {
+      alive = false;
+    };
+  }, [open, team.id]);
+
+  if (!open)
+    return (
+      <div className="px-1">
+        <button type="button" onClick={() => setOpen(true)} className="text-[12px] font-bold text-faint underline decoration-dotted underline-offset-4 hover:text-muted">
+          Advanced
+        </button>
+      </div>
+    );
+
+  const ready = typed.trim().toLowerCase() === team.name.trim().toLowerCase();
+  return (
+    <Card className="flex flex-col gap-3 border-[1.5px] border-red-line bg-transparent shadow-none">
+      <div className="flex items-start justify-between gap-4">
+        <div className="flex flex-col">
+          <span className="text-[14px] font-extrabold">Remove everything the bot has posted</span>
+          <span className="max-w-[70ch] text-[13px] text-muted">
+            Deletes the week plans, updates, reminders and nudges the bot has sent for <strong className="text-ink">{team.name}</strong>, in channels and in DMs.
+            {count === null ? "" : ` ${count} message${count === 1 ? "" : "s"} on record.`} Other teams on the same server are untouched, and nothing written by a person is
+            removed. This cannot be undone.
+          </span>
+        </div>
+        <button type="button" onClick={() => setOpen(false)} className="shrink-0 text-[12px] font-bold text-faint hover:text-muted">
+          Close
+        </button>
+      </div>
+      <div className="flex flex-wrap items-center gap-2">
+        <Input value={typed} onChange={(e) => setTyped(e.target.value)} placeholder={`Type ${team.name} to confirm`} className="h-10 w-full max-w-[280px] text-[14px]" />
+        <Button
+          variant="danger"
+          size="sm"
+          className="h-10"
+          disabled={!ready || busy}
+          onClick={() => {
+            setBusy(true);
+            setGone(0);
+            void run(async () => {
+              let total = 0;
+              // Each round takes a batch. Twenty rounds is far more than any
+              // team has, and stops a surprise from turning into a spin.
+              for (let i = 0; i < 200; i++) {
+                const r = await wipeBotMessages(team.id, typed);
+                total += r.deleted;
+                setGone(total);
+                if (r.stopped) throw new Error(`${r.stopped} Removed ${total} before stopping — press again once it is sorted.`);
+                if (r.remaining === 0 || r.deleted === 0) break;
+              }
+              setTyped("");
+              setCount(0);
+              toast(total === 0 ? "Nothing left to remove." : `Removed ${total} message${total === 1 ? "" : "s"} from Discord.`);
+            }).finally(() => setBusy(false));
+          }}
+        >
+          {busy ? `Removing… ${gone ?? 0}` : "Remove them"}
+        </Button>
+      </div>
+    </Card>
+  );
+}
 
 function DisconnectCard({ team, state, run }: { team: MyTeam; state: DiscordState; run: Run }) {
   const [arm, setArm] = useState(false);

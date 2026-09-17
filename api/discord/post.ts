@@ -7,6 +7,7 @@ export const config = { runtime: 'edge' }
 import { discord, explain, leaveGuild } from '../_lib/discord'
 import { guard, HttpError, json } from '../_lib/env'
 import { db, log, requireEditor, requireOwner, requireUser, throttle } from '../_lib/supabase'
+import { forget, postAndRecord, wipeMessages } from '../_lib/sent'
 import type { DiscordChannel, DiscordLink, WeekPost } from '../_lib/supabase'
 import { addDays, localNow, mondayOf } from '../_lib/time'
 import { COMPONENTS_V2, ensureWeekPost } from '../_lib/week'
@@ -18,7 +19,7 @@ import type { OutboxRow } from '../_lib/updates'
 export default function handler(req: Request): Promise<Response> {
   return guard(async () => {
     if (req.method !== 'POST') throw new HttpError(405, 'method not allowed')
-    const body = (await req.json().catch(() => ({}))) as { team?: string; action?: string; which?: string; event_id?: string; outbox_id?: number }
+    const body = (await req.json().catch(() => ({}))) as { team?: string; action?: string; which?: string; event_id?: string; outbox_id?: number; confirm?: string }
     const teamId = body.team ?? ''
     // "Send a reminder now" belongs to whoever books sessions: owner or admin.
     // Everything else here is the owner's.
@@ -35,7 +36,9 @@ export default function handler(req: Request): Promise<Response> {
     await requireOwner(req, teamId)
     const link = await db.one<DiscordLink>('discord_links', { team_id: `eq.${teamId}` })
     if (!link) throw new HttpError(409, 'not connected')
-    if (body.action !== 'disconnect') await throttle(teamId)
+    // Opprydding og frakobling går utenom: de er eierens egne, store grep, og
+    // oppryddingen holder farten selv mellom hver sletting.
+    if (body.action !== 'disconnect' && body.action !== 'wipe') await throttle(teamId)
 
     if (body.action === 'test') return json(await test(teamId))
     if (body.action === 'post') return json(await postNow(teamId, body.which === 'next' ? 'next' : 'this'))
@@ -43,6 +46,7 @@ export default function handler(req: Request): Promise<Response> {
     if (body.action === 'outbox_send') return json(await outboxSend(teamId, body.outbox_id))
     if (body.action === 'outbox_cancel') return json(await outboxCancel(teamId, body.outbox_id))
     if (body.action === 'disconnect') return json(await disconnect(teamId, link))
+    if (body.action === 'wipe') return json(await wipe(teamId, body.confirm))
     throw new HttpError(400, 'unknown action')
   })
 }
@@ -124,17 +128,22 @@ async function test(teamId: string) {
   for (const [channelId, kinds] of targets) {
     const what = kinds.map((k) => (k === 'schedule' ? 'the week plan' : k)).join(' and ')
     try {
-      await discord('POST', `/channels/${channelId}/messages`, {
-        flags: COMPONENTS_V2,
-        components: [
-          {
-            type: 17,
-            accent_color: 0x3e9a63,
-            components: [{ type: 10, content: `**Gather is connected to ${team?.name ?? 'the team'}.**\n-# This channel gets ${what}. Nothing else will be posted until the week is up.` }],
-          },
-        ],
-        allowed_mentions: { parse: [] },
-      })
+      await postAndRecord(
+        teamId,
+        channelId,
+        {
+          flags: COMPONENTS_V2,
+          components: [
+            {
+              type: 17,
+              accent_color: 0x3e9a63,
+              components: [{ type: 10, content: `**Gather is connected to ${team?.name ?? 'the team'}.**\n-# This channel gets ${what}. Nothing else will be posted until the week is up.` }],
+            },
+          ],
+          allowed_mentions: { parse: [] },
+        },
+        'test',
+      )
       sent.push(channelId)
     } catch (err) {
       failed.push({ kind: kinds.join(', '), reason: explain(err) })
@@ -161,6 +170,26 @@ async function postNow(teamId: string, which: 'this' | 'next') {
   }
 }
 
+/**
+ * Ta ned alt boten har lagt ut for dette laget. Én bunke per kall; appen
+ * kaller til `remaining` er 0, slik at en lang historikk ikke må ryddes
+ * innenfor levetiden til én funksjon.
+ *
+ * Bekreftelsen er lagets eget navn, skrevet av eieren. Ikke fordi noen andre
+ * kommer forbi requireOwner, men fordi dette ikke kan gjøres om igjen, og et
+ * uhell med musepekeren skal ikke holde.
+ */
+async function wipe(teamId: string, confirm?: string) {
+  const team = await db.one<{ name: string }>('teams', { id: `eq.${teamId}`, select: 'name' })
+  if (!team) throw new HttpError(404, 'team not found')
+  if ((confirm ?? '').trim().toLowerCase() !== team.name.trim().toLowerCase()) {
+    throw new HttpError(400, `Type the team name (${team.name}) to confirm.`)
+  }
+  const r = await wipeMessages(teamId)
+  if (r.stopped && r.deleted === 0) throw new HttpError(409, r.stopped)
+  return r
+}
+
 async function disconnect(teamId: string, link: DiscordLink) {
   // Take the living post down so a dead week does not stay pinned.
   const post = await db.one<WeekPost>('discord_week_post', { team_id: `eq.${teamId}` })
@@ -175,6 +204,7 @@ async function disconnect(teamId: string, link: DiscordLink) {
     } catch {
       /* fine */
     }
+    await forget(post.message_id)
   }
   if (link.managed_role && link.ping_role_id) {
     try {

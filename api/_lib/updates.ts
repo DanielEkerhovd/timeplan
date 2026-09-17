@@ -5,6 +5,7 @@
 
 import { channelInGuild, discord, DiscordError, explain } from './discord'
 import { db, log } from './supabase'
+import { postAndRecord } from './sent'
 import type { DiscordChannel, DiscordLink, DiscordSchedule } from './supabase'
 import { buildNewSessionsCard, buildUpdateCard, forPeople, forRole, silent, title } from './updateCard'
 import type { Audience, OutboxRow } from './updateCard'
@@ -73,13 +74,13 @@ async function teamCtx(teamId: string): Promise<Ctx> {
  * the person is marked, skipped next time, and handed back so the caller can
  * ping them in the channel instead.
  */
-async function sendDms(people: string[], msgFor: (id: string) => Record<string, unknown>): Promise<{ sent: string[]; blocked: string[] }> {
+async function sendDms(teamId: string, people: string[], msgFor: (id: string) => Record<string, unknown>): Promise<{ sent: string[]; blocked: string[] }> {
   const sent: string[] = []
   const blocked: string[] = []
   for (const id of people) {
     try {
       const dm = await discord<{ id: string }>('POST', '/users/@me/channels', { recipient_id: id })
-      await discord('POST', `/channels/${dm.id}/messages`, { ...msgFor(id), allowed_mentions: { parse: [] } })
+      await postAndRecord(teamId, dm.id, { ...msgFor(id), allowed_mentions: { parse: [] } }, 'update', true)
       sent.push(id)
     } catch (err) {
       if (err instanceof DiscordError && err.code === 50007) {
@@ -98,20 +99,18 @@ async function sendDms(people: string[], msgFor: (id: string) => Record<string, 
  * person, and whoever could not be reached gets pinged in the channel after
  * all. Both: the channel card and the DMs.
  */
-async function deliver(ctx: TeamCtx, card: Record<string, unknown>, audience: Audience, dmTo: string[], dmCard: (me: string) => Record<string, unknown>): Promise<string | null> {
+async function deliver(teamId: string, ctx: TeamCtx, card: Record<string, unknown>, audience: Audience, dmTo: string[], dmCard: (me: string) => Record<string, unknown>): Promise<string | null> {
   const mode = ctx.schedule.updates_mode
   let messageId: string | null = null
   if (mode === 'channel' || mode === 'both') {
-    const posted = await discord<{ id: string }>('POST', `/channels/${ctx.channel}/messages`, card)
-    messageId = posted.id
+    messageId = await postAndRecord(teamId, ctx.channel, card, 'update')
   }
   if (mode === 'dm' || mode === 'both') {
-    const { blocked } = await sendDms(dmTo, dmCard)
+    const { blocked } = await sendDms(teamId, dmTo, dmCard)
     if (mode === 'dm' && (blocked.length || dmTo.length === 0)) {
       // DM-only, but some (or all) could not be reached: the channel is the fallback, pinging only them.
       const fallback = blocked.length ? forPeople(blocked) : audience
-      const posted = await discord<{ id: string }>('POST', `/channels/${ctx.channel}/messages`, { ...card, allowed_mentions: { parse: [], users: fallback.users, roles: fallback.roles } })
-      messageId = posted.id
+      messageId = await postAndRecord(teamId, ctx.channel, { ...card, allowed_mentions: { parse: [], users: fallback.users, roles: fallback.roles } }, 'update')
     }
   }
   return messageId
@@ -191,7 +190,7 @@ export async function drainOutbox(limit = 20, onlyTeam?: string, onlyRow?: numbe
         const audience = ctx.link.ping_mode === 'role' && ctx.link.ping_role_id ? forRole(ctx.link.ping_role_id) : forPeople(await teamPeople(teamId, false))
         const card = buildNewSessionsCard(batch, ctx.timezone, audience)
         const dmCard = (me: string) => buildNewSessionsCard(batch, ctx.timezone, silent, [], { team: ctx.name, me })
-        const messageId = await deliver(ctx, card, audience, await teamPeople(teamId, true), dmCard)
+        const messageId = await deliver(teamId, ctx, card, audience, await teamPeople(teamId, true), dmCard)
         await done(batch, messageId)
         await log(teamId, 'update', batch.length === 1 && batch[0].payload.after ? `New: ${title(batch[0].payload.after)}` : `${batch.length} new sessions`, true)
         out[`${teamId}:new`] = 'sent'
@@ -221,7 +220,7 @@ export async function drainOutbox(limit = 20, onlyTeam?: string, onlyRow?: numbe
       const audience = people.length ? forPeople(people) : silent
       const dmTo = people.length ? (await teamPeople(row.team_id, true)).filter((id) => people.includes(id)) : []
       const dmCard = (me: string) => buildUpdateCard(row, ctx.timezone, people, { team: ctx.name, me })
-      const messageId = await deliver(ctx, card, audience, dmTo, dmCard)
+      const messageId = await deliver(teamId, ctx, card, audience, dmTo, dmCard)
       await done([row], messageId)
       const what = row.payload.after ?? row.payload.before
       await log(row.team_id, 'update', `${KIND_LABEL[row.kind]}: ${what ? title(what) : 'session'}`, true)

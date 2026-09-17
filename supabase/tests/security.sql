@@ -846,6 +846,32 @@ set local role authenticated;
 select pg_temp.expect_count('en fremmed ser ingen kø', 'select * from public.discord_outbox', 0);
 reset role;
 
+-- Kvitteringsboka (0028): bare serveren skriver og leser rader. Laget får et
+-- tall, og bare eieren — det er hele grunnlaget for at oppryddingen kan holde
+-- seg til ett lag når flere deler en Discord-server.
+insert into public.discord_messages (team_id, channel_id, message_id, kind)
+  values (:'team_a', '800000000000000001', '900000000000000001', 'week_post'),
+         (:'team_a', '800000000000000001', '900000000000000002', 'update');
+insert into public.discord_messages (team_id, channel_id, message_id, kind)
+  values (:'team_b', '800000000000000009', '900000000000000003', 'update');
+select pg_temp.become(:'eier_a');
+set local role authenticated;
+select pg_temp.expect_denied('eier kan ikke lese kvitteringsboka', 'select * from public.discord_messages');
+select pg_temp.expect_denied('eier kan ikke skrive i kvitteringsboka',
+  format('insert into public.discord_messages (team_id, channel_id, message_id, kind) values (%L, ''1'', ''2'', ''test'')', :'team_a'));
+select pg_temp.expect_denied('eier kan ikke slette fra kvitteringsboka', 'delete from public.discord_messages');
+select pg_temp.expect_count('eier ser tallet for sitt eget lag',
+  format('select 1 where public.discord_message_count(%L) = 2', :'team_a'), 1);
+select pg_temp.expect_count('eier ser ikke tallet for et annet lag',
+  format('select 1 where public.discord_message_count(%L) = 0', :'team_b'), 1);
+reset role;
+select pg_temp.become(:'spiller_a');
+set local role authenticated;
+select pg_temp.expect_count('et medlem som ikke eier laget får 0',
+  format('select 1 where public.discord_message_count(%L) = 0', :'team_a'), 1);
+reset role;
+delete from public.discord_messages where team_id in (:'team_a', :'team_b');
+
 -- Påminnelser (0023): stempelet er serverens, nullstilles når aktiviteten flyttes, og utvalget er bare for serveren.
 select pg_temp.become(:'eier_a');
 set local role authenticated;
