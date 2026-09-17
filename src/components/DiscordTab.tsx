@@ -1149,7 +1149,7 @@ function SendsCard({ team, state, run }: { team: MyTeam; state: DiscordState; ru
       </SendRow>
       <SendRow
         title="Nudge for next week"
-        sub="To anyone who hasn\u2019t marked a single hour for next week. Once a week, and not at all if everyone has answered."
+        sub="To anyone who hasnt marked a single hour for next week."
         on={s.nudge_enabled}
         onToggle={(v) => save({ nudge_enabled: v })}
       >
@@ -1160,13 +1160,13 @@ function SendsCard({ team, state, run }: { team: MyTeam; state: DiscordState; ru
       </SendRow>
       <SendRow
         title="New and changed sessions"
-        sub="Only for the week that is posted. New sessions ping the team; moves and cancellations ping the people who had said yes."
+        sub="Sends message to users about new events and changes to existing events."
         on={s.updates_enabled}
         onToggle={(v) => save({ updates_enabled: v })}
       >
         <Dropdown look="pill" value={s.updates_mode ?? "channel"} options={MODE_OPTIONS} search={false} onChange={(v) => save({ updates_mode: v })} />
       </SendRow>
-      <SendRow title="Reminder before a session" sub="To the people who said yes, with Still in / Can’t. Sent once; a moved session gets a new one." on={s.same_day_enabled} onToggle={(v) => save({ same_day_enabled: v })}>
+      <SendRow title="Reminder before a session" sub="Sends message to users who have joined the session" on={s.same_day_enabled} onToggle={(v) => save({ same_day_enabled: v })}>
         <Dropdown look="pill" value={Number(s.same_day_hours)} options={HOURS_OPTIONS} search={false} onChange={(v) => save({ same_day_hours: v })} />
         <Dropdown look="pill" value={s.same_day_mode} options={MODE_OPTIONS} search={false} onChange={(v) => save({ same_day_mode: v })} />
       </SendRow>
