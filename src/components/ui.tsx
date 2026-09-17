@@ -285,18 +285,16 @@ export function AvatarStack({
   return (
     <div className="flex items-center">
       {shown.map((p, i) => (
-        <div
-          key={p.user_id}
-          style={{ marginLeft: i === 0 ? 0 : -Math.round(size / 3) }}
-          title={p.profile?.display_name ?? ""}
-        >
-          <Avatar
-            name={p.profile?.display_name ?? "?"}
-            url={p.profile?.avatar_url}
-            size={size}
-            ring={ring}
-          />
-        </div>
+        <Tip key={p.user_id} text={p.profile?.display_name}>
+          <div style={{ marginLeft: i === 0 ? 0 : -Math.round(size / 3) }}>
+            <Avatar
+              name={p.profile?.display_name ?? "?"}
+              url={p.profile?.avatar_url}
+              size={size}
+              ring={ring}
+            />
+          </div>
+        </Tip>
       ))}
       {rest > 0 && (
         <div
@@ -567,5 +565,93 @@ export function WhoHover({
         </div>
       )}
     </div>
+  );
+}
+
+/**
+ * The little label that explains a control on hover. The browser's own `title=`
+ * does the same job, but in the operating system's boxy style, a second late,
+ * and never for someone on a keyboard — so it always looked like a page we had
+ * not finished. This is ours: the same delay and the same measure-and-flip as
+ * WhoHover, and it answers focus as well as the mouse.
+ *
+ * The wrapper is display:contents, so it adds no box of its own and the child
+ * keeps whatever layout its parent gave it.
+ */
+export function Tip({
+  text,
+  children,
+  delay = 300,
+  wide = false,
+}: {
+  text?: string | null;
+  children: ReactNode;
+  delay?: number;
+  wide?: boolean;
+}) {
+  const [pos, setPos] = useState<{ x: number; y: number; up: boolean } | null>(
+    null,
+  );
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const ref = useRef<HTMLSpanElement>(null);
+
+  const clear = () => {
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = null;
+    setPos(null);
+  };
+
+  // Keyboard focus shows it at once; the mouse waits, so passing over a row of
+  // controls does not flash a label for each one.
+  const show = (now = false) => {
+    if (!text) return;
+    if (timer.current) clearTimeout(timer.current);
+    const run = () => {
+      const r = (
+        ref.current?.firstElementChild as HTMLElement | null
+      )?.getBoundingClientRect();
+      if (!r) return;
+      const half = wide ? 150 : 110;
+      const up = r.bottom + 64 > window.innerHeight;
+      setPos({
+        x: Math.min(
+          Math.max(r.left + r.width / 2, half + 8),
+          window.innerWidth - half - 8,
+        ),
+        y: up ? r.top - 6 : r.bottom + 6,
+        up,
+      });
+    };
+    if (now) run();
+    else timer.current = setTimeout(run, delay);
+  };
+
+  useEffect(() => clear, []);
+
+  return (
+    <span
+      ref={ref}
+      className="contents"
+      onMouseEnter={() => show()}
+      onMouseLeave={clear}
+      onMouseDown={clear}
+      onFocusCapture={() => show(true)}
+      onBlurCapture={clear}
+    >
+      {children}
+      {pos && text && (
+        <div
+          role="tooltip"
+          className={`pointer-events-none fixed z-[90] ${wide ? "max-w-[300px]" : "max-w-[220px]"} rounded-xl bg-ink px-2.5 py-1.5 text-[11.5px] font-semibold leading-snug text-on-ink shadow-pop`}
+          style={{
+            left: pos.x,
+            top: pos.y,
+            transform: `translate(-50%, ${pos.up ? "-100%" : "0"})`,
+          }}
+        >
+          {text}
+        </div>
+      )}
+    </span>
   );
 }

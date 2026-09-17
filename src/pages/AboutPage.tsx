@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { Eyebrow, useToast } from "../components/ui";
+import { Eyebrow, Tip, useToast } from "../components/ui";
 
 /**
  * Om appen. Nås fra merket nederst i sidemenyen, og fra brukermenyen på mobil.
@@ -210,10 +210,10 @@ export default function AboutPage() {
               </svg>
               daniel@webvest.no
             </a>
+            <Tip text="Copy the Discord name">
             <button
               type="button"
               onClick={() => void copy("fabbiel", "Discord name")}
-              title="Copy the Discord name"
               className="flex h-11 items-center gap-2.5 rounded-full border-[1.5px] border-line bg-surface px-4 text-[13px] font-bold transition hover:border-faint"
             >
               <svg
@@ -227,6 +227,7 @@ export default function AboutPage() {
               </svg>
               fabbiel
             </button>
+            </Tip>
           </div>
         </section>
 

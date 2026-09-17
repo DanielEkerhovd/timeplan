@@ -10,7 +10,7 @@ import {
 import type { ActivityType, MemberWithProfile } from "../lib/types";
 import { dayShort, fromDateKey } from "../lib/week";
 import { useZone } from "../lib/zone";
-import { AvatarStack, Check, Pill } from "./ui";
+import { AvatarStack, Check, Pill, Tip } from "./ui";
 
 interface Props {
   events: EventWithResponses[];
@@ -141,20 +141,26 @@ export default function SessionsList({
 function RemindPill({ event, onRemind }: { event: EventWithResponses; onRemind: (e: EventWithResponses) => Promise<string> }) {
   const [busy, setBusy] = useState(false);
   const [said, setSaid] = useState<string | null>(null);
-  if (said) return <span className="max-w-[140px] truncate text-[12px] font-bold text-muted" title={said}>{said}</span>;
+  if (said)
+    return (
+      <Tip text={said} wide>
+        <span className="max-w-[140px] truncate text-[12px] font-bold text-muted">{said}</span>
+      </Tip>
+    );
   return (
-    <Pill
-      disabled={busy}
-      title="Send the Discord reminder for this session now"
-      onClick={() => {
-        setBusy(true);
-        onRemind(event)
-          .then(setSaid)
-          .catch((err: unknown) => setSaid(err instanceof Error ? err.message : "Could not send"))
-          .finally(() => setBusy(false));
-      }}
-    >
-      {busy ? "Sending…" : "Remind"}
-    </Pill>
+    <Tip text="Send the Discord reminder for this session now" wide>
+      <Pill
+        disabled={busy}
+        onClick={() => {
+          setBusy(true);
+          onRemind(event)
+            .then(setSaid)
+            .catch((err: unknown) => setSaid(err instanceof Error ? err.message : "Could not send"))
+            .finally(() => setBusy(false));
+        }}
+      >
+        {busy ? "Sending…" : "Remind"}
+      </Pill>
+    </Tip>
   );
 }

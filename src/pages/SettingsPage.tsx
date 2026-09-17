@@ -55,6 +55,7 @@ import {
   Modal,
   Pill,
   Spinner,
+  Tip,
   Toggle,
   useToast,
 } from "../components/ui";
@@ -296,11 +297,6 @@ function WeekPlanTab({
                     on ? [...off, d] : off.filter((x) => x !== d),
                   ),
                 )
-              }
-              title={
-                isOwner
-                  ? `Turn ${dayShort[d - 1]} ${on ? "off for every week" : "back on"}`
-                  : undefined
               }
               className={`group flex flex-col items-center gap-2 rounded-[16px] p-3 ring-1 transition duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink ${
                 isOwner
@@ -1014,30 +1010,31 @@ function TeamZone({
 
   return (
     <>
-      <button
-        type="button"
-        onClick={() => {
-          setPick(timezone);
-          setOpen(true);
-        }}
-        title="Change the time zone the team plans in"
-        className="flex items-center gap-2 rounded-full bg-surface px-3 py-1.5 text-[12px] font-bold shadow-card ring-1 ring-transparent transition hover:ring-line"
-      >
-        {label}
-        <svg
-          width="12"
-          height="12"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2.5"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          className="text-faint"
+      <Tip text="Change the time zone the team plans in" wide>
+        <button
+          type="button"
+          onClick={() => {
+            setPick(timezone);
+            setOpen(true);
+          }}
+          className="flex items-center gap-2 rounded-full bg-surface px-3 py-1.5 text-[12px] font-bold shadow-card ring-1 ring-transparent transition hover:ring-line"
         >
-          <path d="M6 9l6 6 6-6" />
-        </svg>
-      </button>
+          {label}
+          <svg
+            width="12"
+            height="12"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className="text-faint"
+          >
+            <path d="M6 9l6 6 6-6" />
+          </svg>
+        </button>
+      </Tip>
 
       {open && (
         <Modal onClose={() => setOpen(false)}>
@@ -1460,7 +1457,6 @@ function TypesCard({
                   `${t.name} restored`,
                 )
               }
-              title="Restore"
             >
               <span
                 className="h-2 w-2 rounded-full"
@@ -1485,13 +1481,14 @@ function ColorDot({
   const [open, setOpen] = useState(false);
   return (
     <div className="relative">
-      <button
-        onClick={() => setOpen((o) => !o)}
-        aria-label={`Colour: ${palette[color].label}`}
-        title="Pick a colour"
-        className="h-[22px] w-[22px] shrink-0 rounded-full ring-2 ring-line-soft transition hover:ring-ink"
-        style={{ background: palette[color].accent }}
-      />
+      <Tip text="Pick a colour">
+        <button
+          onClick={() => setOpen((o) => !o)}
+          aria-label={`Colour: ${palette[color].label}`}
+          className="h-[22px] w-[22px] shrink-0 rounded-full ring-2 ring-line-soft transition hover:ring-ink"
+          style={{ background: palette[color].accent }}
+        />
+      </Tip>
       {open && (
         <div
           className="absolute left-0 top-7 z-10 flex gap-1.5 rounded-xl bg-surface p-2 shadow-card"
@@ -1556,6 +1553,7 @@ function TypeRow({ type, run }: { type: ActivityType; run: Run }) {
         aria-label="Type name"
         className="h-9 w-full min-w-[130px] flex-1 basis-[calc(100%-30px)] border-transparent bg-transparent px-2 text-sm font-extrabold transition hover:border-line hover:bg-surface focus:border-line focus:bg-surface sm:w-auto sm:basis-auto"
       />
+      <Tip text="Does the booking form ask who you play against?" wide>
       <button
         type="button"
         onClick={() =>
@@ -1564,7 +1562,6 @@ function TypeRow({ type, run }: { type: ActivityType; run: Run }) {
           )
         }
         aria-pressed={type.ask_opponent}
-        title="Does the booking form ask who you play against?"
         className={`flex h-8 items-center gap-1.5 whitespace-nowrap rounded-full px-3 text-xs font-bold transition ${
           type.ask_opponent
             ? "bg-green-soft text-green-ink hover:brightness-95"
@@ -1576,6 +1573,7 @@ function TypeRow({ type, run }: { type: ActivityType; run: Run }) {
         />
         {type.ask_opponent ? "Asks opponent" : "No opponent"}
       </button>
+      </Tip>
       <Dropdown
         value={type.default_hours}
         options={lengthOptions}
@@ -1816,12 +1814,12 @@ function RolesCard({
                 <span className="min-w-0 flex-1 truncate text-sm font-bold">
                   {r.name}
                 </span>
+                <Tip text="Anyone with this role keeps their seat, just without a role" wide>
                 <button
                   onClick={() =>
                     void run(() => deleteTeamRole(r.id), "Role removed")
                   }
                   aria-label={`Remove ${r.name}`}
-                  title="Anyone with this role keeps their seat, just without a role"
                   // Kommer fram når du peker på raden. På touch står det alltid.
                   className="flex h-7 w-7 items-center justify-center rounded-full text-faint opacity-0 transition hover:bg-red-soft hover:text-red-ink focus-visible:opacity-100 group-hover:opacity-100 pointer-coarse:opacity-100"
                 >
@@ -1837,6 +1835,7 @@ function RolesCard({
                     <path d="M6 6l12 12M18 6L6 18" />
                   </svg>
                 </button>
+                </Tip>
               </li>
             </Fragment>
           ))}

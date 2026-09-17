@@ -2,7 +2,7 @@ import { useSearchParams } from "react-router-dom";
 import { shareLink } from "../lib/share";
 import type { MyTeam } from "../lib/teams";
 import { weekId, weekStartFromId } from "../lib/week";
-import { useToast } from "./ui";
+import { Tip, useToast } from "./ui";
 
 /** Copies the link for the week you are looking at, ready to paste on Discord. */
 export function useCopyWeekLink(team: MyTeam) {
@@ -42,31 +42,35 @@ export default function ShareWeekButton({
 }) {
   const copy = useCopyWeekLink(team);
   return (
-    <button
-      onClick={() => void copy()}
-      title={
+    <Tip
+      wide
+      text={
         team.share_enabled
           ? "Copy the link for this week"
           : team.role === "owner"
             ? "Sharing is off · turn it on in Settings"
             : "Sharing is off · only the owner can turn it on"
       }
-      className={`flex h-11 w-full shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-xl bg-ink px-3 text-[13px] font-bold text-on-ink hover:opacity-90 ${className}`}
     >
-      <svg
-        width="16"
-        height="16"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
+      <button
+        onClick={() => void copy()}
+        className={`flex h-11 w-full shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-xl bg-ink px-3 text-[13px] font-bold text-on-ink hover:opacity-90 ${className}`}
       >
-        <path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1" />
-        <path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1" />
-      </svg>
-      Share week on Discord
-    </button>
+        <svg
+          width="16"
+          height="16"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          <path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1" />
+          <path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1" />
+        </svg>
+        Share week on Discord
+      </button>
+    </Tip>
   );
 }

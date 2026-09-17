@@ -14,7 +14,7 @@ import {
   weekId,
   weekStartFromId,
 } from "../lib/week";
-import { Avatar, Button, Spinner } from "../components/ui";
+import { Avatar, Button, Spinner, Tip } from "../components/ui";
 
 /**
  * Read-only week for anyone with the link. No login. Shows booked activities and the blocks
@@ -138,11 +138,8 @@ export default function SharePage() {
                       {e.people.length > 0 && (
                         <div className="flex items-center pt-1">
                           {e.people.map((person, k) => (
-                            <div
-                              key={k}
-                              style={{ marginLeft: k === 0 ? 0 : -7 }}
-                              title={person.name}
-                            >
+                            <Tip key={k} text={person.name}>
+                            <div style={{ marginLeft: k === 0 ? 0 : -7 }}>
                               <Avatar
                                 name={person.name}
                                 url={person.avatar}
@@ -150,6 +147,7 @@ export default function SharePage() {
                                 ring={p.soft}
                               />
                             </div>
+                            </Tip>
                           ))}
                         </div>
                       )}

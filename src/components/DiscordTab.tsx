@@ -27,7 +27,7 @@ import {
 } from "../lib/discord";
 import { DiscordApiError } from "../lib/discord";
 import type { ChannelKind, DiscordPending, DiscordState, PickerChannel, PickerRole, StatusCheck } from "../lib/discord";
-import { Button, Card, Check, Eyebrow, ErrorText, Input, Label, Pill, Spinner, Toggle, useToast } from "./ui";
+import { Button, Card, Check, Eyebrow, ErrorText, Input, Label, Pill, Spinner, Tip, Toggle, useToast } from "./ui";
 import { Dropdown } from "./pickers";
 import type { DropdownOption } from "./pickers";
 
@@ -1119,9 +1119,9 @@ function LogCard({ state, last, isOwner, run }: { state: DiscordState; last: Dis
           {state.log.map((l, i) => (
             <div key={l.id} className={`grid grid-cols-[76px_minmax(0,1fr)_auto] items-center gap-3 py-2.5 ${i ? "border-t border-line-soft" : ""}`}>
               <span className="text-[12px] font-extrabold text-muted">{KIND_LABEL[l.kind]}</span>
-              <span className="truncate text-[14px] font-semibold" title={l.detail ?? undefined}>
-                {l.summary}
-              </span>
+              <Tip text={l.detail} wide>
+                <span className="truncate text-[14px] font-semibold">{l.summary}</span>
+              </Tip>
               <span className="flex items-center gap-2 text-[12px] text-muted">
                 {when(l.at)}
                 <span className={`flex items-center gap-1.5 font-extrabold ${l.ok ? "text-muted" : "text-red-ink"}`}>
@@ -1155,9 +1155,9 @@ function PendingRow({ team, row, isOwner, run }: { team: string; row: DiscordPen
   return (
     <div className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-[12px] bg-surface px-3.5 py-2.5">
       <span className="text-[12px] font-extrabold text-muted">{PENDING_LABEL[row.kind]}</span>
-      <span className="min-w-0 flex-1 truncate text-[14px] font-semibold" title={row.last_error ?? undefined}>
-        {name}
-      </span>
+      <Tip text={row.last_error} wide>
+        <span className="min-w-0 flex-1 truncate text-[14px] font-semibold">{name}</span>
+      </Tip>
       <span className="text-[12px] text-muted">{row.last_error ? "Could not send" : due <= Date.now() ? "Any moment now" : `Goes at ${when(row.send_after)}`}</span>
       {isOwner && (
         <span className="flex gap-1.5">

@@ -29,6 +29,7 @@ import {
   Eyebrow,
   Pill,
   Spinner,
+  Tip,
   useToast,
 } from "../components/ui";
 import { Dropdown } from "../components/pickers";
@@ -278,11 +279,11 @@ function MemberRow({
 
           {/* Column 3: remove. Placeholder keeps the columns lined up on rows you cannot remove. */}
           {canManage ? (
+            <Tip text="Remove from team">
             <button
               onClick={() => onAskConfirm("remove")}
               disabled={busy}
               aria-label={`Remove ${name}`}
-              title="Remove from team"
               className="flex h-8 w-8 items-center justify-center rounded-full text-faint hover:bg-red-soft hover:text-red-ink"
             >
               <svg
@@ -297,6 +298,7 @@ function MemberRow({
                 <path d="M6 6l12 12M18 6L6 18" />
               </svg>
             </button>
+            </Tip>
           ) : (
             <span className="h-8 w-8" />
           )}
@@ -464,9 +466,11 @@ export function InviteCardView({ invites, days, uses, busy, onDays, onUses, onCr
             </Button>
           </div>
           <div className="flex items-center gap-2 pl-1 text-xs text-muted">
-            <button onClick={() => onCopyCode(first.code)} className="shrink-0 rounded-md bg-surface px-1.5 py-0.5 font-mono text-[11px] font-bold tracking-[0.1em] text-ink hover:text-green-ink" title="Copy the code on its own">
-              {first.code}
-            </button>
+            <Tip text="Copy the code on its own">
+              <button onClick={() => onCopyCode(first.code)} className="shrink-0 rounded-md bg-surface px-1.5 py-0.5 font-mono text-[11px] font-bold tracking-[0.1em] text-ink hover:text-green-ink">
+                {first.code}
+              </button>
+            </Tip>
             <span className="min-w-0 truncate">
               <span className="font-bold text-ink">{first.max_uses - first.used_count} of {first.max_uses} left</span> · expires {expiryLabel(first.expires_at)}
             </span>
@@ -482,9 +486,11 @@ export function InviteCardView({ invites, days, uses, busy, onDays, onUses, onCr
         <ul className="flex flex-col gap-1.5">
           {rest.map((inv) => (
             <li key={inv.id} className="flex items-center gap-3 rounded-xl px-3 py-2 hover:bg-bg">
-              <button onClick={() => onCopyCode(inv.code)} className="font-mono text-[13px] font-bold tracking-[0.1em] hover:text-green-ink" title="Copy the code on its own">
-                {inv.code}
-              </button>
+              <Tip text="Copy the code on its own">
+                <button onClick={() => onCopyCode(inv.code)} className="font-mono text-[13px] font-bold tracking-[0.1em] hover:text-green-ink">
+                  {inv.code}
+                </button>
+              </Tip>
               <span className="hidden min-w-0 flex-1 truncate text-xs text-muted sm:block">
                 {inv.max_uses - inv.used_count} of {inv.max_uses} left · expires {expiryLabel(inv.expires_at)}
               </span>

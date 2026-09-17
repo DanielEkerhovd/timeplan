@@ -1,5 +1,6 @@
 import { formatRange, weekId } from '../lib/week'
 
+
 interface Props {
   monday: Date
   isCurrentWeek: boolean
@@ -38,7 +39,7 @@ export default function WeekNav({ monday, isCurrentWeek, subtitle, onPrev, onNex
         <button onClick={onPrev} aria-label="Previous week" className="flex h-9 w-9 items-center justify-center rounded-[10px] text-muted hover:bg-surface-2">
           {arrow('left')}
         </button>
-        <button onClick={onToday} className="flex min-w-0 flex-1 flex-col items-center gap-0.5 px-2" title="Jump to this week">
+        <button onClick={onToday} className="flex min-w-0 flex-1 flex-col items-center gap-0.5 px-2" aria-label="Jump to this week">
           <span className="text-[15px] font-bold">
             Week {number}
             {now}
