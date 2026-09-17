@@ -96,6 +96,14 @@ describe('zoneSlotLabel', () => {
     expect(zoneSlotLabel(20, 23, -8)).toBe('next day 04:00 - 07:00')
     expect(zoneSlotLabel(1, 3, 6)).toBe('day before 19:00 - 21:00')
   })
+  it('halve timer: 19.5 er 19:30, også med forskjell og over midnatt', () => {
+    expect(zoneSlotLabel(19.5, 21, 0, 1)).toBe('19:30 - 21:00')
+    expect(zoneSlotLabel(19.5, 21, 6, 1)).toBe('13:30 - 15:00')
+    // Slutter 00:00 hos deg: samme døgn som starten, ikke +1.
+    expect(zoneSlotLabel(22.5, 24, 0, 1)).toBe('22:30 - 00:00')
+    expect(zoneSlotLabel(22.5, 24, -1, 1)).toBe('23:30 - 01:00 +1')
+    expect(zoneSlotShort(19.5, 21, 0, 1)).toBe('19:30–21')
+  })
 })
 
 describe('zoneHour', () => {

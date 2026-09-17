@@ -141,7 +141,7 @@ export function zoneSlotShort(start: number, end: number, diff: number, isoDay?:
   if (diff === 0) return text;
 
   const shiftStart = zoneDayShift(start, diff);
-  const shiftEnd = zoneDayShift(end - 1, diff);
+  const shiftEnd = zoneDayShift(end - 0.5, diff);
 
   let out = text;
   if (shiftEnd !== shiftStart) out += ' +1';
@@ -166,8 +166,8 @@ export function zoneSlotLabel(start: number, end: number, diff: number, isoDay?:
   if (diff === 0) return text;
 
   const shiftStart = zoneDayShift(start, diff);
-  // Slutten er eksklusiv: 24 hører til samme døgn som 23.
-  const shiftEnd = zoneDayShift(end - 1, diff);
+  // Slutten er eksklusiv: 24 hører til samme døgn som 23:30.
+  const shiftEnd = zoneDayShift(end - 0.5, diff);
 
   let out = text;
   if (shiftEnd !== shiftStart) out += " +1";

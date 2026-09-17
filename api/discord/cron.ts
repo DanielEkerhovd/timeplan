@@ -17,6 +17,9 @@
 //   3. Change messages. The database queues added, moved and cancelled
 //      sessions (discord_outbox); anything that has waited its two minutes is
 //      posted in the updates channel, pinging the people it concerns.
+//
+//   4. Reminders. A session that starts within the team's chosen number of
+//      hours gets one card to the people who said yes (reminders.ts).
 
 export const config = { runtime: 'edge' }
 
@@ -26,6 +29,7 @@ import type { DiscordSchedule, WeekPost } from '../_lib/supabase'
 import { addDays, localNow, mondayOf, timeToMinutes } from '../_lib/time'
 import { ensureWeekPost } from '../_lib/week'
 import { drainOutbox } from '../_lib/updates'
+import { sendReminders } from '../_lib/reminders'
 import { sameSecret } from '../_lib/crypto'
 import { leaveOrphanGuilds } from '../_lib/discord'
 
@@ -84,5 +88,12 @@ export default async function handler(req: Request): Promise<Response> {
   }
   // 3. Change messages that have waited their two minutes.
   const updates = await drainOutbox()
-  return json({ teams: schedules.length, out, updates, orphans })
+  // 4. Reminders before sessions, to the people who said yes.
+  let reminders: Record<string, string> = {}
+  try {
+    reminders = await sendReminders()
+  } catch (err) {
+    reminders = { error: err instanceof Error ? err.message : String(err) }
+  }
+  return json({ teams: schedules.length, out, updates, reminders, orphans })
 }

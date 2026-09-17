@@ -198,10 +198,18 @@ export function sendTestDm(teamId: string) {
 }
 
 /** One of the try-it-out actions on the Discord tab. All owner-only, all answered with a plain message. */
-export function tryAction(teamId: string, action: "preview" | "sample_change" | "flush" | "ping_me") {
+export function tryAction(teamId: string, action: "preview" | "sample_change" | "sample_reminder" | "flush" | "ping_me") {
   return api<{ ok?: boolean; where?: string[]; week?: string; sent?: number; errors?: number }>("/api/discord/post", {
     method: "POST",
     body: JSON.stringify({ team: teamId, action }),
+  });
+}
+
+/** Send the reminder for one session now, to the people who said yes. Owner or coach. The scheduled one is then skipped. */
+export function sendReminderNow(teamId: string, eventId: string) {
+  return api<{ sent: string; people: number }>("/api/discord/post", {
+    method: "POST",
+    body: JSON.stringify({ team: teamId, action: "remind", event_id: eventId }),
   });
 }
 

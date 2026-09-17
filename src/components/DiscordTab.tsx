@@ -535,7 +535,14 @@ function PingPicker({ team, link, run, onCreated }: { team: MyTeam; link: Discor
                   {made.missing > 0 && <span className="font-semibold text-muted">· {made.missing} not on the server yet</span>}
                 </p>
               )}
-              <ManagedRole team={team} current={options.find((o) => o.value === link.ping_role_id)?.label.replace(/^@/, "") ?? made?.name ?? null} run={run} />
+              <ManagedRole
+                team={team}
+                current={options.find((o) => o.value === link.ping_role_id)?.label.replace(/^@/, "") ?? made?.name ?? null}
+                run={run}
+                options={options.filter((o) => o.value !== link.ping_role_id)}
+                rolesLoaded={roles !== null}
+                onPick={(id) => pingTo("role", id)}
+              />
             </>
           ) : (
             <>
@@ -597,9 +604,25 @@ function PingPicker({ team, link, run, onCreated }: { team: MyTeam; link: Discor
 }
 
 /** The role the bot made. Its name lives here, not in Server Settings, so the owner never has to guess which @Team is ours. */
-function ManagedRole({ team, current, run }: { team: MyTeam; current: string | null; run: Run }) {
+function ManagedRole({
+  team,
+  current,
+  run,
+  options,
+  rolesLoaded,
+  onPick,
+}: {
+  team: MyTeam;
+  current: string | null;
+  run: Run;
+  /** The server's other roles, for switching away from the bot's. */
+  options: DropdownOption<string>[];
+  rolesLoaded: boolean;
+  onPick: (roleId: string) => Promise<void>;
+}) {
   const [name, setName] = useState(current ?? "");
   const [busy, setBusy] = useState(false);
+  const [switching, setSwitching] = useState(false);
   useEffect(() => {
     if (current !== null) setName(current);
   }, [current]);
@@ -610,6 +633,33 @@ function ManagedRole({ team, current, run }: { team: MyTeam; current: string | n
         <Label>Team role</Label>
         <Tag>Managed by Gather</Tag>
       </div>
+      {switching && (
+        <div className="flex flex-col gap-1.5 rounded-[12px] bg-bg p-3">
+          <Label>Use a role the server already has</Label>
+          <Dropdown
+            value=""
+            options={options}
+            disabled={!rolesLoaded}
+            placeholder={!rolesLoaded ? "Loading roles…" : options.length === 0 ? "No other roles on the server" : "Pick a role"}
+            search={false}
+            onChange={(id) => {
+              setBusy(true);
+              void run(() => onPick(id)).finally(() => {
+                setBusy(false);
+                setSwitching(false);
+              });
+            }}
+          />
+          <div className="flex items-center justify-between gap-3">
+            <span className="text-[12.5px] text-muted">
+              Picking one removes @{current ?? "the team role"} from the server.
+            </span>
+            <button type="button" onClick={() => setSwitching(false)} className="text-[13px] font-semibold text-muted hover:text-ink">
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
       <div className="flex items-center gap-2">
         <span className="pl-1 text-[15px] font-bold text-muted">@</span>
         <Input value={name} onChange={(e) => setName(e.target.value)} className="h-10 text-[14px]" placeholder={current ?? "Loading…"} aria-label="Team role name" />
@@ -628,7 +678,14 @@ function ManagedRole({ team, current, run }: { team: MyTeam; current: string | n
           Rename
         </Button>
       </div>
-      <p className="px-1 text-[12.5px] text-muted">Switching to everyone or to another role removes this role from the server.</p>
+      <div className="flex flex-wrap items-center justify-between gap-2 px-1">
+        <p className="text-[12.5px] text-muted">Switching to everyone or to another role removes this role from the server.</p>
+        {!switching && (
+          <button type="button" disabled={busy} onClick={() => setSwitching(true)} className="text-[13px] font-semibold text-muted underline-offset-2 hover:text-ink hover:underline disabled:opacity-50">
+            Use a server role instead
+          </button>
+        )}
+      </div>
     </div>
   );
 }
@@ -866,6 +923,15 @@ function TryCard({ team, run }: { team: MyTeam; run: Run }) {
           },
         },
         {
+          key: "sample_reminder",
+          label: "Send a sample reminder",
+          hint: "A made-up reminder for a session tonight, delivered the way reminders are set to go. Only you are mentioned.",
+          fn: async () => {
+            const r = await tryAction(team.id, "sample_reminder");
+            return `Sent (${(r.where ?? []).join(" + ")}).`;
+          },
+        },
+        {
           key: "flush",
           label: "Send what’s waiting now",
           hint: "Runs the clock for this team instead of waiting up to five minutes.",
@@ -1093,7 +1159,7 @@ function SendsCard({ team, state, run }: { team: MyTeam; state: DiscordState; ru
       >
         <Dropdown look="pill" value={s.updates_mode ?? "channel"} options={MODE_OPTIONS} search={false} onChange={(v) => save({ updates_mode: v })} />
       </SendRow>
-      <SendRow title="Same-day reminder" sub="To the people who are in. Next round." on={s.same_day_enabled} onToggle={(v) => save({ same_day_enabled: v })}>
+      <SendRow title="Reminder before a session" sub="To the people who said yes, with Still in / Can’t. Sent once; a moved session gets a new one." on={s.same_day_enabled} onToggle={(v) => save({ same_day_enabled: v })}>
         <Dropdown look="pill" value={Number(s.same_day_hours)} options={HOURS_OPTIONS} search={false} onChange={(v) => save({ same_day_hours: v })} />
         <Dropdown look="pill" value={s.same_day_mode} options={MODE_OPTIONS} search={false} onChange={(v) => save({ same_day_mode: v })} />
       </SendRow>

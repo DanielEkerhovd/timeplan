@@ -5,18 +5,29 @@ export const config = { runtime: 'edge' }
 
 import { discord, explain, leaveGuild } from '../_lib/discord'
 import { env, guard, HttpError, json } from '../_lib/env'
-import { db, log, requireOwner, throttle } from '../_lib/supabase'
+import { db, log, requireEditor, requireOwner, throttle } from '../_lib/supabase'
 import type { DiscordChannel, DiscordLink, DiscordSchedule, WeekPost } from '../_lib/supabase'
 import { addDays, localNow, mondayOf } from '../_lib/time'
 import { buildWeekMessage, COMPONENTS_V2, ensureWeekPost, fetchBotWeek } from '../_lib/week'
 import { buildUpdateCard, drainOutbox, updatesChannel } from '../_lib/updates'
+import { buildReminderCard } from '../_lib/updateCard'
+import { remindNow } from '../_lib/reminders'
 import type { OutboxRow } from '../_lib/updates'
 
 export default function handler(req: Request): Promise<Response> {
   return guard(async () => {
     if (req.method !== 'POST') throw new HttpError(405, 'method not allowed')
-    const body = (await req.json().catch(() => ({}))) as { team?: string; action?: string; which?: string }
+    const body = (await req.json().catch(() => ({}))) as { team?: string; action?: string; which?: string; event_id?: string }
     const teamId = body.team ?? ''
+    // "Send a reminder now" belongs to whoever books sessions: owner or coach.
+    // Everything else here is the owner's.
+    if (body.action === 'remind') {
+      await requireEditor(req, teamId)
+      await throttle(teamId)
+      const eventId = String(body.event_id ?? '')
+      if (!/^[0-9a-f-]{36}$/i.test(eventId)) throw new HttpError(400, 'bad event id')
+      return json(await remindNow(teamId, eventId))
+    }
     const user = await requireOwner(req, teamId)
     const link = await db.one<DiscordLink>('discord_links', { team_id: `eq.${teamId}` })
     if (!link) throw new HttpError(409, 'not connected')
@@ -27,6 +38,7 @@ export default function handler(req: Request): Promise<Response> {
     if (body.action === 'post') return json(await postNow(teamId, body.which === 'next' ? 'next' : 'this'))
     if (body.action === 'preview') return json(await preview(teamId, user.id))
     if (body.action === 'sample_change') return json(await sampleChange(teamId, user.id))
+    if (body.action === 'sample_reminder') return json(await sampleReminder(teamId, user.id))
     if (body.action === 'flush') return json(await flush(teamId))
     if (body.action === 'ping_me') return json(await pingMe(teamId, user.id, link))
     if (body.action === 'disconnect') return json(await disconnect(teamId, link))
@@ -110,6 +122,43 @@ async function sampleChange(teamId: string, userId: string) {
     throw new HttpError(409, explain(err))
   }
   await log(teamId, 'test', `Sample change sent (${where.join(' + ')})`, true)
+  return { ok: true, where }
+}
+
+/**
+ * A made-up reminder for a session "tonight", delivered the way reminders are
+ * set to go. Only the owner is mentioned; the buttons are dropped (there is no
+ * session behind it) and the test line added.
+ */
+async function sampleReminder(teamId: string, userId: string) {
+  const me = await ownDiscordId(userId)
+  const [team, schedule, link, channels] = await Promise.all([
+    db.one<{ timezone: string; name: string }>('teams', { id: `eq.${teamId}`, select: 'timezone,name' }),
+    db.one<DiscordSchedule>('discord_schedules', { team_id: `eq.${teamId}` }),
+    db.one<DiscordLink>('discord_links', { team_id: `eq.${teamId}` }),
+    db.select<DiscordChannel>('discord_channels', { team_id: `eq.${teamId}` }),
+  ])
+  if (!team || !schedule || !link) throw new HttpError(404, 'team not found')
+  const pick = (k: DiscordChannel['kind']) => channels.find((c) => c.kind === k)?.channel_id
+  const channel = pick('reminders') ?? pick('updates') ?? pick('schedule')
+  if (!channel) throw new HttpError(409, 'Pick a channel first.')
+  const today = localNow(team.timezone).dateKey
+  const snap = { id: '00000000-0000-4000-8000-000000000000', date: today, start_hour: 20, end_hour: 23, title: 'Scrim', opponent: 'Sample FC', color: 'yellow' }
+  const mode = schedule.same_day_mode
+  const where: string[] = []
+  try {
+    if (mode === 'channel' || mode === 'both') {
+      await discord('POST', `/channels/${channel}/messages`, markTest(buildReminderCard(snap, team.timezone, [me], today)))
+      where.push('channel')
+    }
+    if (mode === 'dm' || mode === 'both') {
+      await dm(me, markTest(buildReminderCard(snap, team.timezone, [me], today, { team: team.name, me })))
+      where.push('DM')
+    }
+  } catch (err) {
+    throw new HttpError(409, explain(err))
+  }
+  await log(teamId, 'test', `Sample reminder sent (${where.join(' + ')})`, true)
   return { ok: true, where }
 }
 

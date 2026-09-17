@@ -140,6 +140,32 @@ export function buildUpdateCard(row: OutboxRow, tz: string, people: string[], dm
 }
 
 /**
+ * The reminder before a session, to the people who said yes. "Today" or the
+ * day name, the time, who is in, and Still in / Can't so a change of plans is
+ * one press. Buttons carry `r` so the click redraws this card, not the week.
+ */
+export function buildReminderCard(s: Snapshot, tz: string, people: string[], today: string, dm?: DmView): Record<string, unknown> {
+  const audience = dm ? silent : forPeople(people)
+  const start = unix(localToInstant(s.date, s.start_hour, 0, tz))
+  const heading = `## Reminder · ${title(s)}`
+  const dayWord = s.date === today ? 'Today' : `**${dayName(s.date)}**`
+  let line = `${dayWord} <t:${start}:t> · starts <t:${start}:R>`
+  if (dm) line = `-# ${dm.team}\n${line}\n${standing(people, dm.me, 'changed')}`
+  else if (audience.line) line += `\n${audience.line}`
+  const blocks: Record<string, unknown>[] = [
+    { type: 10, content: `${heading}\n${line}\n${WIDTH}` },
+    {
+      type: 1,
+      components: [
+        { type: 2, style: 3, label: 'Still in', custom_id: `rj:${s.id}` },
+        { type: 2, style: 2, label: "Can't", custom_id: `rc:${s.id}` },
+      ],
+    },
+  ]
+  return wrap(ACCENT[s.color] ?? GATHER_GREEN, blocks, audience)
+}
+
+/**
  * One card for one or more new sessions, pinging the team once. Five sessions
  * added in a burst are one card, not five pings. Capped at five per card;
  * the sender splits anything longer.

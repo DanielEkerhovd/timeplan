@@ -14,8 +14,10 @@ export function indexHours(rows: Pick<Availability, 'user_id' | 'date' | 'hour'>
   return out
 }
 
+/** The half hours a slot covers: 19–21 → [19, 19.5, 20, 20.5]. One availability row each. */
 export function slotHours(slot: Pick<TeamSlot, 'start_hour' | 'end_hour'>): number[] {
-  return Array.from({ length: slot.end_hour - slot.start_hour }, (_, i) => slot.start_hour + i)
+  const n = Math.round((slot.end_hour - slot.start_hour) * 2)
+  return Array.from({ length: n }, (_, i) => slot.start_hour + i / 2)
 }
 
 /** True when every hour in the slot is in the set. */

@@ -519,7 +519,8 @@ function SlotTimeline({
     const d = dragRef.current;
     if (!d) return;
     const slid = (scrollRef.current?.scrollLeft ?? 0) - d.scroll;
-    const step = Math.round((clientX - d.x + slid) / d.pxPerHour);
+    // Halve timer: musa snapper til nærmeste halvtime, og en bolk er minst én time.
+    const step = Math.round(((clientX - d.x + slid) / d.pxPerHour) * 2) / 2;
     const { start, end } = d.from;
     let next = { start, end };
     if (d.mode === "start")
@@ -856,10 +857,13 @@ function Nudge({
   );
 }
 
-/** «18–21». Bolkene er hele timer, så minuttene sier ingenting her — og korte
- *  tall gjør at teksten får plass også i en smal stolpe. */
+/** «18–21», «19:30–21». Hele timer uten minutter, så teksten får plass også i
+ *  en smal stolpe; halve timer beholder dem. */
 function hourPair(start: number, end: number) {
-  const p = (h: number) => String(h % 24).padStart(2, "0");
+  const p = (h: number) => {
+    const hh = String(Math.floor(h % 24)).padStart(2, "0");
+    return h % 1 ? `${hh}:30` : hh;
+  };
   return `${p(start)}–${p(end)}`;
 }
 
@@ -867,10 +871,12 @@ function clamp(n: number, lo: number, hi: number) {
   return Math.min(hi, Math.max(lo, n));
 }
 
+/** Piltast flytter en halvtime; med Shift en hel. */
 function arrowKey(e: ReactKeyboardEvent, move: (by: number) => void) {
   if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
   e.preventDefault();
-  move(e.key === "ArrowLeft" ? -1 : 1);
+  const step = e.shiftKey ? 1 : 0.5;
+  move(e.key === "ArrowLeft" ? -step : step);
 }
 
 /** Draget i enden av en stolpe. Egen knapp, så piltastene virker uten mus. */

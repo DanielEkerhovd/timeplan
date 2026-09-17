@@ -10,24 +10,32 @@ const s18 = slot('a', 18, 21)
 const s19 = slot('b', 19, 22)
 const s20 = slot('c', 20, 23)
 const day = [s18, s19, s20]
+/** Every half hour from `a` up to (not including) `b`. */
+const halves = (a: number, b: number) => Array.from({ length: (b - a) * 2 }, (_, i) => a + i / 2)
 
 describe('planToggle', () => {
-  it('turns a slot on by adding its hours', () => {
-    expect(planToggle(undefined, s19, day)).toEqual({ add: [19, 20, 21], remove: [] })
+  it('turns a slot on by adding its half hours', () => {
+    expect(planToggle(undefined, s19, day)).toEqual({ add: halves(19, 22), remove: [] })
   })
-  it('only adds the hours that are missing', () => {
-    expect(planToggle(new Set([19, 20, 21]), s18, day)).toEqual({ add: [18], remove: [] })
+  it('only adds the half hours that are missing', () => {
+    expect(planToggle(new Set(halves(19, 22)), s18, day)).toEqual({ add: [18, 18.5], remove: [] })
   })
-  it('turning off 19–22 keeps hours still covered by 18–21', () => {
-    expect(planToggle(new Set([18, 19, 20, 21]), s19, day)).toEqual({ add: [], remove: [21] })
+  it('turning off 19–22 keeps half hours still covered by 18–21', () => {
+    expect(planToggle(new Set(halves(18, 22)), s19, day)).toEqual({ add: [], remove: [21, 21.5] })
   })
   it('turning off the only selected slot removes all of it', () => {
-    expect(planToggle(new Set([19, 20, 21]), s19, day)).toEqual({ add: [], remove: [19, 20, 21] })
+    expect(planToggle(new Set(halves(19, 22)), s19, day)).toEqual({ add: [], remove: halves(19, 22) })
   })
-  it('coversSlot needs every hour', () => {
-    expect(coversSlot(new Set([19, 20]), s19)).toBe(false)
-    expect(coversSlot(new Set([19, 20, 21, 22]), s19)).toBe(true)
-    expect(slotHours(s20)).toEqual([20, 21, 22])
+  it('coversSlot needs every half hour', () => {
+    expect(coversSlot(new Set([19, 20, 21]), s19)).toBe(false)
+    expect(coversSlot(new Set(halves(19, 22)), s19)).toBe(true)
+    expect(slotHours(s20)).toEqual([20, 20.5, 21, 21.5, 22, 22.5])
+  })
+  it('half-hour slots work the same way', () => {
+    const s = slot('h', 19.5, 21)
+    expect(slotHours(s)).toEqual([19.5, 20, 20.5])
+    expect(coversSlot(new Set([19.5, 20, 20.5]), s)).toBe(true)
+    expect(planToggle(new Set([19.5, 20]), s, [s])).toEqual({ add: [20.5], remove: [] })
   })
 })
 

@@ -150,6 +150,14 @@ Mindre ting fra samme runde: en brems per lag på knappene i innstillingene (mak
 
 Det som ble sjekket og var i orden: eier-sjekk på hvert endepunkt med lagets id fra forespørselen; ingen filter-injeksjon i PostgREST (alle verdier er regex-sjekket, signerte eller lest fra databasen under constraint); ingen bruker-styrte URL-er mot Discord; OAuth-state med HMAC, utløp og konto-match; cron-hemmelighet i header med konstant-tids sammenlikning; ingen hemmeligheter i svar eller logg; ingen CORS, ingen cookies.
 
+## Påminnelser (0023)
+
+Før en aktivitet sender boten ett kort til dem som har sagt ja, så mange timer før som laget har valgt (Settings → Discord → «Reminder before a session»), i kanal, DM eller begge. `events.reminder_sent_at` gjør at det går én gang; en trigger nullstiller stempelet når aktiviteten flyttes. Klokka henter utvalget fra `discord_reminder_candidates()` (bare service_role) og regner tidspunktet i lagets sone. Eier og trener kan også sende påminnelsen med én gang fra aktivitetens skjema («Send reminder»); da settes stempelet, og den planlagte hoppes over. Knappene på kortet (`rj:`/`rc:`) svarer som Join/Can't og tegner kortet på nytt.
+
+## Halvtimer (0022)
+
+Blokker, aktiviteter og tilgjengelighet kan starte og slutte på halve timer (19:30–21:00), minst én time lange. Kolonnene heter fortsatt `start_hour`, `end_hour` og `hour`, men er `numeric(3,1)` med halve steg: 19.5 er 19:30. Én rad i `availability` (og `default_week`) er én halvtime; migrasjonen la til raden 19.5 for hver gammel rad 19, så ingen mistet noe. `available_users` teller halvtimer, `share_week` går i halve steg, og klienten regnet allerede med desimaltimer (tidssoner som +5:30). Piltastene i bolkredigeringa flytter en halvtime, med Shift en hel. Varsel- og posttider for Discord-boten er fortsatt hele timer.
+
 ## Sikkerhetstestene
 
 `supabase/tests/security.sql` er et testskript med fire brukere (eier, trener, spiller og en fremmed fra et annet lag) som prøver alt de ikke skal få lov til, mot hver tabell og hver funksjon. Nesten 150 sjekker. Alt kjøres i én transaksjon som rulles tilbake, så databasen er uendret etterpå.

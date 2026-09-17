@@ -96,7 +96,7 @@ insert into public.invites (team_id, max_uses) values (:'team_a', 2);
 select code as code_a from public.invites where team_id = :'team_a' \gset
 
 insert into public.availability (team_id, date, hour) values
-  (:'team_a', :'dato', 19), (:'team_a', :'dato', 20), (:'team_a', :'dato', 21);
+  (:'team_a', :'dato', 19), (:'team_a', :'dato', 19.5), (:'team_a', :'dato', 20), (:'team_a', :'dato', 20.5), (:'team_a', :'dato', 21), (:'team_a', :'dato', 21.5);
 
 select pg_temp.expect_count('eier ser eget lag', 'select * from public.teams', 1);
 select pg_temp.expect_count('eier ser 6 standardintervaller', 'select * from public.team_slots', 6);
@@ -138,6 +138,24 @@ select pg_temp.expect_denied('dato mer enn ett år fram',
   format('insert into public.availability (team_id, date, hour) values (%L, current_date + 400, 19)', :'team_a'));
 select pg_temp.expect_denied('aktivitet med slutt før start',
   format('insert into public.events (team_id, date, start_hour, end_hour, type_id) values (%L, %L, 21, 19, %L)', :'team_a', :'dato', :'type_scrim'));
+-- Halvtimer (0022): halve steg er lov, kvarter ikke, og minst én time.
+select pg_temp.expect_ok('aktivitet 19:30–21:00',
+  format('insert into public.events (team_id, date, start_hour, end_hour, type_id) values (%L, %L, 19.5, 21, %L)', :'team_a', :'dato', :'type_scrim'));
+select pg_temp.expect_denied('aktivitet på kvarter avvises',
+  format('insert into public.events (team_id, date, start_hour, end_hour, type_id) values (%L, %L, 19.25, 21, %L)', :'team_a', :'dato', :'type_scrim'));
+select pg_temp.expect_denied('aktivitet kortere enn en time avvises',
+  format('insert into public.events (team_id, date, start_hour, end_hour, type_id) values (%L, %L, 19.5, 20, %L)', :'team_a', :'dato', :'type_scrim'));
+select pg_temp.expect_ok('blokk 19:30–21:00',
+  format('insert into public.team_slots (team_id, day_type, start_hour, end_hour, sort) values (%L, ''weekday'', 19.5, 21, 9)', :'team_a'));
+select pg_temp.expect_denied('blokk kortere enn en time avvises',
+  format('insert into public.team_slots (team_id, day_type, start_hour, end_hour, sort) values (%L, ''weekday'', 20, 20.5, 9)', :'team_a'));
+select pg_temp.expect_ok('halvtime i tilgjengelighet',
+  format('insert into public.availability (team_id, date, hour) values (%L, %L, 22.5)', :'team_a', :'dato'));
+select pg_temp.expect_denied('kvarter i tilgjengelighet avvises',
+  format('insert into public.availability (team_id, date, hour) values (%L, %L, 22.25)', :'team_a', :'dato'));
+delete from public.events where team_id = :'team_a' and start_hour = 19.5;
+delete from public.team_slots where team_id = :'team_a' and start_hour = 19.5;
+delete from public.availability where team_id = :'team_a' and hour = 22.5;
 select pg_temp.expect_denied('custom-aktivitet med for lang tittel',
   format('insert into public.events (team_id, date, start_hour, end_hour, title, color) values (%L, %L, 19, 22, %L, ''blue'')', :'team_a', :'dato', repeat('x', 81)));
 select pg_temp.expect_denied('custom-aktivitet uten farge avvises',
@@ -265,11 +283,11 @@ select pg_temp.expect_count('spiller ser lag A', format('select * from public.te
 select pg_temp.expect_count('spiller ser begge medlemmene', format('select * from public.members where team_id = %L', :'team_a'), 2);
 select pg_temp.expect_count('spiller ser eierens profil', format('select * from public.profiles where user_id = %L', :'eier_a'), 1);
 select pg_temp.expect_count('spiller ser ikke fremmed B sin profil', format('select * from public.profiles where user_id = %L', :'fremmed_b'), 0);
-select pg_temp.expect_count('spiller ser eierens tilgjengelighet', format('select * from public.availability where team_id = %L', :'team_a'), 3);
+select pg_temp.expect_count('spiller ser eierens tilgjengelighet', format('select * from public.availability where team_id = %L', :'team_a'), 6);
 select pg_temp.expect_count('spiller ser ikke koder', 'select * from public.invites', 0);
 
 select pg_temp.expect_ok('spiller skriver egen tilgjengelighet',
-  format('insert into public.availability (team_id, date, hour) values (%L, %L, 19), (%L, %L, 20), (%L, %L, 21)', :'team_a', :'dato', :'team_a', :'dato', :'team_a', :'dato'));
+  format('insert into public.availability (team_id, date, hour) values (%L, %L, 19), (%L, %L, 19.5), (%L, %L, 20), (%L, %L, 20.5), (%L, %L, 21), (%L, %L, 21.5)', :'team_a', :'dato', :'team_a', :'dato', :'team_a', :'dato', :'team_a', :'dato', :'team_a', :'dato', :'team_a', :'dato'));
 select pg_temp.expect_count('slot_counts viser 2 ledige på 19–22',
   format('select * from public.slot_counts where team_id = %L and date = %L and start_hour = 19 and available_count = 2', :'team_a', :'dato'), 1);
 select pg_temp.expect_count('slot_counts viser 0 ledige på 18–21',
@@ -331,14 +349,14 @@ select public.week_monday(current_date) as mandag,
        public.week_monday(current_date) + 2 as dato_ikke_mandag,
        public.week_monday(current_date) - 7 as gammel_mandag \gset
 insert into public.availability (team_id, date, hour) values
-  (:'team_a', :'mandag', 19), (:'team_a', :'mandag', 20);
+  (:'team_a', :'mandag', 19), (:'team_a', :'mandag', 19.5), (:'team_a', :'mandag', 20), (:'team_a', :'mandag', 20.5);
 select pg_temp.expect_ok('spiller lagrer sin vanlige uke',
   format('select public.save_default_week(%L, %L)', :'team_a', :'mandag'));
 select pg_temp.expect_ok('spiller bytter uka mot den vanlige uka',
   format('select public.replace_with_default_week(%L, %L)', :'team_a', :'mandag'));
--- Spilleren har allerede 3 timer fra en tidligere test, pluss de 2 her.
+-- Spilleren har allerede 3 timer (6 halvtimer) fra en tidligere test, pluss de 2 timene (4) her.
 select pg_temp.expect_count('timene står der fortsatt etter byttet',
-  format('select * from public.availability where team_id = %L and user_id = %L', :'team_a', :'spiller_a'), 5);
+  format('select * from public.availability where team_id = %L and user_id = %L', :'team_a', :'spiller_a'), 10);
 select pg_temp.expect_denied('bytte krever mandag',
   format('select public.replace_with_default_week(%L, %L)', :'team_a', :'dato_ikke_mandag'));
 select pg_temp.expect_denied('kan ikke bytte ut en uke som har vært',
@@ -350,7 +368,7 @@ select pg_temp.expect_ok('spiller tømmer sin egen uke',
 select pg_temp.expect_count('spillerens timer er borte',
   format('select * from public.availability where team_id = %L and user_id = %L', :'team_a', :'spiller_a'), 0);
 select pg_temp.expect_count('eierens timer står urørt',
-  format('select * from public.availability where team_id = %L and user_id = %L', :'team_a', :'eier_a'), 3);
+  format('select * from public.availability where team_id = %L and user_id = %L', :'team_a', :'eier_a'), 6);
 select pg_temp.expect_ok('spiller sletter sin vanlige uke',
   format('select public.clear_default_week(%L)', :'team_a'));
 
@@ -464,12 +482,12 @@ set local role authenticated;
 select pg_temp.expect_count('spiller blir med igjen via trenerens kode',
   format('select * from (select public.join_team(%L) as t) j where t is not null', :'code_t'), 1);
 select pg_temp.expect_ok('spiller skriver tilgjengelighet på nytt',
-  format('insert into public.availability (team_id, date, hour) values (%L, %L, 19), (%L, %L, 20), (%L, %L, 21)', :'team_a', :'dato', :'team_a', :'dato', :'team_a', :'dato'));
+  format('insert into public.availability (team_id, date, hour) values (%L, %L, 19), (%L, %L, 19.5), (%L, %L, 20), (%L, %L, 20.5), (%L, %L, 21), (%L, %L, 21.5)', :'team_a', :'dato', :'team_a', :'dato', :'team_a', :'dato', :'team_a', :'dato', :'team_a', :'dato', :'team_a', :'dato'));
 select (date :'dato' - (extract(isodow from date :'dato')::int - 1))::text as mandag \gset
-select pg_temp.expect_count('spiller lagrer vanlig uke (3 timer)',
-  format('select 1 where public.save_default_week(%L, %L) = 3', :'team_a', :'mandag'), 1);
-select pg_temp.expect_count('spiller fyller neste uke fra vanlig uke (3 timer)',
-  format('select 1 where public.apply_default_week(%L, date %L + 7) = 3', :'team_a', :'mandag'), 1);
+select pg_temp.expect_count('spiller lagrer vanlig uke (3 timer = 6 halvtimer)',
+  format('select 1 where public.save_default_week(%L, %L) = 6', :'team_a', :'mandag'), 1);
+select pg_temp.expect_count('spiller fyller neste uke fra vanlig uke (6 halvtimer)',
+  format('select 1 where public.apply_default_week(%L, date %L + 7) = 6', :'team_a', :'mandag'), 1);
 select pg_temp.expect_count('fylling er idempotent (0 nye)',
   format('select 1 where public.apply_default_week(%L, date %L + 7) = 0', :'team_a', :'mandag'), 1);
 -- ------------------------------------------------------------
@@ -803,13 +821,40 @@ update public.events set end_hour = 23 where id = :'outbox_event';
 update public.events set start_hour = 20 where id = :'outbox_event';
 reset role;
 select pg_temp.expect_count('endring etter sending gir én changed-rad med «før» fra første endring',
-  format('select 1 from public.discord_outbox where event_id = %L and sent_at is null and kind = ''changed'' and (payload -> ''before'' ->> ''start_hour'')::int = 19 and (payload -> ''after'' ->> ''end_hour'')::int = 23', :'outbox_event'), 1);
+  format('select 1 from public.discord_outbox where event_id = %L and sent_at is null and kind = ''changed'' and (payload -> ''before'' ->> ''start_hour'')::numeric = 19 and (payload -> ''after'' ->> ''end_hour'')::numeric = 23', :'outbox_event'), 1);
 select pg_temp.become(:'eier_a');
 set local role authenticated;
 update public.events set note = 'bare et notat' where id = :'outbox_event';
 reset role;
 select pg_temp.expect_count('et notat er ingen endring folk skal varsles om',
   format('select 1 from public.discord_outbox where event_id = %L and sent_at is null', :'outbox_event'), 1);
+
+-- Påminnelser (0023): stempelet er serverens, nullstilles når aktiviteten flyttes, og utvalget er bare for serveren.
+select pg_temp.become(:'eier_a');
+set local role authenticated;
+select pg_temp.expect_denied('eier kan ikke stemple påminnelsen selv',
+  format('update public.events set reminder_sent_at = now() where id = %L', :'outbox_event'));
+select pg_temp.expect_denied('eier kan ikke se utvalget for påminnelser',
+  'select * from public.discord_reminder_candidates()');
+reset role;
+select pg_temp.expect_count('aktiviteten er kandidat før stempling',
+  format('select 1 from public.discord_reminder_candidates() where event_id = %L', :'outbox_event'), 1);
+update public.events set reminder_sent_at = now() where id = :'outbox_event';
+select pg_temp.expect_count('stemplet aktivitet er ikke kandidat',
+  format('select 1 from public.discord_reminder_candidates() where event_id = %L', :'outbox_event'), 0);
+select pg_temp.become(:'eier_a');
+set local role authenticated;
+update public.events set note = 'et notat til' where id = :'outbox_event';
+reset role;
+select pg_temp.expect_count('et notat rører ikke stempelet',
+  format('select 1 from public.events where id = %L and reminder_sent_at is not null', :'outbox_event'), 1);
+select pg_temp.become(:'eier_a');
+set local role authenticated;
+update public.events set start_hour = 21 where id = :'outbox_event';
+reset role;
+select pg_temp.expect_count('flytting nullstiller stempelet, så den nye tida får sin påminnelse',
+  format('select 1 from public.events where id = %L and reminder_sent_at is null', :'outbox_event'), 1);
+
 select pg_temp.become(:'eier_a');
 set local role authenticated;
 insert into public.event_responses (event_id, status) values (:'outbox_event', 'coming');
@@ -871,7 +916,7 @@ select (date :'dato' - (extract(isodow from date :'dato')::int - 1))::text as ma
 -- Alle tre er ledige lørdag 13–16, så det skal bli en «alle ledige»-blokk
 insert into public.availability (team_id, user_id, date, hour)
   select :'team_a', u, date :'dato' + 2, h
-  from unnest(array[:'eier_a', :'spiller_a', :'trener_a']::uuid[]) u, generate_series(13, 15) h
+  from unnest(array[:'eier_a', :'spiller_a', :'trener_a']::uuid[]) u, generate_series(13, 15.5, 0.5) h
   on conflict do nothing;
 
 select set_config('request.jwt.claims', '', true);
@@ -913,7 +958,7 @@ set local role authenticated;
 select pg_temp.expect_count('eieren ser at navnet ikke ble endret',
   format('select * from public.teams where id = %L and name = ''Quackers''', :'team_a'), 1);
 select pg_temp.expect_count('eieren ser at tilgjengeligheten fortsatt er der',
-  format('select * from public.availability where team_id = %L', :'team_a'), 20);
+  format('select * from public.availability where team_id = %L', :'team_a'), 38);
 select pg_temp.expect_count('laget har 3 medlemmer', format('select * from public.members where team_id = %L', :'team_a'), 3);
 
 select pg_temp.expect_ok('eier kan fjerne treneren', format('select public.remove_member(%L, %L)', :'team_a', :'trener_a'));
@@ -935,7 +980,7 @@ select pg_temp.become(:'spiller_a');
 set local role authenticated;
 select pg_temp.expect_count('ny eier ser bare seg selv som medlem', format('select * from public.members where team_id = %L', :'team_a'), 1);
 select pg_temp.expect_count('tilgjengeligheten til den som forlot laget er borte',
-  format('select * from public.availability where team_id = %L', :'team_a'), 11);
+  format('select * from public.availability where team_id = %L', :'team_a'), 20);
 select pg_temp.expect_denied('ny eier kan ikke forlate laget', format('select public.leave_team(%L)', :'team_a'));
 select pg_temp.expect_denied('ny eier kan ikke slette laget med feil navn',
   format('select public.delete_team(%L, ''Feil navn'')', :'team_a'));

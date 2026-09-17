@@ -39,6 +39,8 @@ describe("team clock", () => {
     expect(localToInstant("2026-09-15", 20, 0, "Europe/Oslo").toISOString()).toBe("2026-09-15T18:00:00.000Z");
     expect(localToInstant("2026-12-15", 20, 0, "Europe/Oslo").toISOString()).toBe("2026-12-15T19:00:00.000Z");
     expect(localToInstant("2026-09-15", 20, 0, "America/New_York").toISOString()).toBe("2026-09-16T00:00:00.000Z");
+    // Half hours ride in the hour: 19.5 is 19:30.
+    expect(localToInstant("2026-09-15", 19.5, 0, "Europe/Oslo").toISOString()).toBe("2026-09-15T17:30:00.000Z");
   });
   it("knows what day it is for the team, not for the server", () => {
     // 23:30 UTC on a Sunday is already Monday 01:30 in Oslo.
@@ -115,7 +117,7 @@ describe("week message", () => {
   });
 });
 
-import { buildNewSessionsCard, buildUpdateCard, forPeople, forRole } from "../../../api/_lib/updateCard";
+import { buildNewSessionsCard, buildReminderCard, buildUpdateCard, forPeople, forRole } from "../../../api/_lib/updateCard";
 import type { OutboxRow } from "../../../api/_lib/updateCard";
 
 describe("change cards", () => {
@@ -155,6 +157,20 @@ describe("change cards", () => {
     expect(msg.allowed_mentions.users).toEqual(["100"]);
     expect(text(msg)).toContain("## Cancelled · Scrim vs Foxes");
     expect(text(msg)).not.toContain("custom_id");
+  });
+  it("a reminder says Today, pings those who said yes, and its buttons are its own", () => {
+    const msg = buildReminderCard(snap, "Europe/Oslo", ["100", "200"], "2026-09-15") as { allowed_mentions: { users: string[] } };
+    expect(msg.allowed_mentions.users).toEqual(["100", "200"]);
+    expect(text(msg)).toContain("## Reminder · Scrim vs Foxes");
+    expect(text(msg)).toContain("Today <t:1789495200:t>");
+    expect(text(msg)).toContain("<@100> <@200>");
+    expect(text(msg)).toContain("rj:e");
+    const later = buildReminderCard(snap, "Europe/Oslo", ["100"], "2026-09-14");
+    expect(text(later)).toContain("**Tuesday**");
+    const dm = buildReminderCard(snap, "Europe/Oslo", ["100", "200"], "2026-09-15", { team: "Quackers", me: "100" }) as { allowed_mentions: { users: string[] } };
+    expect(dm.allowed_mentions.users).toEqual([]);
+    expect(text(dm)).toContain("You're in");
+    expect(text(dm)).toContain("1 other in");
   });
   it("the DM version names the team, mentions nobody, and says where the reader stands", () => {
     const dm = { team: "Quackers", me: "100" };

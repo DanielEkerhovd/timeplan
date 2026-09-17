@@ -77,8 +77,10 @@ export function formatRange(monday: Date): string {
 
 export const dayShort = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
+/** '19:00', '19:30'. Hours come as numbers with half steps (19.5 is 19:30). */
 export function formatHour(h: number): string {
-  return `${String(h).padStart(2, "0")}:00`;
+  const m = Math.round(h * 60);
+  return `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
 }
 
 /** '18:00 - 21:00' */

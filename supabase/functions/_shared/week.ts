@@ -66,7 +66,10 @@ export async function fetchShareWeek(slug: string, monday: string): Promise<Shar
   return data ?? null
 }
 
-export const hour = (h: number) => `${String(h).padStart(2, '0')}:00`
+export const hour = (h: number) => {
+  const m = Math.round(h * 60)
+  return `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`
+}
 export const range = (a: number, b: number) => `${hour(a)} - ${hour(b)}`
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']

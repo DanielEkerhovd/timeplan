@@ -189,11 +189,13 @@ export function Dropdown<T extends string | number>({ value, options, onChange, 
 }
 
 /**
- * Hours as dropdown options, e.g. 18 → "18:00". The value stays the team's hour;
- * only the label follows the reader's timezone, so nothing about storage changes.
+ * Times as dropdown options in half-hour steps, e.g. 18 → "18:00", 18.5 → "18:30".
+ * The value stays the team's time; only the label follows the reader's timezone,
+ * so nothing about storage changes.
  */
 export function hourOptions(from: number, to: number, diff = 0): DropdownOption<number>[] {
-  return Array.from({ length: to - from + 1 }, (_, i) => from + i).map((h) => {
+  const n = Math.round((to - from) * 2) + 1
+  return Array.from({ length: n }, (_, i) => from + i / 2).map((h) => {
     const shift = zoneDayShift(h, diff)
     return { value: h, label: `${zoneHourLabel(h, diff)}${shift === 0 ? '' : shift > 0 ? ' +1' : ' −1'}` }
   })

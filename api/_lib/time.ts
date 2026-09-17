@@ -27,10 +27,15 @@ function offsetAt(d: Date, tz: string): number {
   return Math.round((asUtc - d.getTime()) / 60_000)
 }
 
-/** The instant for `YYYY-MM-DD` at `hour:00` on the team's clock. Two passes for DST edges. */
+/**
+ * The instant for `YYYY-MM-DD` at `hour:minute` on the team's clock. `hour` may
+ * carry half steps (19.5 = 19:30); the fraction is folded into the minutes.
+ * Two passes for DST edges.
+ */
 export function localToInstant(dateKey: string, hour: number, minute: number, tz: string): Date {
   const [y, m, d] = dateKey.split('-').map(Number)
-  const guess = Date.UTC(y, m - 1, d, hour, minute)
+  const whole = Math.floor(hour)
+  const guess = Date.UTC(y, m - 1, d, whole, minute + Math.round((hour - whole) * 60))
   let t = guess - offsetAt(new Date(guess), tz) * 60_000
   t = guess - offsetAt(new Date(t), tz) * 60_000
   return new Date(t)
